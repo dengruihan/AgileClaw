@@ -2266,15 +2266,8 @@ describeBrowserLayout.concurrent("chat responsive browser layout", () => {
       expect(await bubble.locator(".chat-assistant-attachment-card--compact").count()).toBe(1);
       expect(await bubble.locator(".chat-assistant-attachment-card--definitive").count()).toBe(6);
       expect(
-        await bubble
-          .getByText(
-            "Not sent · Rejected by the local attachment allowlist. Send a supported file type.",
-          )
-          .count(),
-      ).toBe(5);
-      expect(
         await bubble.getByText("Not sent · Delivery failed. Try sending this file again.").count(),
-      ).toBe(1);
+      ).toBe(6);
       expect(await bubble.getByText("Media failed").count()).toBe(0);
 
       try {

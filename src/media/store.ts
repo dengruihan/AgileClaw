@@ -300,7 +300,7 @@ export async function pruneOutboundMedia(): Promise<void> {
 export async function cleanOldMedia(ttlMs = DEFAULT_TTL_MS, options: CleanOldMediaOptions = {}) {
   const context = captureOpenClawStateWorkerContext();
   await pruneNonPlaybackMedia(ttlMs, options);
-  // Trust metadata must not outlive the staged file that it authorizes.
+  // Legacy trusted-HTML markers must not outlive the staged file they describe.
   const { pruneGeneratedHtmlProvenance } = await import("./generated-html-provenance.js");
   await pruneGeneratedHtmlProvenance(context);
 }
@@ -563,7 +563,7 @@ export async function saveMediaBuffer(
   maxBytes = MEDIA_MAX_BYTES,
   originalFilename?: string,
   detectionFilePathHint?: string,
-  options?: { assertCommitAllowed?: () => void },
+  options?: { assertCommitAllowed?: () => void; preserveContentType?: boolean },
 ): Promise<SavedMedia> {
   options?.assertCommitAllowed?.();
   if (buffer.byteLength > maxBytes) {
@@ -573,11 +573,16 @@ export async function saveMediaBuffer(
   await fs.mkdir(dir, { recursive: true, mode: 0o700 });
   const uuid = crypto.randomUUID();
   const headerExt = extensionForAuthoritativeHeaderMime(contentType);
-  const mime = await detectMime({
+  const detectedMime = await detectMime({
     buffer,
     headerMime: contentType,
     filePath: originalFilename ?? detectionFilePathHint,
   });
+  // A loader that already classified the bytes can pin a generic result so a media
+  // extension cannot promote it back into a preview family during staging.
+  const mime = options?.preserveContentType
+    ? (normalizeMimeType(contentType) ?? detectedMime)
+    : detectedMime;
   const ext = resolveSavedMediaExtension({
     detectedMime: mime,
     headerExt,

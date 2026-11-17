@@ -9,15 +9,19 @@ import {
   MANAGED_OUTGOING_ORIGINALS_SUBDIR,
   readManagedImageRecord,
 } from "../gateway/managed-image-record-store.js";
-import { executeSqliteQueryTakeFirstSync, getNodeSqliteKysely } from "../infra/kysely-sync.js";
+import {
+  executeSqliteQuerySync,
+  executeSqliteQueryTakeFirstSync,
+  getNodeSqliteKysely,
+} from "../infra/kysely-sync.js";
 import type { DB as OpenClawStateKyselyDatabase } from "../state/openclaw-state-db.generated.js";
 import {
   closeOpenClawStateDatabaseAsync,
   closeOpenClawStateDatabaseForTest,
   openOpenClawStateDatabase,
+  runOpenClawStateWriteTransaction,
 } from "../state/openclaw-state-db.js";
 import { createTempHomeEnv, type TempHomeEnv } from "../test-utils/temp-home.js";
-import { markTrustedGeneratedHtmlPath } from "./web-media.js";
 
 describe("cleanOldMedia managed-subtree retention", () => {
   let store: typeof import("./store.js");
@@ -126,10 +130,24 @@ describe("cleanOldMedia managed-subtree retention", () => {
       "image/png",
       MANAGED_OUTGOING_ORIGINALS_SUBDIR,
     );
-    await markTrustedGeneratedHtmlPath(
-      staleOutbound.path,
-      Buffer.from("<!doctype html><h1>stale</h1>"),
-    );
+    const staleHtml = Buffer.from("<!doctype html><h1>stale</h1>");
+    await store.saveMediaBuffer(staleHtml, "text/html", "outbound", undefined, "stale.html");
+    const staleOutboundRealpath = await fs.realpath(staleOutbound.path);
+    runOpenClawStateWriteTransaction(({ db }) => {
+      executeSqliteQuerySync(
+        db,
+        getNodeSqliteKysely<Pick<OpenClawStateKyselyDatabase, "outbound_media_provenance">>(db)
+          .insertInto("outbound_media_provenance")
+          .values({
+            realpath: staleOutboundRealpath,
+            kind: "trusted-generated-html",
+            version: 1,
+            sha256: "0".repeat(64),
+            size_bytes: staleHtml.length,
+            created_at_ms: Date.now(),
+          }),
+      );
+    });
     const stale = Date.now() - 25 * 60 * 60_000;
     await Promise.all(
       [staleInbound.path, staleOutbound.path, stalePlayback.path, staleManagedOutgoing.path].map(

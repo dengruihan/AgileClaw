@@ -459,7 +459,11 @@ export function resolveAttachmentImageKind(
   attachment: AttachmentItem["attachment"],
 ): "raster" | "svg" | undefined {
   const mimeType = attachment.mimeType?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
-  const inferExtension = !mimeType || mimeType === "application/octet-stream";
+  // A managed artifact carries the Gateway's authoritative classification. Generic
+  // octet-stream bytes named .png/.svg are download-only fallbacks, not previews;
+  // only unmanaged (upload) metadata needs the legacy extension inference.
+  const inferExtension =
+    (!mimeType || mimeType === "application/octet-stream") && !attachment.artifactId;
   const image =
     attachment.kind === "image" ||
     (attachment.kind === "document" &&

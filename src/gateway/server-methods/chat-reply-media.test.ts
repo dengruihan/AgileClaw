@@ -426,6 +426,39 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     }
   });
 
+  it("delivers an ordinary workspace HTML file as an attachment", async () => {
+    const { workspaceDir, cfg } = createMediaTestContext({ allowRead: true });
+    const source = path.join(workspaceDir, "report.html");
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(source, "<!doctype html><title>Report</title><h1>Ready</h1>\n");
+
+    const payload = await normalizeReplyMedia({
+      cfg,
+      payloads: [{ text: "Report ready", mediaUrls: [source] }],
+    });
+    expect(payload).toMatchObject({
+      text: "Report ready",
+      attachments: [expect.objectContaining({ name: "report.html", mimeType: "text/html" })],
+    });
+    const { assistantContent: content } = await buildAssistantReplyContent({
+      sessionKey: TEST_SESSION_KEY,
+      agentId: "main",
+      payloads: payload ? [payload] : [],
+      managedMediaLocalRoots: getAgentScopedMediaLocalRoots(cfg, "main"),
+    });
+    expect(content).toEqual([
+      { type: "text", text: "Report ready" },
+      expect.objectContaining({
+        type: "attachment",
+        attachment: expect.objectContaining({
+          kind: "document",
+          label: "report.html",
+          mimeType: "text/html",
+        }),
+      }),
+    ]);
+  });
+
   it("delivers named script attachments beside trusted local audio", async () => {
     const { workspaceDir, cfg } = createMediaTestContext({ allowRead: true });
     const documentPath = path.join(workspaceDir, "report.json");
@@ -613,6 +646,48 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
       expect(errors).toEqual([]);
     },
   );
+
+  it.each([
+    ["broken.mp3", Buffer.from([0, 1, 2, 3, 0xff])],
+    [
+      "broken.png",
+      Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.from([1, 2, 3, 4])]),
+    ],
+  ])("falls back unverified %s bytes to a document attachment", async (fileName, body) => {
+    const { workspaceDir, cfg } = createMediaTestContext({ allowRead: true });
+    const source = path.join(workspaceDir, fileName);
+    await fs.mkdir(workspaceDir, { recursive: true });
+    await fs.writeFile(source, body);
+
+    const payload = await normalizeReplyMedia({
+      cfg,
+      payloads: [{ text: "Artifact result", mediaUrls: [source] }],
+    });
+    expect(payload).toMatchObject({
+      text: "Artifact result",
+      attachments: [
+        expect.objectContaining({ name: fileName, mimeType: "application/octet-stream" }),
+      ],
+    });
+    const { assistantContent: content } = await buildAssistantReplyContent({
+      sessionKey: TEST_SESSION_KEY,
+      agentId: "main",
+      payloads: payload ? [payload] : [],
+      managedMediaLocalRoots: getAgentScopedMediaLocalRoots(cfg, "main"),
+    });
+    expect(content).toEqual([
+      { type: "text", text: "Artifact result" },
+      expect.objectContaining({
+        type: "attachment",
+        attachment: expect.objectContaining({
+          kind: "document",
+          label: fileName,
+          mimeType: "application/octet-stream",
+          sizeBytes: body.length,
+        }),
+      }),
+    ]);
+  });
 
   it.each(["paragraphs", "caption", "reply caption"] as const)(
     "preserves %s beside the corresponding image in saved replies",

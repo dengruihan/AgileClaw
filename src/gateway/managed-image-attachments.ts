@@ -1265,12 +1265,14 @@ export async function createManagedOutgoingMediaBlocks(params: {
               return await saveMediaSource(ingestSource, undefined, "outgoing/originals", maxBytes);
             })();
         savedOriginalPath = savedOriginal.path;
-        // Any file format is deliverable; content type only selects preview and limits.
+        // A caller-declared generic payload is authoritative: re-detection must not
+        // promote unknown bytes back into a media family just from the file extension.
+        const declaredMime = normalizeMimeType(item.mimeType);
         let savedOriginalContentType =
-          savedOriginal.contentType ??
-          normalizeMimeType(item.mimeType) ??
-          "application/octet-stream";
-        const mediaKind = resolveManagedMediaKind(savedOriginalContentType);
+          declaredMime === "application/octet-stream"
+            ? declaredMime
+            : (savedOriginal.contentType ?? declaredMime ?? "application/octet-stream");
+        let mediaKind = resolveManagedMediaKind(savedOriginalContentType);
         if (!mediaKind) {
           throw new Error("Managed media attachment has an unsupported content type");
         }
@@ -1289,66 +1291,107 @@ export async function createManagedOutgoingMediaBlocks(params: {
           height: null,
           sizeBytes: savedOriginal.size,
         };
+        // Preview metadata is an enhancement, never a delivery gate: undecodable or
+        // uncompressible media keeps its original bytes as a downloadable document.
+        const fallbackToDocument = () => {
+          assertManagedMediaByteLimit(
+            savedOriginal.size,
+            "document",
+            label,
+            maxBytesForManagedMediaKind("document", limits.maxBytes, Boolean(localMediaPath)),
+          );
+          savedOriginalContentType = "application/octet-stream";
+          mediaKind = "document";
+          originalStats = { width: null, height: null, sizeBytes: savedOriginal.size };
+        };
         if (mediaKind === "image") {
-          let originalBuffer = parsedDataUrl
-            ? parsedDataUrl.buffer
-            : (await readLocalFileSafely({ filePath: savedOriginal.path })).buffer;
-          assertManagedMediaByteLimit(originalBuffer.byteLength, "image", label, limits.maxBytes);
-          let originalDisplayMetadata: { width: number; height: number } | undefined;
-          for (let resizeAttempt = 0; ; resizeAttempt += 1) {
-            originalStats = await getVariantStats({
-              buffer: originalBuffer,
-              sizeBytes: savedOriginal.size,
-            });
-            const effectiveMetadata =
-              originalStats.width != null && originalStats.height != null
-                ? { width: originalStats.width, height: originalStats.height }
-                : await getImageMetadata(originalBuffer);
-            const metadataLimitError = getManagedImageMetadataLimitError(
-              effectiveMetadata,
-              label,
-              limits,
-            );
-            if (!metadataLimitError) {
-              if (originalDisplayMetadata && effectiveMetadata) {
-                resizeWarning = {
-                  type: "text",
-                  text:
-                    `[Image warning] ${label} exceeded gateway dimension/pixel limits and was resized from ` +
-                    `${originalDisplayMetadata.width}×${originalDisplayMetadata.height} to ` +
-                    `${effectiveMetadata.width}×${effectiveMetadata.height}.`,
-                };
+          try {
+            let originalBuffer = parsedDataUrl
+              ? parsedDataUrl.buffer
+              : (await readLocalFileSafely({ filePath: savedOriginal.path })).buffer;
+            assertManagedMediaByteLimit(originalBuffer.byteLength, "image", label, limits.maxBytes);
+            let originalDisplayMetadata: { width: number; height: number } | undefined;
+            for (let resizeAttempt = 0; ; resizeAttempt += 1) {
+              originalStats = await getVariantStats({
+                buffer: originalBuffer,
+                sizeBytes: savedOriginal.size,
+              });
+              const effectiveMetadata =
+                originalStats.width != null && originalStats.height != null
+                  ? { width: originalStats.width, height: originalStats.height }
+                  : await getImageMetadata(originalBuffer);
+              const metadataLimitError = getManagedImageMetadataLimitError(
+                effectiveMetadata,
+                label,
+                limits,
+              );
+              if (!metadataLimitError) {
+                if (originalDisplayMetadata && effectiveMetadata) {
+                  resizeWarning = {
+                    type: "text",
+                    text:
+                      `[Image warning] ${label} exceeded gateway dimension/pixel limits and was resized from ` +
+                      `${originalDisplayMetadata.width}×${originalDisplayMetadata.height} to ` +
+                      `${effectiveMetadata.width}×${effectiveMetadata.height}.`,
+                  };
+                }
+                break;
               }
-              break;
+              if (!effectiveMetadata || resizeAttempt >= 3) {
+                throw createManagedImageAttachmentError(metadataLimitError);
+              }
+              originalDisplayMetadata ??= effectiveMetadata;
+              const resized = await createImageProcessor().encode(originalBuffer, {
+                format: "auto",
+                limits: {
+                  maxWidth: limits.maxWidth,
+                  maxHeight: limits.maxHeight,
+                  maxPixels: limits.maxPixels,
+                },
+                opaque: { format: "jpeg", quality: 92 },
+                transparent: { format: "png", compressionLevel: 9 },
+                transparency: "auto",
+              });
+              assertManagedMediaByteLimit(resized.data.byteLength, "image", label, limits.maxBytes);
+              const replacement = await saveMediaBuffer(
+                resized.data,
+                resized.mimeType,
+                "outgoing/originals",
+                limits.maxBytes,
+                toRecordFilename(savedOriginal.path) ?? `generated-image-${index + 1}`,
+              );
+              await unlinkIfExists(savedOriginal.path);
+              savedOriginal = replacement;
+              savedOriginalContentType = replacement.contentType ?? resized.mimeType;
+              savedOriginalPath = savedOriginal.path;
+              originalBuffer = resized.data;
             }
-            if (!effectiveMetadata || resizeAttempt >= 3) {
-              throw createManagedImageAttachmentError(metadataLimitError);
-            }
-            originalDisplayMetadata ??= effectiveMetadata;
-            const resized = await createImageProcessor().encode(originalBuffer, {
-              format: "auto",
-              limits: {
-                maxWidth: limits.maxWidth,
-                maxHeight: limits.maxHeight,
-                maxPixels: limits.maxPixels,
-              },
-              opaque: { format: "jpeg", quality: 92 },
-              transparent: { format: "png", compressionLevel: 9 },
-              transparency: "auto",
+          } catch {
+            fallbackToDocument();
+            resizeWarning = null;
+          }
+        }
+
+        let playback: "native" | "transcode" | undefined;
+        if (mediaKind === "audio" || mediaKind === "video") {
+          const opened = await openLocalFileSafely({ filePath: savedOriginal.path });
+          await opened[Symbol.asyncDispose]();
+          try {
+            const metadata = await resolvePlaybackMetadataForSource({
+              sourcePath: opened.realPath,
+              sourceStat: opened.stat,
+              mimeType: savedOriginalContentType,
+              kind: mediaKind,
+              signal: params.abortSignal,
+              assertCurrent: params.assertCurrent,
+              admission: "immediate",
             });
-            assertManagedMediaByteLimit(resized.data.byteLength, "image", label, limits.maxBytes);
-            const replacement = await saveMediaBuffer(
-              resized.data,
-              resized.mimeType,
-              "outgoing/originals",
-              limits.maxBytes,
-              toRecordFilename(savedOriginal.path) ?? `generated-image-${index + 1}`,
-            );
-            await unlinkIfExists(savedOriginal.path);
-            savedOriginal = replacement;
-            savedOriginalContentType = replacement.contentType ?? resized.mimeType;
-            savedOriginalPath = savedOriginal.path;
-            originalBuffer = resized.data;
+            playback = metadata.playback;
+          } catch (error) {
+            if (!(error instanceof PlaybackInspectionBusyError)) {
+              // Undecodable audio/video keeps its bytes as a generic document.
+              fallbackToDocument();
+            }
           }
         }
 
@@ -1378,27 +1421,6 @@ export async function createManagedOutgoingMediaBlocks(params: {
             ),
           },
         };
-        let playback: "native" | "transcode" | undefined;
-        if (mediaKind === "audio" || mediaKind === "video") {
-          const opened = await openLocalFileSafely({ filePath: savedOriginal.path });
-          await opened[Symbol.asyncDispose]();
-          try {
-            const metadata = await resolvePlaybackMetadataForSource({
-              sourcePath: opened.realPath,
-              sourceStat: opened.stat,
-              mimeType: savedOriginalContentType,
-              kind: mediaKind,
-              signal: params.abortSignal,
-              assertCurrent: params.assertCurrent,
-              admission: "immediate",
-            });
-            playback = metadata.playback;
-          } catch (error) {
-            if (!(error instanceof PlaybackInspectionBusyError)) {
-              throw error;
-            }
-          }
-        }
         const block = buildManagedMediaBlock(record, playback);
         await insertManagedImageRecordWithFile(record, savedOriginal.path, stateDir, context);
         insertedRecord = record;

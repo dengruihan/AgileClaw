@@ -1000,10 +1000,10 @@ describe("createManagedOutgoingImageBlocks", () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
-  it("returns a visible failure without publishing a record when playback inspection fails", async () => {
+  it("falls back to a document without a visible failure when playback inspection fails", async () => {
     const sourcePath = path.join(stateDir, "workspace", "voice.mp3");
     await writeSource(sourcePath, Buffer.from([0xff, 0xfb, 0x90, 0x00]));
-    resolvePlaybackMetadataForSourceMock.mockRejectedValueOnce(
+    resolvePlaybackMetadataForSourceMock.mockRejectedValue(
       new Error("synthetic playback inspection failure"),
     );
 
@@ -1015,17 +1015,75 @@ describe("createManagedOutgoingImageBlocks", () => {
 
     expect(blocks).toEqual([
       {
-        type: "attachment_error",
-        attachment: {
-          code: "delivery-failed",
-          kind: "audio",
+        type: "attachment",
+        attachment: expect.objectContaining({
+          kind: "document",
           label: "voice.mp3",
-          mimeType: "audio/mpeg",
-        },
+          mimeType: "application/octet-stream",
+          sizeBytes: 4,
+        }),
       },
     ]);
-    expect(await listManagedImageRecordEntries({ stateDir })).toEqual([]);
-    await expectPathMissing(path.join(stateDir, "media", "outgoing", "originals"));
+    const records = await listManagedImageRecordEntries({ stateDir });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.record.original).toMatchObject({
+      contentType: "application/octet-stream",
+      filename: "voice.mp3",
+    });
+  });
+
+  it("falls back undecodable images to a downloadable document", async () => {
+    const sourcePath = path.join(stateDir, "workspace", "broken.png");
+    const body = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(64, 0x41)]);
+    await writeSource(sourcePath, body);
+
+    const blocks = await createImages([sourcePath], {
+      localRoots: [path.dirname(sourcePath)],
+      allowLocalNonImage: true,
+      continueOnPrepareError: true,
+      messageId: "msg-1",
+    });
+
+    expect(blocks).toEqual([
+      {
+        type: "attachment",
+        attachment: expect.objectContaining({
+          kind: "document",
+          label: "broken.png",
+          mimeType: "application/octet-stream",
+          sizeBytes: body.length,
+        }),
+      },
+    ]);
+    const record = (await listManagedImageRecordEntries({ stateDir }))[0]?.record;
+    if (!record) {
+      throw new Error("expected a persisted managed record");
+    }
+    const pathName = `/api/chat/media/outgoing/${encodeURIComponent(record.sessionKey)}/${record.attachmentId}/full`;
+    const { result } = await requestManagedImage({
+      stateDir,
+      pathName,
+      method: "GET",
+      authResponse: { authMethod: "token" },
+      transcriptMessages: [
+        assistantMessage([
+          {
+            type: "attachment",
+            attachment: {
+              kind: "document",
+              label: "broken.png",
+              mimeType: "application/octet-stream",
+              url: pathName,
+            },
+          },
+        ]),
+      ],
+    });
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["content-type"]).toBe("application/octet-stream");
+    expect(result.headers["x-content-type-options"]).toBe("nosniff");
+    expect(result.headers["content-disposition"]).toMatch(/^attachment;/u);
+    expect(result.body).toEqual(body);
   });
 
   it("caps managed video data URLs by media kind", async () => {
@@ -1284,6 +1342,11 @@ describe("createManagedOutgoingImageBlocks", () => {
   it.each([
     { fileName: "vector.svg", mimeType: "image/svg+xml", body: "<svg/>" },
     {
+      fileName: "report.html",
+      mimeType: "text/html",
+      body: "<!doctype html><title>Report</title>",
+    },
+    {
       fileName: "mystery.blob",
       mimeType: "application/octet-stream",
       body: Buffer.from([0, 1, 2, 3]),
@@ -1369,6 +1432,42 @@ describe("createManagedOutgoingImageBlocks", () => {
     expect(result.headers["x-content-type-options"]).toBe("nosniff");
     expect(result.headers["content-disposition"]).toMatch(/^attachment;/u);
     expect(result.headers["content-disposition"]).toContain("vector.svg");
+    expect(result.body).toEqual(body);
+  });
+
+  it("serves HTML document records as downloads, not same-origin pages", async () => {
+    const body = Buffer.from("<!doctype html><title>Report</title><h1>Ready</h1>");
+    const { attachmentId, sessionKey } = await createFixture(stateDir, {
+      filename: "report.html",
+      contentType: "text/html",
+      body,
+    });
+    const pathName = `/api/chat/media/outgoing/${encodeURIComponent(sessionKey)}/${attachmentId}/full`;
+
+    const { result } = await requestManagedImage({
+      stateDir,
+      pathName,
+      method: "GET",
+      authResponse: { authMethod: "token" },
+      transcriptMessages: [
+        assistantMessage([
+          {
+            type: "attachment",
+            attachment: {
+              kind: "document",
+              label: "report.html",
+              mimeType: "text/html",
+              url: pathName,
+            },
+          },
+        ]),
+      ],
+    });
+
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["content-type"]).toBe("text/html");
+    expect(result.headers["x-content-type-options"]).toBe("nosniff");
+    expect(result.headers["content-disposition"]).toMatch(/^attachment;/u);
     expect(result.body).toEqual(body);
   });
 

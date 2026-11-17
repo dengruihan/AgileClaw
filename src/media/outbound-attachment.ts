@@ -1,4 +1,3 @@
-import { rm } from "node:fs/promises";
 import { buildOutboundMediaLoadOptions, type OutboundMediaAccess } from "./load-options.js";
 import { saveMediaBuffer } from "./store.js";
 
@@ -12,16 +11,16 @@ export async function resolveOutboundAttachmentFromUrl(
     readFile?: (filePath: string) => Promise<Buffer>;
   },
 ): Promise<{ path: string; contentType?: string }> {
-  const { loadWebMedia, markTrustedGeneratedHtmlPath } = await import("./web-media.js");
-  const media = await loadWebMedia(
-    mediaUrl,
-    buildOutboundMediaLoadOptions({
+  const { loadWebMedia } = await import("./web-media.js");
+  const media = await loadWebMedia(mediaUrl, {
+    ...buildOutboundMediaLoadOptions({
       maxBytes,
       mediaAccess: options?.mediaAccess,
       mediaLocalRoots: options?.localRoots,
       mediaReadFile: options?.readFile,
     }),
-  );
+    documentFallback: true,
+  });
   // Preserve source file names so outbound attachments keep useful names after UUID staging.
   const saved = await saveMediaBuffer(
     media.buffer,
@@ -29,15 +28,9 @@ export async function resolveOutboundAttachmentFromUrl(
     "outbound",
     maxBytes,
     media.fileName,
+    undefined,
+    { preserveContentType: media.contentType === "application/octet-stream" },
   );
-  if (media.trustedGeneratedHtmlSource) {
-    try {
-      await markTrustedGeneratedHtmlPath(saved.path, media.buffer);
-    } catch (error) {
-      await rm(saved.path, { force: true }).catch(() => {});
-      throw error;
-    }
-  }
   return { path: saved.path, contentType: saved.contentType };
 }
 

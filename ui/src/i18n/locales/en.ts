@@ -3896,8 +3896,7 @@ export const en: TranslationMap & {
       failureInvalidReference:
         "Use a public HTTPS URL without credentials or attach a local file by a safe path.",
       failureFileNotFound: "File not found. Check the path and try again.",
-      failureUnsupportedFormat:
-        "Rejected by the local attachment allowlist. Send a supported file type.",
+      failureUnsupportedFormat: "Delivery failed. Try sending this file again.",
       history: "History",
       image: "Image",
       notSent: "Not sent",
