@@ -447,8 +447,10 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/plain");
   });
 
-  it("rejects host-read LOG files even though they map to text/plain", async () => {
-    await expectAccessError(hostDocument("debug.log", "plain text\n"));
+  it("allows host-read LOG files as plain text", async () => {
+    const result = await hostDocument("debug.log", "plain text\n");
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe("text/plain");
   });
 
   it("allows byte-verified XLSM without changing its name or bytes", async () => {
@@ -460,13 +462,74 @@ describe("loadWebMedia", () => {
     expect(result.buffer).toEqual(body);
   });
 
-  it("rejects text disguised as an allowed binary document", async () => {
-    await expectAccessError(hostDocument("secret.pdf", "secret"));
+  it("keeps text with a binary document extension as inert bytes", async () => {
+    const result = await hostDocument("secret.pdf", "secret");
+    expect(result.kind).toBe("document");
+    expect(result.buffer).toEqual(Buffer.from("secret"));
   });
 
-  it("rejects unverified text named as XLSM", async () => {
-    await expectAccessError(hostDocument("report.xlsm", "not a workbook"));
+  it("delivers unverified text named as XLSM as opaque bytes", async () => {
+    const result = await hostDocument("report.xlsm", "not a workbook");
+    expect(result.buffer).toEqual(Buffer.from("not a workbook"));
+    expect(result.fileName).toBe("report.xlsm");
   });
+
+  it.each([
+    [
+      "vector.svg",
+      '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>\n',
+      "document",
+      "image/svg+xml",
+    ],
+    ["script.js", "export default true;\n", "document", "text/javascript"],
+    ["config.xml", "<config/>\n", "document", "text/xml"],
+  ] as const)(
+    "delivers %s as a document without rewriting its bytes",
+    async (name, body, kind, contentType) => {
+      const result = await hostDocument(name, body);
+      expect(result.kind).toBe(kind);
+      expect(result.contentType).toBe(contentType);
+      expect(result.fileName).toBe(name);
+      expect(result.buffer).toEqual(Buffer.from(body));
+    },
+  );
+
+  it.each(["script.js", "vector.svg", "payload.bin"])(
+    "keeps root and byte boundaries for newly admitted %s files",
+    async (name) => {
+      const body = Buffer.from("export default true;\n");
+      const file = await writeFile(name, body);
+      const readFile = vi.fn((source: string) => fs.readFile(source));
+      await expectAccessError(
+        media.loadWebMedia(file, {
+          localRoots: [workspaceDir],
+          readFile,
+          hostReadCapability: true,
+        }),
+      );
+      expect(readFile).not.toHaveBeenCalled();
+      await expect(
+        media.loadWebMedia(file, {
+          maxBytes: body.length - 1,
+          localRoots: [fixtureRoot],
+          readFile,
+          hostReadCapability: true,
+        }),
+      ).rejects.toThrow(/exceeds.*limit/i);
+    },
+  );
+
+  it.each(["payload.bin", "payload"])(
+    "delivers extensionless and unrecognized binaries as documents",
+    async (name) => {
+      const body = Buffer.from([0x00, 0x01, 0x02, 0x03, 0xff]);
+      const result = await hostDocument(name, body);
+      expect(result.kind).toBeUndefined();
+      expect(result.contentType).toBeUndefined();
+      expect(result.fileName).toBe(name);
+      expect(result.buffer).toEqual(body);
+    },
+  );
 
   it("keeps the host-read XLSM root boundary and byte limit", async () => {
     const body = await xlsmFixture();
@@ -642,15 +705,12 @@ describe("loadWebMedia", () => {
     await expectAccessError(hostDocument("opaque.html", body));
   });
 
-  it("rejects a CSV binary tail after the old text sample window", async () => {
+  it("delivers a CSV binary tail without rewriting its bytes", async () => {
     const prefix = Buffer.from(`name,value\n${"row,1\n".repeat(1400)}`);
     expect(prefix.length).toBeGreaterThan(8192);
-    await expectAccessError(
-      hostDocument(
-        "prefix-tail.csv",
-        Buffer.concat([prefix, Buffer.from([0x00, 0xff, 0x10, 0x80])]),
-      ),
-    );
+    const body = Buffer.concat([prefix, Buffer.from([0x00, 0xff, 0x10, 0x80])]);
+    const result = await hostDocument("prefix-tail.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
   it("allows single-byte encoded host-read CSV", async () => {
@@ -659,16 +719,18 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/csv");
   });
 
-  it("rejects BOM-prefixed binary despite a misleading media signature", async () => {
+  it("delivers BOM-prefixed binary despite a misleading media signature", async () => {
     const body = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.alloc(9000, 0xff)]);
-    await expectAccessError(hostDocument("bom-binary.csv", body));
+    const result = await hostDocument("bom-binary.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
-  it("rejects alternating ASCII and high bytes at the former 50% threshold", async () => {
+  it("delivers alternating ASCII and high bytes without a text-shape verdict", async () => {
     const body = Buffer.from(
       Array.from({ length: 9000 }, (_, index) => (index % 2 === 0 ? 0x41 : 0xff)),
     );
-    await expectAccessError(hostDocument("alternating-high.csv", body));
+    const result = await hostDocument("alternating-high.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
   it("rejects traversal-style canvas media paths", async () => {

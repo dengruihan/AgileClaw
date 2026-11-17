@@ -6,7 +6,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import { readFileWindowFully, sanitizeUntrustedFileName } from "@openclaw/fs-safe/advanced";
 import { maxBytesForKind, mediaKindFromMime } from "@openclaw/media-core/constants";
-import { mimeTypeFromFilePath } from "@openclaw/media-core/mime";
+import { mimeTypeFromFilePath, normalizeMimeType } from "@openclaw/media-core/mime";
 import { hasHttpUrlPrefix } from "@openclaw/net-policy/url-protocol";
 import { asNonNegativeFiniteNumber } from "@openclaw/normalization-core/number-coercion";
 import { asOptionalRecord } from "@openclaw/normalization-core/record-coerce";
@@ -1265,10 +1265,11 @@ export async function createManagedOutgoingMediaBlocks(params: {
               return await saveMediaSource(ingestSource, undefined, "outgoing/originals", maxBytes);
             })();
         savedOriginalPath = savedOriginal.path;
-        let savedOriginalContentType = savedOriginal.contentType ?? item.mimeType;
-        if (!savedOriginalContentType) {
-          throw new Error("Managed media attachment has no detectable content type");
-        }
+        // Any file format is deliverable; content type only selects preview and limits.
+        let savedOriginalContentType =
+          savedOriginal.contentType ??
+          normalizeMimeType(item.mimeType) ??
+          "application/octet-stream";
         const mediaKind = resolveManagedMediaKind(savedOriginalContentType);
         if (!mediaKind) {
           throw new Error("Managed media attachment has an unsupported content type");
@@ -1465,6 +1466,15 @@ export async function createManagedOutgoingMediaBlocks(params: {
   });
 }
 
+/**
+ * SVG can execute script when a browser navigates to it, so it is served as an
+ * opaque download while the Control UI previews the bytes inside an image element.
+ */
+function resolveManagedResponseContentType(contentType: string | undefined): string {
+  const normalized = normalizeMimeType(contentType) ?? "application/octet-stream";
+  return normalized === "image/svg+xml" ? "application/octet-stream" : normalized;
+}
+
 function sendStatus(res: ServerResponse, statusCode: number, body: string) {
   if (res.writableEnded) {
     return;
@@ -1617,7 +1627,7 @@ export async function handleManagedOutgoingMediaHttpRequest(
         };
         let byteStream = createGatewayByteStream(res, opened.handle, respondNotFound);
         try {
-          let responseContentType = record.original.contentType || "application/octet-stream";
+          let responseContentType = resolveManagedResponseContentType(record.original.contentType);
           let responseFilename = record.original.filename;
           if (variant === "thumbnail") {
             // A full-image ticket already authorizes these original bytes; the thumbnail

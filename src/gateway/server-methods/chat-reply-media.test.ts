@@ -342,15 +342,15 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     },
   );
 
-  it("preserves ordered document and image metadata beside one rejected SVG", async () => {
+  it("delivers ordered document, image, and SVG metadata in one reply", async () => {
     const { workspaceDir, cfg } = createMediaTestContext({ allowRead: true });
     const documentPath = path.join(workspaceDir, "artifact.json");
     const localImagePath = path.join(workspaceDir, "local.png");
-    const unsupportedPath = path.join(workspaceDir, "vector.svg");
+    const svgPath = path.join(workspaceDir, "vector.svg");
     await fs.mkdir(workspaceDir, { recursive: true });
     await fs.writeFile(documentPath, '{"ready":true}\n');
     await fs.writeFile(localImagePath, PNG_BYTES);
-    await fs.writeFile(unsupportedPath, "<svg><script/></svg>\n");
+    await fs.writeFile(svgPath, "<svg><script/></svg>\n");
     const upstream = http.createServer((req, res) => {
       expect(req.url).toBe("/remote.png?sig=secret");
       res.statusCode = 200;
@@ -369,20 +369,21 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
         payloads: [
           {
             text: "Artifacts ready",
-            mediaUrls: [documentPath, remoteImageUrl, localImagePath, unsupportedPath],
+            mediaUrls: [documentPath, remoteImageUrl, localImagePath, svgPath],
           },
         ],
       });
 
       expect(payload).toMatchObject({
-        text: "Artifacts ready\n⚠️ vector.svg: Rejected by the local attachment allowlist. Send a supported file type.",
+        text: "Artifacts ready",
         attachments: [
           expect.objectContaining({ name: "artifact.json", mimeType: "application/json" }),
           {},
           expect.objectContaining({ name: "local.png", mimeType: "image/png" }),
+          expect.objectContaining({ name: "vector.svg", mimeType: "image/svg+xml" }),
         ],
       });
-      expect(payload?.mediaUrls).toHaveLength(3);
+      expect(payload?.mediaUrls).toHaveLength(4);
       const matchedUrls: string[] = [];
       const { assistantContent: content } = await withStoreRemoteFixture(
         { url: remoteImageUrl, onMatch: (url) => matchedUrls.push(url) },
@@ -406,15 +407,13 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
         }),
         expect.objectContaining({ type: "image", alt: "remote.png", mimeType: "image/png" }),
         expect.objectContaining({ type: "image", alt: "local.png", mimeType: "image/png" }),
-        {
-          type: "attachment_error",
-          attachment: {
-            code: "unsupported-format",
-            kind: "image",
+        expect.objectContaining({
+          type: "attachment",
+          attachment: expect.objectContaining({
             label: "vector.svg",
             mimeType: "image/svg+xml",
-          },
-        },
+          }),
+        }),
       ]);
       const serialized = JSON.stringify(content);
       expect(serialized).toContain("vector.svg");
@@ -427,14 +426,14 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     }
   });
 
-  it("preserves named rejection outcomes and metadata beside trusted local audio", async () => {
+  it("delivers named script attachments beside trusted local audio", async () => {
     const { workspaceDir, cfg } = createMediaTestContext({ allowRead: true });
     const documentPath = path.join(workspaceDir, "report.json");
-    const unsupportedPath = path.join(workspaceDir, "script.js");
+    const scriptPath = path.join(workspaceDir, "script.js");
     const audioPath = path.join(workspaceDir, "voice.mp3");
     await fs.mkdir(workspaceDir, { recursive: true });
     await fs.writeFile(documentPath, '{"ready":true}\n');
-    await fs.writeFile(unsupportedPath, "export default true;\n");
+    await fs.writeFile(scriptPath, "export default true;\n");
     await createAudioFile(audioPath);
 
     const payload = await normalizeReplyMedia({
@@ -442,7 +441,7 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
       payloads: [
         {
           text: "Artifacts ready",
-          mediaUrls: [documentPath, unsupportedPath, audioPath],
+          mediaUrls: [documentPath, scriptPath, audioPath],
           attachments: [
             { name: "report.json", mimeType: "application/json", trustedLocalMedia: true },
             { name: "script.js", mimeType: "text/javascript", trustedLocalMedia: true },
@@ -454,10 +453,11 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     });
 
     expect(payload).toMatchObject({
-      text: "Artifacts ready\n⚠️ script.js: Rejected by the local attachment allowlist. Send a supported file type.",
-      mediaUrls: [expect.stringMatching(/\.json$/u), audioPath],
+      text: "Artifacts ready",
+      mediaUrls: [expect.stringMatching(/\.json$/u), expect.stringMatching(/\.js$/u), audioPath],
       attachments: [
         expect.objectContaining({ name: "report.json", mimeType: "application/json" }),
+        expect.objectContaining({ name: "script.js", mimeType: "text/javascript" }),
         expect.objectContaining({ name: "voice.mp3", mimeType: "audio/mpeg" }),
       ],
     });
@@ -483,16 +483,25 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     expect(assistantContent?.filter((block) => block.type === "text")).toEqual([
       { type: "text", text: "Artifacts ready" },
     ]);
-    expect(assistantContent?.filter((block) => block.type === "attachment_error")).toEqual([
-      {
-        type: "attachment_error",
-        attachment: {
-          code: "unsupported-format",
-          kind: "document",
+    expect(
+      assistantContent?.filter(
+        (block) => block.type === "attachment" || block.type === "attachment_error",
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "attachment",
+        attachment: expect.objectContaining({
+          label: "report.json",
+          mimeType: "application/json",
+        }),
+      }),
+      expect.objectContaining({
+        type: "attachment",
+        attachment: expect.objectContaining({
           label: "script.js",
           mimeType: "text/javascript",
-        },
-      },
+        }),
+      }),
       {
         type: "attachment_error",
         attachment: {
@@ -537,18 +546,41 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
     },
   );
 
-  it.each(["invalid data", "unknown file"] as const)(
-    "projects a named failure for %s without exposing its source",
-    async (kind) => {
+  it("projects a named failure for invalid data without exposing its source", async () => {
+    const { workspaceDir } = createMediaTestContext({ allowRead: true });
+    const source = "data:audio/mpeg;base64,not-valid!";
+    const errors: string[] = [];
+    const { assistantContent: content, persistedAssistantContent } =
+      await buildAssistantReplyContent({
+        sessionKey: TEST_SESSION_KEY,
+        agentId: "main",
+        payloads: [{ mediaUrls: [source] }],
+        managedMediaLocalRoots: [workspaceDir],
+        onManagedMediaPrepareError: (message) => errors.push(message),
+      });
+    expect(content).toEqual([
+      {
+        type: "attachment_error",
+        attachment: {
+          code: "delivery-failed",
+          kind: "audio",
+          label: "Generated audio 1",
+        },
+      },
+    ]);
+    expect(persistedAssistantContent).toEqual(content);
+    expect(JSON.stringify(content)).not.toContain(source);
+    expect(Buffer.byteLength(JSON.stringify(content))).toBeLessThan(256);
+    expect(errors).toEqual(["Invalid image data URL"]);
+  });
+
+  it.each(["mystery.blob", "payload"])(
+    "delivers an unrecognized %s as a document attachment without exposing its source",
+    async (fileName) => {
       const { workspaceDir } = createMediaTestContext({ allowRead: true });
-      const source =
-        kind === "invalid data"
-          ? "data:audio/mpeg;base64,not-valid!"
-          : path.join(workspaceDir, "mystery.blob");
-      if (kind === "unknown file") {
-        await fs.mkdir(workspaceDir, { recursive: true });
-        await fs.writeFile(source, Buffer.from([0, 1, 2, 3]));
-      }
+      const source = path.join(workspaceDir, fileName);
+      await fs.mkdir(workspaceDir, { recursive: true });
+      await fs.writeFile(source, Buffer.from([0, 1, 2, 3]));
       const errors: string[] = [];
       const { assistantContent: content, persistedAssistantContent } =
         await buildAssistantReplyContent({
@@ -557,34 +589,28 @@ describe("normalizeWebchatReplyMediaPathsForDisplay", () => {
           payloads: [
             {
               mediaUrls: [source],
-              ...(kind === "unknown file"
-                ? {
-                    text: "Artifact result",
-                    attachments: [{ name: "mystery.blob", trustedLocalMedia: true }],
-                  }
-                : {}),
+              text: "Artifact result",
+              attachments: [{ name: fileName, trustedLocalMedia: true }],
             },
           ],
           managedMediaLocalRoots: [workspaceDir],
           onManagedMediaPrepareError: (message) => errors.push(message),
         });
       expect(content).toEqual([
-        ...(kind === "unknown file" ? [{ type: "text", text: "Artifact result" }] : []),
-        {
-          type: "attachment_error",
-          attachment: {
-            code: "delivery-failed",
-            kind: kind === "invalid data" ? "audio" : "document",
-            label: kind === "invalid data" ? "Generated audio 1" : "mystery.blob",
-          },
-        },
+        { type: "text", text: "Artifact result" },
+        expect.objectContaining({
+          type: "attachment",
+          attachment: expect.objectContaining({
+            kind: "document",
+            label: fileName,
+            mimeType: "application/octet-stream",
+            sizeBytes: 4,
+          }),
+        }),
       ]);
       expect(persistedAssistantContent).toEqual(content);
       expect(JSON.stringify(content)).not.toContain(source);
-      expect(Buffer.byteLength(JSON.stringify(content))).toBeLessThan(256);
-      if (kind === "invalid data") {
-        expect(errors).toEqual(["Invalid image data URL"]);
-      }
+      expect(errors).toEqual([]);
     },
   );
 

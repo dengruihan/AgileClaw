@@ -7,7 +7,6 @@ import { basenameFromAnyPath, extnameFromAnyPath } from "@openclaw/media-core/fi
 import {
   detectMime,
   extensionForMime,
-  getFileExtension,
   kindFromMime,
   mimeTypeFromFilePath,
   normalizeMimeType,
@@ -87,7 +86,7 @@ type WebMediaOptions = {
   /** Caller already validated the local path (sandbox/other guards); requires readFile override. */
   sandboxValidated?: boolean;
   readFile?: OutboundMediaReadFile;
-  /** Host-local fs-policy read piggyback; rejects plaintext-like document sends. */
+  /** Host-local fs-policy read piggyback; keeps the trusted-HTML provenance gate. */
   hostReadCapability?: boolean;
 };
 
@@ -166,38 +165,10 @@ function resolveWebMediaOptions(params: {
 const IMAGE_OPTIMIZE_HEADROOM_FACTOR = 4;
 
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
-// file-type returns undefined (no magic bytes) for plain-text formats like CSV,
-// Markdown, TXT, JSON, and YAML, so host-read needs an explicit "this really
-// decodes as text" fallback.
-const HOST_READ_TEXT_PLAIN_ALIASES = new Set([
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-  "application/json",
-  "application/yaml",
-]);
-const HOST_READ_ALLOWED_DOCUMENT_MIMES = new Set([
-  "application/msword",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-excel.sheet.macroenabled.12",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/gzip",
-  "application/x-7z-compressed",
-  "application/x-tar",
-  "application/zip",
-  ...HOST_READ_TEXT_PLAIN_ALIASES,
-]);
-// HTML remains deliberately outside the host-read allowlist pending a separate
-// security-boundary review, but extension-declared .html files still need to
-// fail closed instead of falling through to binary/media sniffing.
-const HOST_READ_DECLARED_TEXT_MIMES = new Set([...HOST_READ_TEXT_PLAIN_ALIASES, "text/html"]);
-const HOST_READ_DECLARED_TEXT_ERROR =
-  "hostReadCapability permits only validated plain-text documents " +
-  "and trusted generated HTML reports for local reads";
+// Every local file format is admissible as a download-only attachment. HTML is the
+// exception: the Control UI renders HTML attachments in an executable sandbox, so
+// extension-declared HTML keeps the exact-byte trusted-generated provenance gate.
+const HOST_READ_HTML_ERROR = "Host-local HTML sends require trusted generated HTML";
 
 function stripLegacyMediaDirectivePrefix(mediaUrl: string): string {
   if (/^\s*media:\/\//i.test(mediaUrl)) {
@@ -405,13 +376,6 @@ function isTrustedGeneratedHostReadHtml(params: {
   );
 }
 
-function isAllowedHostReadTextAlias(mime: string | undefined, filePath?: string): boolean {
-  if (!mime || !HOST_READ_TEXT_PLAIN_ALIASES.has(mime)) {
-    return false;
-  }
-  return mime !== "text/plain" || getFileExtension(filePath) === ".txt";
-}
-
 function formatCapLimit(label: string, cap: number, size: number): string {
   return `${label} exceeds ${formatMediaSize(cap)} limit (got ${formatMediaSize(size)})`;
 }
@@ -420,85 +384,37 @@ function formatCapReduce(label: string, cap: number, size: number): string {
   return `${label} could not be reduced below ${formatMediaSize(cap)} (got ${formatMediaSize(size)})`;
 }
 
+/**
+ * SVG is text that browsers execute when navigated to and that raster decoders cannot
+ * process, so it stays on the download-only document path instead of image delivery.
+ */
+function resolveWebMediaKind(mime: string | undefined): MediaKind | undefined {
+  return normalizeMimeType(mime) === "image/svg+xml" ? "document" : kindFromMime(mime);
+}
+
+/**
+ * Host reads admit every local file format; only extension-declared HTML keeps a
+ * trust check because the Control UI can render HTML with scripts inside a sandbox.
+ */
 function assertHostReadMediaAllowed(params: {
   sniffedContentType?: string;
-  contentType?: string;
   filePath?: string;
-  kind: MediaKind | undefined;
   buffer?: Buffer;
   trustedGeneratedHtmlPath?: HostReadHtmlTrust;
 }): void {
-  const declaredMime = normalizeMimeType(mimeTypeFromFilePath(params.filePath));
-  const normalizedMime = normalizeMimeType(params.contentType);
-  // For extension-declared plain-text aliases such as .csv/.html/.md, trust only the
-  // text validator path. Some opaque blobs can still produce bogus binary MIME
-  // hits (for example BOM-prefixed 0xFF data sniffing as audio/mpeg), and
-  // host-read should reject those instead of returning early on the sniff.
-  if (declaredMime && HOST_READ_DECLARED_TEXT_MIMES.has(declaredMime)) {
-    if (
-      declaredMime === "text/html" &&
-      isTrustedGeneratedHostReadHtml({
-        sniffedContentType: params.sniffedContentType,
-        buffer: params.buffer,
-        trustedGeneratedHtmlPath: params.trustedGeneratedHtmlPath,
-      })
-    ) {
-      return;
-    }
-    if (
-      isAllowedHostReadTextAlias(declaredMime, params.filePath) &&
-      !params.sniffedContentType &&
-      params.buffer &&
-      getValidatedHostReadText(params.buffer) !== undefined
-    ) {
-      return;
-    }
-    throw new HostReadMediaTypeError(HOST_READ_DECLARED_TEXT_ERROR);
-  }
-  const sniffedKind = kindFromMime(params.sniffedContentType);
-  if (sniffedKind === "image" || sniffedKind === "audio" || sniffedKind === "video") {
-    return;
-  }
-  const sniffedMime = normalizeMimeType(params.sniffedContentType);
-  if (
-    sniffedKind === "document" &&
-    sniffedMime &&
-    HOST_READ_ALLOWED_DOCUMENT_MIMES.has(sniffedMime)
-  ) {
+  if (normalizeMimeType(mimeTypeFromFilePath(params.filePath)) !== "text/html") {
     return;
   }
   if (
-    sniffedMime === "application/x-cfb" &&
-    [".doc", ".ppt", ".xls"].includes(getFileExtension(params.filePath) ?? "")
+    isTrustedGeneratedHostReadHtml({
+      sniffedContentType: params.sniffedContentType,
+      buffer: params.buffer,
+      trustedGeneratedHtmlPath: params.trustedGeneratedHtmlPath,
+    })
   ) {
     return;
   }
-  // Plain-text document exception: file-type v22 returns undefined (not "text/plain")
-  // for text buffers that have no binary magic bytes. Allow these formats when:
-  // - sniffedMime is undefined (no binary signature detected by file-type)
-  // - The extension-derived MIME is an allowed text/document MIME (operator intent)
-  // - The buffer decodes as actual text instead of opaque binary bytes
-  if (
-    !sniffedMime &&
-    normalizedMime &&
-    isAllowedHostReadTextAlias(normalizedMime, params.filePath) &&
-    params.buffer &&
-    getValidatedHostReadText(params.buffer) !== undefined
-  ) {
-    return;
-  }
-  if (
-    params.kind === "document" &&
-    normalizedMime &&
-    HOST_READ_ALLOWED_DOCUMENT_MIMES.has(normalizedMime)
-  ) {
-    throw new HostReadMediaTypeError(
-      `Host-local media sends require buffer-verified media/document types (got fallback ${normalizedMime}).`,
-    );
-  }
-  throw new HostReadMediaTypeError(
-    `Host-local media sends only allow buffer-verified images, audio, video, PDF, Office documents, archives, and validated plain-text documents (got ${sniffedMime ?? normalizedMime ?? "unknown"}).`,
-  );
+  throw new HostReadMediaTypeError(HOST_READ_HTML_ERROR);
 }
 
 function toImageFileName(fileName: string | undefined, mimeType: string): string | undefined {
@@ -911,7 +827,7 @@ async function loadWebMediaInternal(
       trustExplicitProxyDns,
     });
     const { buffer, contentType, fileName } = fetched;
-    const kind = kindFromMime(contentType);
+    const kind = resolveWebMediaKind(contentType);
     return await clampAndFinalize({ buffer, contentType, kind, fileName });
   }
 
@@ -949,7 +865,7 @@ async function loadWebMediaInternal(
       ? await resolveTrustedGeneratedHostReadHtml(mediaUrl)
       : undefined;
   if (hostReadDeclaredMime === "text/html" && !htmlTrust) {
-    throw new HostReadMediaTypeError(HOST_READ_DECLARED_TEXT_ERROR);
+    throw new HostReadMediaTypeError(HOST_READ_HTML_ERROR);
   }
 
   let data: Buffer;
@@ -1000,13 +916,11 @@ async function loadWebMediaInternal(
   }
   const sniffedMime = hostReadCapability ? await detectMime({ buffer: data }) : undefined;
   const mime = await detectMime({ buffer: data, filePath: mediaUrl });
-  const kind = kindFromMime(mime);
+  const kind = resolveWebMediaKind(mime);
   if (hostReadCapability) {
     assertHostReadMediaAllowed({
       sniffedContentType: sniffedMime,
-      contentType: mime,
       filePath: mediaUrl,
-      kind,
       buffer: data,
       trustedGeneratedHtmlPath: htmlTrust,
     });

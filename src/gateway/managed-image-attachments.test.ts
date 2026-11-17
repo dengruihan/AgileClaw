@@ -46,6 +46,7 @@ import { resolveOpenClawStateSqlitePath } from "../state/openclaw-state-db.paths
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
 import { createCanonicalAgentConfigFixture } from "../test-utils/config-roster.js";
 import { withEnvAsync } from "../test-utils/env.js";
+import { resolveManagedImageOriginalPath } from "./managed-image-attachments.custody.js";
 import {
   createFixture,
   createManagedOutgoingImageBlocks,
@@ -1287,7 +1288,7 @@ describe("createManagedOutgoingImageBlocks", () => {
       mimeType: "application/octet-stream",
       body: Buffer.from([0, 1, 2, 3]),
     },
-  ])("rejects unsupported $mimeType metadata before persistence", async (fixture) => {
+  ])("delivers unsupported $mimeType as a document attachment", async (fixture) => {
     const sourcePath = path.join(stateDir, "workspace", fixture.fileName);
     await writeSource(sourcePath, fixture.body);
 
@@ -1308,24 +1309,33 @@ describe("createManagedOutgoingImageBlocks", () => {
       onPrepareError,
     });
 
-    expect(blocks).toEqual([
-      {
-        type: "attachment_error",
-        attachment: {
-          code: "delivery-failed",
-          kind: "document",
-          label: fixture.fileName,
-          mimeType: fixture.mimeType,
-        },
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toMatchObject({
+      type: "attachment",
+      attachment: {
+        kind: "document",
+        label: fixture.fileName,
+        mimeType: fixture.mimeType,
+        sizeBytes: fixture.body.length,
       },
-    ]);
-    expect(onPrepareError).toHaveBeenCalledOnce();
-    expect(await listManagedImageRecordEntries({ stateDir })).toEqual([]);
-    const originalsDir = path.join(stateDir, "media", MANAGED_OUTGOING_ORIGINALS_SUBDIR);
-    await expectPathMissing(originalsDir);
+    });
+    expect(onPrepareError).not.toHaveBeenCalled();
+    const records = await listManagedImageRecordEntries({ stateDir });
+    expect(records).toHaveLength(1);
+    expect(records[0]?.record.original).toMatchObject({
+      contentType: fixture.mimeType,
+      filename: fixture.fileName,
+    });
+    const record = records[0]?.record;
+    if (!record) {
+      throw new Error("expected a persisted managed record");
+    }
+    expect(await fs.readFile(resolveManagedImageOriginalPath(record))).toEqual(
+      Buffer.from(fixture.body),
+    );
   });
 
-  it("does not serve legacy SVG records over GET", async () => {
+  it("serves legacy SVG records as opaque downloads instead of inline images", async () => {
     const body = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>');
     const { attachmentId, sessionKey } = await createFixture(stateDir, {
       filename: "vector.svg",
@@ -1354,14 +1364,16 @@ describe("createManagedOutgoingImageBlocks", () => {
       ],
     });
 
-    expect(result.statusCode).toBe(404);
-    expect(result.headers["content-disposition"]).toBeUndefined();
-    expect(result.body).toEqual(Buffer.from("not found"));
+    expect(result.statusCode).toBe(200);
+    expect(result.headers["content-type"]).toBe("application/octet-stream");
+    expect(result.headers["x-content-type-options"]).toBe("nosniff");
+    expect(result.headers["content-disposition"]).toMatch(/^attachment;/u);
+    expect(result.headers["content-disposition"]).toContain("vector.svg");
+    expect(result.body).toEqual(body);
   });
 
   it("rolls back earlier managed artifacts when a later item fails", async () => {
-    const sourcePath = path.join(stateDir, "workspace", "mystery.blob");
-    await writeSource(sourcePath, Buffer.from([0, 1, 2, 3]));
+    const missingPath = path.join(stateDir, "workspace", "missing.bin");
 
     await expect(
       createManagedOutgoingImageBlocksActual({
@@ -1371,10 +1383,10 @@ describe("createManagedOutgoingImageBlocks", () => {
             url: `data:image/png;base64,${TINY_PNG_BASE64}`,
             trustedLocal: false,
           },
-          { url: sourcePath, trustedLocal: true },
+          { url: missingPath, trustedLocal: true },
         ],
         stateDir,
-        localRoots: [path.dirname(sourcePath)],
+        localRoots: [path.dirname(missingPath)],
       }),
     ).rejects.toThrow(/could not be prepared/u);
 
