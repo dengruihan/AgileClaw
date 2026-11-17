@@ -1,4 +1,5 @@
 import { timestampMsToIsoString } from "@openclaw/normalization-core/number-coercion";
+import { asOptionalRecord, readStringField } from "@openclaw/normalization-core/record-coerce";
 import { t } from "../../i18n/index.ts";
 import type { MessageContentItem } from "../../lib/chat/chat-types.ts";
 import { extractTextCached } from "../../lib/chat/message-extract.ts";
@@ -61,10 +62,8 @@ export function buildChatTranscript(
       continue;
     }
     const role = normalizeRoleForGrouping(resolveMessageRole(message));
-    const envelopeRole = (message as Record<string, unknown>).role;
-    const authorRole = normalizeRoleForGrouping(
-      typeof envelopeRole === "string" ? envelopeRole : "",
-    );
+    const envelope = asOptionalRecord(message);
+    const authorRole = normalizeRoleForGrouping(readStringField(envelope, "role") ?? "");
     const senderLabel = resolveMessageSenderLabel(message);
     const speaker =
       role === "user"
@@ -72,7 +71,7 @@ export function buildChatTranscript(
         : role === "assistant"
           ? (senderLabel ?? assistantName)
           : "Tool";
-    const rawTimestamp = (message as Record<string, unknown>).timestamp;
+    const rawTimestamp = envelope?.timestamp;
     entries.push({
       role,
       authorRole,

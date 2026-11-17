@@ -18,10 +18,13 @@ import {
   resetTranscriptTestDom,
 } from "./components/chat-transcript.test-support.ts";
 
-vi.mock("../../lib/toast.ts", () => ({ showToast: vi.fn() }));
-vi.mock("../../lib/download.ts", () => ({
+vi.mock("../../lib/toast.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/toast.ts")>()),
+  showToast: vi.fn(),
+}));
+vi.mock("../../lib/download.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/download.ts")>()),
   downloadBlobFile: vi.fn(),
-  downloadTextFile: vi.fn(),
 }));
 
 beforeEach(installTranscriptDomMocks);
@@ -91,6 +94,7 @@ describe("chat pane PDF export authority boundary", () => {
     "stops a pending export when live history %s authority is revoked in place",
     async (revocation) => {
       const deferred = createDeferred<unknown>();
+      const secondPageRequested = createDeferred();
       let calls = 0;
       const request = vi.fn(async (method: string) => {
         if (method !== "chat.history") {
@@ -103,12 +107,13 @@ describe("chat pane PDF export authority boundary", () => {
             sessionId: session.sessionId,
           });
         }
+        secondPageRequested.resolve();
         return await deferred.promise;
       });
       const { pane, state, hello } = createFixture(request);
 
       const exported = pane.handleHeaderSessionAction({ kind: "export-pdf" }, { ...session });
-      await vi.waitFor(() => expect(calls).toBe(2));
+      await secondPageRequested.promise;
 
       // The Gateway can revoke authority inside the same hello object it already sent.
       hello.auth =
@@ -138,6 +143,7 @@ describe("chat pane PDF export authority boundary", () => {
 
   it("retires a pending export after a session switch and only then reports no download", async () => {
     const deferred = createDeferred<unknown>();
+    const secondPageRequested = createDeferred();
     let calls = 0;
     const request = vi.fn(async (method: string) => {
       if (method !== "chat.history") {
@@ -150,12 +156,13 @@ describe("chat pane PDF export authority boundary", () => {
           sessionId: session.sessionId,
         });
       }
+      secondPageRequested.resolve();
       return await deferred.promise;
     });
     const { pane, state } = createFixture(request);
 
     const exported = pane.handleHeaderSessionAction({ kind: "export-pdf" }, { ...session });
-    await vi.waitFor(() => expect(calls).toBe(2));
+    await secondPageRequested.promise;
 
     // The pane now presents another conversation while the old read is still open.
     state.sessionKey = otherSession.key;

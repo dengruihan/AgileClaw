@@ -159,7 +159,8 @@ function buildUnits(spans: readonly PdfSpan[], size: number, maxWidth: number): 
       }
       word += char.text;
       wordWidth += char.width;
-      if (char.wide) {
+      // CJK characters are their own break opportunity.
+      if (char.cjk !== null) {
         flushWord();
       }
     }

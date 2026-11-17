@@ -2,6 +2,7 @@ import {
   measurePdfText,
   pdfFontKey,
   pdfFontWidths,
+  type PdfCjkFamily,
   type PdfFontKey,
   type PdfTextStyle,
 } from "./pdf-text.ts";
@@ -46,10 +47,58 @@ export const PDF_PAGE_WIDTH = 595.28;
 export const PDF_PAGE_HEIGHT = 841.89;
 
 /**
- * Object layout: catalog, page tree, one font resource per key, then the CJK
- * descendant font and its descriptor, one shared resource dictionary, and one
- * page plus content stream per rendered page.
+ * Object layout: catalog, page tree, one font resource per key, then one
+ * descendant font and descriptor per predefined CJK ordering, one shared
+ * resource dictionary, and one page plus content stream per rendered page.
  */
+type CjkFontSpec = {
+  key: Extract<PdfFontKey, "cjkGb" | "cjkJp" | "cjkKr">;
+  family: PdfCjkFamily;
+  /** Predefined ADBE font a viewer substitutes from its own font set. */
+  baseFont: string;
+  encoding: string;
+  ordering: "GB1" | "Japan1" | "Korea1";
+  supplement: number;
+  /** Flags: 4 = symbolic, matching the predefined CID font's glyph set. */
+  flags: number;
+};
+
+const CJK_FONTS: readonly CjkFontSpec[] = [
+  {
+    key: "cjkGb",
+    family: "gb",
+    baseFont: "STSong-Light",
+    encoding: "UniGB-UCS2-H",
+    ordering: "GB1",
+    supplement: 4,
+    flags: 4,
+  },
+  {
+    key: "cjkJp",
+    family: "jp",
+    baseFont: "HeiseiMin-W3",
+    encoding: "UniJIS-UCS2-H",
+    ordering: "Japan1",
+    supplement: 6,
+    flags: 4,
+  },
+  {
+    key: "cjkKr",
+    family: "kr",
+    baseFont: "HYSMyeongJo-Medium",
+    encoding: "UniKS-UCS2-H",
+    ordering: "Korea1",
+    supplement: 3,
+    flags: 4,
+  },
+];
+
+const CJK_FONT_KEY_BY_FAMILY: Record<PdfCjkFamily, CjkFontSpec["key"]> = {
+  gb: "cjkGb",
+  jp: "cjkJp",
+  kr: "cjkKr",
+};
+
 const FONT_NAMES: readonly { key: PdfFontKey; name: string }[] = [
   { key: "regular", name: "Helvetica" },
   { key: "bold", name: "Helvetica-Bold" },
@@ -57,8 +106,12 @@ const FONT_NAMES: readonly { key: PdfFontKey; name: string }[] = [
   { key: "boldItalic", name: "Helvetica-BoldOblique" },
   { key: "code", name: "Courier" },
   { key: "codeBold", name: "Courier-Bold" },
-  { key: "cjk", name: "STSong-Light" },
+  ...CJK_FONTS.map((font) => ({ key: font.key, name: font.baseFont })),
 ];
+
+function isCjkFontKey(key: PdfFontKey): key is CjkFontSpec["key"] {
+  return key.startsWith("cjk");
+}
 
 const FONT_RESOURCE_NAMES = new Map<PdfFontKey, string>(
   FONT_NAMES.map((font, index) => [font.key, `F${index + 1}`]),
@@ -113,34 +166,37 @@ function textOperator(op: PdfTextOp): string {
   let fakeBold = false;
   let runText = "";
   let runCodes: number[] = [];
-  let wide: boolean | null = null;
+  let runFamily: PdfCjkFamily | null = null;
+  let runOpen = false;
   const flush = () => {
-    if (runText || runCodes.length > 0) {
-      const font: PdfFontKey = wide === true ? "cjk" : baseFont;
+    if (runOpen) {
+      const font: PdfFontKey = runFamily === null ? baseFont : CJK_FONT_KEY_BY_FAMILY[runFamily];
       if (font !== currentFont) {
         ops.push(`/${FONT_RESOURCE_NAMES.get(font)} ${num(op.size)} Tf`);
         currentFont = font;
       }
       // Fake bold keeps CJK text distinct without a second embedded font program.
-      const boldCjk = font === "cjk" && op.style.bold === true;
+      const boldCjk = isCjkFontKey(font) && op.style.bold === true;
       if (boldCjk !== fakeBold) {
         ops.push(boldCjk ? "2 Tr" : "0 Tr");
         fakeBold = boldCjk;
       }
-      ops.push(wide === true ? `${hexString(runText)} Tj` : `${literalString(runCodes)} Tj`);
+      ops.push(runFamily === null ? `${literalString(runCodes)} Tj` : `${hexString(runText)} Tj`);
     }
     runText = "";
     runCodes = [];
+    runOpen = false;
   };
   for (const char of chars) {
-    if (wide !== null && char.wide !== wide) {
+    if (runOpen && char.cjk !== runFamily) {
       flush();
     }
-    wide = char.wide;
-    if (char.wide) {
-      runText += char.text;
-    } else {
+    runFamily = char.cjk;
+    runOpen = true;
+    if (char.cjk === null) {
       runCodes.push(char.code ?? 0x3f);
+    } else {
+      runText += char.text;
     }
   }
   flush();
@@ -214,9 +270,6 @@ function asciiBytes(text: string): Uint8Array {
 }
 
 function fontDictionary(font: (typeof FONT_NAMES)[number]): string {
-  if (font.key === "cjk") {
-    return "";
-  }
   const widths = pdfFontWidths(font.key).join(" ");
   return `<< /Type /Font /Subtype /Type1 /BaseFont /${font.name} /Encoding /WinAnsiEncoding /FirstChar 32 /LastChar 255 /Widths [${widths}] >>`;
 }
@@ -238,8 +291,10 @@ export function serializePdf(pages: readonly PdfPageContent[]): Uint8Array {
   for (const font of FONT_NAMES) {
     fontIds.set(font.key, reserve());
   }
-  const cjkDescriptorId = reserve();
-  const cjkDescendantId = reserve();
+  const cjkIds = new Map<CjkFontSpec["key"], { descendant: number; descriptor: number }>();
+  for (const font of CJK_FONTS) {
+    cjkIds.set(font.key, { descendant: reserve(), descriptor: reserve() });
+  }
   const resourcesId = reserve();
 
   const pageIds = pages.map((page) => {
@@ -261,23 +316,25 @@ export function serializePdf(pages: readonly PdfPageContent[]): Uint8Array {
   );
   for (const font of FONT_NAMES) {
     const id = fontIds.get(font.key)!;
-    if (font.key === "cjk") {
-      set(
-        id,
-        `<< /Type /Font /Subtype /Type0 /BaseFont /${font.name} /Encoding /UniGB-UCS2-H /DescendantFonts [${cjkDescendantId} 0 R] >>`,
-      );
+    if (!isCjkFontKey(font.key)) {
+      set(id, fontDictionary(font));
       continue;
     }
-    set(id, fontDictionary(font));
+    const spec = CJK_FONTS.find((candidate) => candidate.key === font.key)!;
+    const ids = cjkIds.get(spec.key)!;
+    set(
+      id,
+      `<< /Type /Font /Subtype /Type0 /BaseFont /${spec.baseFont} /Encoding /${spec.encoding} /DescendantFonts [${ids.descendant} 0 R] >>`,
+    );
+    set(
+      ids.descriptor,
+      `<< /Type /FontDescriptor /FontName /${spec.baseFont} /Flags ${spec.flags} /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>`,
+    );
+    set(
+      ids.descendant,
+      `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /${spec.baseFont} /CIDSystemInfo << /Registry (Adobe) /Ordering (${spec.ordering}) /Supplement ${spec.supplement} >> /FontDescriptor ${ids.descriptor} 0 R /DW 1000 >>`,
+    );
   }
-  set(
-    cjkDescriptorId,
-    "<< /Type /FontDescriptor /FontName /STSong-Light /Flags 4 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 93 >>",
-  );
-  set(
-    cjkDescendantId,
-    `<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (GB1) /Supplement 4 >> /FontDescriptor ${cjkDescriptorId} 0 R /DW 1000 >>`,
-  );
   set(
     resourcesId,
     `<< /Font << ${FONT_NAMES.map((font) => `/${FONT_RESOURCE_NAMES.get(font.key)} ${fontIds.get(font.key)} 0 R`).join(" ")} >> >>`,

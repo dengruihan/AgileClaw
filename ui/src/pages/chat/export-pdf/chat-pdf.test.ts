@@ -148,6 +148,46 @@ describe("buildChatPdf", () => {
     expect(() => buildChatPdf(input(entries))).toThrow(ChatPdfTooLargeError);
   });
 
+  it("routes kana and Hangul through their own predefined CJK orderings", () => {
+    const document = pdfText(
+      buildChatPdf(
+        input([
+          {
+            speaker: "AgileClaw",
+            role: "assistant",
+            timestampIso: null,
+            body: "日本語 かな カナ 한국어 한자",
+            attachments: 0,
+          },
+        ]),
+      ),
+    );
+    expect(document).toContain("/Encoding /UniGB-UCS2-H");
+    expect(document).toContain("/Encoding /UniJIS-UCS2-H");
+    expect(document).toContain("/Encoding /UniKS-UCS2-H");
+    expect(document).toContain("/Ordering (GB1)");
+    expect(document).toContain("/Ordering (Japan1)");
+    expect(document).toContain("/Ordering (Korea1)");
+    const runs = new Map<string, string>();
+    let current = "";
+    for (const match of document.matchAll(/\/(F\d) [\d.]+ Tf|<([0-9A-F]+)> Tj/gu)) {
+      if (match[1]) {
+        current = match[1];
+      } else if (match[2]) {
+        runs.set(current, (runs.get(current) ?? "") + match[2]);
+      }
+    }
+    const hex = (text: string) =>
+      Array.from(text)
+        .map((char) => char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0"))
+        .join("");
+    // F7 = Adobe-GB1, F8 = Adobe-Japan1, F9 = Adobe-Korea1.
+    expect(runs.get("F7")).toContain(hex("日本語"));
+    expect(runs.get("F8")).toContain(hex("かな"));
+    expect(runs.get("F9")).toContain(hex("한국어"));
+    expect(runs.get("F7")).not.toContain(hex("한국어"));
+  });
+
   it("keeps code indentation instead of treating it as droppable leading space", () => {
     const document = pdfText(
       buildChatPdf(

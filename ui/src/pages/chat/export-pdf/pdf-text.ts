@@ -2,16 +2,28 @@
  * Font metrics and WinAnsi/UCS2 routing for the dependency-free PDF writer.
  *
  * The writer embeds no font programs: Latin text uses the PDF base-14 families
- * (every viewer ships their metrics) and non-Latin text uses the predefined
- * Adobe-GB1 CID font, which viewers substitute with a locally installed CJK
- * font. Both keep the PDF text extractable and searchable.
+ * (every viewer ships their metrics) and CJK text uses the predefined ADBE CID
+ * fonts for its script (Adobe-GB1, Adobe-Japan1, Adobe-Korea1), which viewers
+ * substitute with a locally installed font. Kana and Hangul are routed to their
+ * own ordering so they are never carried through a Chinese-only CMap.
  */
 
 export type PdfTextStyle = { bold?: boolean; italic?: boolean; code?: boolean };
 
-export type PdfFontKey = "regular" | "bold" | "italic" | "boldItalic" | "code" | "codeBold" | "cjk";
+export type PdfCjkFamily = "gb" | "jp" | "kr";
 
-/** Visible replacement for characters the predefined CID font cannot encode. */
+export type PdfFontKey =
+  | "regular"
+  | "bold"
+  | "italic"
+  | "boldItalic"
+  | "code"
+  | "codeBold"
+  | "cjkGb"
+  | "cjkJp"
+  | "cjkKr";
+
+/** Visible replacement for characters the predefined CID fonts cannot encode. */
 export const PDF_UNSUPPORTED_MARKER = "\u25A1";
 
 /** Counts astral characters that the PDF font range cannot carry. */
@@ -25,13 +37,35 @@ export function countUnsupportedPdfChars(text: string): number {
   return count;
 }
 
+/** Script-specific predefined ordering for a non-WinAnsi BMP code point. */
+export function pdfCjkFamilyForCodePoint(codePoint: number): PdfCjkFamily {
+  // Hangul jamo, compatibility jamo, syllables, and halfwidth Hangul live only in Korea1.
+  if (
+    (codePoint >= 0x1100 && codePoint <= 0x11ff) ||
+    (codePoint >= 0x3130 && codePoint <= 0x318f) ||
+    (codePoint >= 0xac00 && codePoint <= 0xd7af) ||
+    (codePoint >= 0xffa0 && codePoint <= 0xffdc)
+  ) {
+    return "kr";
+  }
+  // Kana live only in Japan1, so they must not travel through the GB CMap.
+  if (
+    (codePoint >= 0x3040 && codePoint <= 0x30ff) ||
+    (codePoint >= 0x31f0 && codePoint <= 0x31ff) ||
+    (codePoint >= 0xff65 && codePoint <= 0xff9f)
+  ) {
+    return "jp";
+  }
+  return "gb";
+}
+
 export type PdfChar = {
-  /** Text written to the page; astral and unencodable characters become "?". */
+  /** Text written to the page; astral characters become the visible marker. */
   text: string;
-  /** WinAnsi byte for base-14 text, null when the character needs the CID font. */
+  /** WinAnsi byte for base-14 text, null when the character needs a CID font. */
   code: number | null;
-  /** Full-width advance flag (CID font). */
-  wide: boolean;
+  /** CID font family for this character, null for base-14 text. */
+  cjk: PdfCjkFamily | null;
   width: number;
 };
 
@@ -143,23 +177,28 @@ export function measurePdfText(text: string, style: PdfTextStyle, size: number):
   const chars: PdfChar[] = [];
   for (const char of text) {
     if (char === "\t") {
-      chars.push({ text: "    ", code: 0x20, wide: false, width: (spaceMetric / 1000) * size * 4 });
+      chars.push({
+        text: "    ",
+        code: 0x20,
+        cjk: null,
+        width: (spaceMetric / 1000) * size * 4,
+      });
       continue;
     }
     const code = winAnsiCode(char);
     if (code !== null) {
       const metric = table ? (table[code - 32] ?? 556) : 600;
-      chars.push({ text: char, code, wide: false, width: (metric / 1000) * size });
+      chars.push({ text: char, code, cjk: null, width: (metric / 1000) * size });
       continue;
     }
     const codePoint = char.codePointAt(0) ?? 0;
     if (codePoint > 0xffff) {
-      // The CID font's UCS2 encoding cannot address astral characters (emoji
-      // and similar), so they become a visible marker the export explains.
-      chars.push({ text: PDF_UNSUPPORTED_MARKER, code: null, wide: true, width: size });
+      // The UCS2 CMaps cannot address astral characters (emoji and similar), so
+      // they become a visible marker the export explains.
+      chars.push({ text: PDF_UNSUPPORTED_MARKER, code: null, cjk: "gb", width: size });
       continue;
     }
-    chars.push({ text: char, code: null, wide: true, width: size });
+    chars.push({ text: char, code: null, cjk: pdfCjkFamilyForCodePoint(codePoint), width: size });
   }
   return chars;
 }

@@ -85,8 +85,10 @@ async function installPaginatedHistory(page: Page, messages: unknown[]) {
 }
 
 async function openPdfExportAction(page: Page) {
-  await page.locator(".chat-header-session-menu__trigger").first().click();
-  const menu = page.locator("openclaw-chat-header-session-menu").first();
+  // Cached panes keep their headers mounted; act on the pane the operator sees.
+  const pane = page.locator('openclaw-chat-pane[aria-hidden="false"]');
+  await pane.locator(".chat-header-session-menu__trigger").first().click();
+  const menu = pane.locator("openclaw-chat-header-session-menu").first();
   const action = menu.locator('wa-dropdown-item[value="export-pdf"]');
   await action.waitFor({ state: "visible" });
   return action;
@@ -188,14 +190,14 @@ suite.define(() => {
       });
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, sessionKey));
       await gateway.waitForRequest("chat.startup");
-      const menu = page
+      const pane = page.locator('openclaw-chat-pane[aria-hidden="false"]');
+      const menu = pane
         .locator("openclaw-chat-header-session-menu")
         .filter({ has: page.locator("wa-dropdown.chat-header-session-menu--compact") });
-      await page.locator(".chat-header-session-menu__trigger").first().click();
+      await pane.locator(".chat-header-session-menu__trigger").first().click();
       const action = menu.locator('wa-dropdown-item[value="export-pdf"]');
       await action.waitFor({ state: "visible" });
       await captureUiProof(suite, page, "pdf-export-compact-menu.png");
-      await expect.poll(() => action.isVisible()).toBe(true);
     });
   });
 
@@ -255,15 +257,22 @@ suite.define(() => {
             };
           }
         ).openclawControlUiE2eGateway;
-        const release = { current: false };
-        const state = window as unknown as {
+        let releaseHeldPage: (() => void) | null = null;
+        let markHeldPageRequested: (() => void) | null = null;
+        const heldPageRequested = new Promise<void>((resolve) => {
+          markHeldPageRequested = resolve;
+        });
+        const heldPageRelease = new Promise<void>((resolve) => {
+          releaseHeldPage = resolve;
+        });
+        const host = window as unknown as {
+          openclawPdfHeldPageRequested?: Promise<void>;
           openclawReleasePdfPage?: () => void;
-          openclawPdfHeldPageDelivered?: boolean;
         };
-        state.openclawPdfHeldPageDelivered = false;
-        state.openclawReleasePdfPage = () => {
-          release.current = true;
-        };
+        // Explicit deferred signals: the test awaits the request and drives the release
+        // through the page, so no fixed sleep or polling is involved.
+        host.openclawPdfHeldPageRequested = heldPageRequested;
+        host.openclawReleasePdfPage = () => releaseHeldPage?.();
         mockGateway.setRequestHandler("chat.history", ({ params, respond }) => {
           const query = (params ?? {}) as { offset?: number; limit?: number; sessionKey?: string };
           const offset = typeof query.offset === "number" ? query.offset : 0;
@@ -289,27 +298,26 @@ suite.define(() => {
             answer(false);
             return;
           }
-          // The export's second page stays pending until the operator switches away.
           if (offset === 0) {
             answer(true);
             return;
           }
-          const wait = () => {
-            if (release.current) {
-              state.openclawPdfHeldPageDelivered = true;
-              answer(false);
-              return;
-            }
-            window.setTimeout(wait, 25);
-          };
-          wait();
+          // Hold the export's second page until the test releases it after switching.
+          markHeldPageRequested?.();
+          void heldPageRelease.then(() => answer(false));
         });
       });
 
-      const downloads: string[] = [];
-      page.on("download", (download) => downloads.push(download.suggestedFilename()));
+      const seenDownloads: string[] = [];
+      page.on("download", (download) => seenDownloads.push(download.suggestedFilename()));
       const exportAction = await openPdfExportAction(page);
       await exportAction.click();
+      // Deterministic wait for the export's held second page, then switch away.
+      await page.evaluate(
+        () =>
+          (window as unknown as { openclawPdfHeldPageRequested?: Promise<void> })
+            .openclawPdfHeldPageRequested,
+      );
       await page
         .locator('.sidebar-recent-session[data-session-key="' + otherSessionKey + '"]')
         .click();
@@ -320,26 +328,28 @@ suite.define(() => {
       await page.evaluate(() => {
         (window as unknown as { openclawReleasePdfPage?: () => void }).openclawReleasePdfPage?.();
       });
-      // The zero-download assertion must follow the real continuation: wait until the
-      // held page was actually delivered, then give the retired export its settle window.
-      await expect
-        .poll(
-          () =>
-            page.evaluate(
-              () =>
-                (window as unknown as { openclawPdfHeldPageDelivered?: boolean })
-                  .openclawPdfHeldPageDelivered === true,
-            ),
-          { timeout: 5_000 },
-        )
-        .toBe(true);
-      await page.waitForTimeout(600);
-      expect(downloads).toEqual([]);
-      // The new conversation still owns the transcript: no stale export output replaced it.
-      await page
-        .locator('openclaw-chat-pane[aria-hidden="false"]')
-        .getByText("Other session body", { exact: true })
-        .waitFor();
+
+      // Settlement signal from the real flow: exporting the session now on screen can
+      // only start once the retired export cleared the pane's in-flight guard. If the
+      // old export were still pending, this click would be refused and no download
+      // would arrive.
+      const currentPaneDownload = page.waitForEvent("download");
+      const otherExportAction = await openPdfExportAction(page);
+      await otherExportAction.click();
+      const download = await currentPaneDownload;
+      const stream = await download.createReadStream();
+      const chunks: Buffer[] = [];
+      for await (const chunk of stream ?? []) {
+        chunks.push(Buffer.from(chunk as Uint8Array));
+      }
+      const pdf = new TextDecoder("latin1").decode(new Uint8Array(Buffer.concat(chunks)));
+
+      // Exactly one download exists: the export of the session now on screen. The
+      // retired export produced none, and it had already settled because the pane
+      // refuses a new export while one is still running.
+      expect(seenDownloads).toEqual([download.suggestedFilename()]);
+      expect(pdf).toContain("(Other session body) Tj");
+      expect(pdf).not.toContain("Which checks gate the release?");
     });
   });
 });

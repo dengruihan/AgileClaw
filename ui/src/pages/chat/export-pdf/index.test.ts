@@ -2,7 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { downloadBlobFile } from "../../../lib/download.ts";
 import { buildChatPdfBytes, buildChatPdfEntries, exportChatPdf } from "./index.ts";
 
-vi.mock("../../../lib/download.ts", () => ({ downloadBlobFile: vi.fn() }));
+vi.mock("../../../lib/download.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../lib/download.ts")>()),
+  downloadBlobFile: vi.fn(),
+}));
 
 afterEach(() => {
   vi.clearAllMocks();
