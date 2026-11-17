@@ -133,6 +133,31 @@ describe("exportChatPdf", () => {
     expect(header).toBe("%PDF-1.4");
   });
 
+  it("counts and marks non-CJK BMP scripts instead of exporting corrupted text", () => {
+    const body =
+      "Arabic: \u0645\u0631\u062D\u0628\u0627 Hebrew: \u05E9\u05DC\u05D5\u05DD Thai: \u0E2A\u0E27\u0E31\u0E2A\u0E14\u0E35";
+    const built = buildChatPdfBytes({
+      messages: [
+        { role: "user", content: body },
+        { role: "assistant", content: "CJK stays text: 中文 日本語 한국어" },
+      ],
+      assistantName: "AgileClaw",
+      title: "Scripts",
+      now: Date.parse("2026-11-17T09:30:00Z"),
+    });
+    // The unsupported letters are counted; the CJK body is not part of the loss.
+    expect(built?.unsupportedCharacters).toBe(15);
+    const document = new TextDecoder("latin1").decode(built!.bytes);
+    expect(document).toContain("15 characters outside the PDF font range appear as");
+    expect(document).toContain("25A1");
+    expect(document).not.toMatch(/<(?:0645|05E9|0E2A)/u);
+    expect(document).toContain(
+      Array.from("中文")
+        .map((char) => char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0"))
+        .join(""),
+    );
+  });
+
   it("keeps emoji content visible as an explained marker instead of a silent ?", () => {
     const built = buildChatPdfBytes({
       messages: [

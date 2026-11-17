@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdownToPdfBlocks } from "./chat-markdown-blocks.ts";
 import { buildChatPdf, ChatPdfTooLargeError, type ChatPdfInput } from "./chat-pdf.ts";
+import { countUnsupportedPdfChars } from "./pdf-text.ts";
 
 const labels = {
   meta: "Exported 2026-11-17 09:30:00 UTC · 4 messages",
@@ -186,6 +187,57 @@ describe("buildChatPdf", () => {
     expect(runs.get("F8")).toContain(hex("かな"));
     expect(runs.get("F9")).toContain(hex("한국어"));
     expect(runs.get("F7")).not.toContain(hex("한국어"));
+  });
+
+  it("replaces non-CJK BMP scripts with the counted marker instead of mis-mapping them", () => {
+    const body =
+      "Arabic: \u0645\u0631\u062D\u0628\u0627 Hebrew: \u05E9\u05DC\u05D5\u05DD Thai: \u0E2A\u0E27\u0E31\u0E2A\u0E14\u0E35 Armenian: \u0532\u0561\u0580\u0587";
+    const letters = countUnsupportedPdfChars(body);
+    const document = pdfText(
+      buildChatPdf({
+        ...input([{ speaker: "You", role: "user", timestampIso: null, body, attachments: 0 }]),
+        unsupportedCharacters: letters,
+      }),
+    );
+    expect(letters).toBeGreaterThan(15);
+    expect(letters).toBe(19);
+    expect(document).toContain("<25A1> Tj");
+    expect(document).toContain("characters outside the PDF font range appear as");
+    // None of the source scripts reach a CID ordering, so no wrong glyphs can appear.
+    for (const source of ["0645", "05E9", "0E2A", "0532"]) {
+      expect(document).not.toContain(`<${source}`);
+    }
+  });
+
+  it("keeps supported CJK and CJK symbol rows routed to their orderings", () => {
+    const body = "中文 日本語 かな カナ 한국어 → ★ ① ─ ± № ° ℃";
+    const document = pdfText(
+      buildChatPdf(
+        input([
+          { speaker: "AgileClaw", role: "assistant", timestampIso: null, body, attachments: 0 },
+        ]),
+      ),
+    );
+    const runs = new Map<string, string>();
+    let current = "";
+    for (const match of document.matchAll(/\/(F\d) [\d.]+ Tf|<([0-9A-F]+)> Tj/gu)) {
+      if (match[1]) {
+        current = match[1];
+      } else if (match[2]) {
+        runs.set(current, (runs.get(current) ?? "") + match[2]);
+      }
+    }
+    const hex = (text: string) =>
+      Array.from(text)
+        .map((char) => char.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0"))
+        .join("");
+    expect(runs.get("F7")).toContain(hex("中文"));
+    expect(runs.get("F8")).toContain(hex("かな"));
+    expect(runs.get("F9")).toContain(hex("한국어"));
+    // Common CJK symbol rows still route instead of turning into markers.
+    expect(runs.get("F7")).toContain(hex("№℃"));
+    expect(runs.get("F8")).toContain(hex("→"));
+    expect(document).not.toContain("25A1");
   });
 
   it("keeps code indentation instead of treating it as droppable leading space", () => {

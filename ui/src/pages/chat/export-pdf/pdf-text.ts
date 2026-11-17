@@ -4,8 +4,12 @@
  * The writer embeds no font programs: Latin text uses the PDF base-14 families
  * (every viewer ships their metrics) and CJK text uses the predefined ADBE CID
  * fonts for its script (Adobe-GB1, Adobe-Japan1, Adobe-Korea1), which viewers
- * substitute with a locally installed font. Kana and Hangul are routed to their
- * own ordering so they are never carried through a Chinese-only CMap.
+ * substitute with a locally installed font.
+ *
+ * Only scripts those orderings actually carry are routed to them. Every other
+ * code point — Arabic, Hebrew, Thai, Armenian, Devanagari, dingbats, and astral
+ * characters — takes the visible marker so the export never silently rewrites a
+ * character into an unrelated glyph.
  */
 
 export type PdfTextStyle = { bold?: boolean; italic?: boolean; code?: boolean };
@@ -23,40 +27,97 @@ export type PdfFontKey =
   | "cjkJp"
   | "cjkKr";
 
-/** Visible replacement for characters the predefined CID fonts cannot encode. */
+/** Visible replacement for characters the predefined CID fonts cannot carry. */
 export const PDF_UNSUPPORTED_MARKER = "\u25A1";
 
-/** Counts astral characters that the PDF font range cannot carry. */
+/**
+ * Non-WinAnsi BMP ranges the predefined orderings carry.
+ *
+ * Han characters, CJK punctuation, fullwidth forms, and the symbol rows that
+ * GB2312 defines travel through Adobe-GB1; kana and the arrow/math/technical
+ * symbol rows travel through Adobe-Japan1; Hangul travels through Adobe-Korea1.
+ * Scripts outside this table would be mapped to unrelated glyphs, so they are
+ * replaced instead. Ranges stay conservative on purpose: a rare symbol may fall
+ * outside them, while a mis-mapped letter never can.
+ */
+const SUPPORTED_RANGES: readonly {
+  start: number;
+  end: number;
+  family: PdfCjkFamily;
+}[] = [
+  // Script-specific blocks first: a kana or Hangul code point must never be
+  // captured by a neighbouring symbol range.
+  { start: 0x1100, end: 0x11ff, family: "kr" },
+  { start: 0x3130, end: 0x318f, family: "kr" },
+  { start: 0xac00, end: 0xd7af, family: "kr" },
+  { start: 0xffa0, end: 0xffdc, family: "kr" },
+  { start: 0x3040, end: 0x30ff, family: "jp" },
+  { start: 0x31f0, end: 0x31ff, family: "jp" },
+  { start: 0xff65, end: 0xff9f, family: "jp" },
+  // Greek and Cyrillic letters carried by GB2312.
+  { start: 0x0391, end: 0x03a9, family: "gb" },
+  { start: 0x03b1, end: 0x03c9, family: "gb" },
+  { start: 0x0401, end: 0x0401, family: "gb" },
+  { start: 0x0410, end: 0x044f, family: "gb" },
+  { start: 0x0451, end: 0x0451, family: "gb" },
+  // Arrows, math, enclosed numbers, box drawing, and geometric rows: Japan1 maps
+  // every code point here, while GB1 drops some (for example the double arrow),
+  // so the text layer must not lose them.
+  { start: 0x2190, end: 0x21ff, family: "jp" },
+  { start: 0x2200, end: 0x22ff, family: "jp" },
+  { start: 0x2460, end: 0x24ff, family: "jp" },
+  { start: 0x2500, end: 0x257f, family: "jp" },
+  { start: 0x25a0, end: 0x25ff, family: "jp" },
+  // CJK punctuation, compatibility, symbol rows, and fullwidth forms.
+  { start: 0x2010, end: 0x2027, family: "gb" },
+  { start: 0x2030, end: 0x203b, family: "gb" },
+  { start: 0x2103, end: 0x2103, family: "gb" },
+  { start: 0x2116, end: 0x2116, family: "gb" },
+  { start: 0x212b, end: 0x212b, family: "gb" },
+  { start: 0x2160, end: 0x2179, family: "gb" },
+  { start: 0x2600, end: 0x266f, family: "gb" },
+  { start: 0x3000, end: 0x303f, family: "gb" },
+  { start: 0x3105, end: 0x3129, family: "gb" },
+  { start: 0x3200, end: 0x33ff, family: "gb" },
+  { start: 0x3400, end: 0x4dbf, family: "gb" },
+  { start: 0x4e00, end: 0x9fff, family: "gb" },
+  { start: 0xf900, end: 0xfaff, family: "gb" },
+  { start: 0xfe30, end: 0xfe4f, family: "gb" },
+  { start: 0xff01, end: 0xff60, family: "gb" },
+  { start: 0xffe0, end: 0xffe6, family: "gb" },
+];
+
+/** Predefined ordering that can carry a non-WinAnsi BMP code point, if any. */
+export function pdfCjkFamilyForCodePoint(codePoint: number): PdfCjkFamily | null {
+  for (const range of SUPPORTED_RANGES) {
+    if (codePoint >= range.start && codePoint <= range.end) {
+      return range.family;
+    }
+  }
+  return null;
+}
+
+function isUnsupportedCodePoint(char: string): boolean {
+  const codePoint = char.codePointAt(0) ?? 0;
+  // Control characters only steer layout and never reach the page as text.
+  if (codePoint < 0x20 || codePoint === 0x7f) {
+    return false;
+  }
+  if (winAnsiCode(char) !== null) {
+    return false;
+  }
+  return codePoint > 0xffff || pdfCjkFamilyForCodePoint(codePoint) === null;
+}
+
+/** Counts characters the export cannot carry and therefore draws as the marker. */
 export function countUnsupportedPdfChars(text: string): number {
   let count = 0;
   for (const char of text) {
-    if ((char.codePointAt(0) ?? 0) > 0xffff) {
+    if (isUnsupportedCodePoint(char)) {
       count += 1;
     }
   }
   return count;
-}
-
-/** Script-specific predefined ordering for a non-WinAnsi BMP code point. */
-export function pdfCjkFamilyForCodePoint(codePoint: number): PdfCjkFamily {
-  // Hangul jamo, compatibility jamo, syllables, and halfwidth Hangul live only in Korea1.
-  if (
-    (codePoint >= 0x1100 && codePoint <= 0x11ff) ||
-    (codePoint >= 0x3130 && codePoint <= 0x318f) ||
-    (codePoint >= 0xac00 && codePoint <= 0xd7af) ||
-    (codePoint >= 0xffa0 && codePoint <= 0xffdc)
-  ) {
-    return "kr";
-  }
-  // Kana live only in Japan1, so they must not travel through the GB CMap.
-  if (
-    (codePoint >= 0x3040 && codePoint <= 0x30ff) ||
-    (codePoint >= 0x31f0 && codePoint <= 0x31ff) ||
-    (codePoint >= 0xff65 && codePoint <= 0xff9f)
-  ) {
-    return "jp";
-  }
-  return "gb";
 }
 
 export type PdfChar = {
@@ -176,6 +237,14 @@ export function measurePdfText(text: string, style: PdfTextStyle, size: number):
   const spaceMetric = table ? (table[0x20 - 32] ?? 278) : 600;
   const chars: PdfChar[] = [];
   for (const char of text) {
+    if (char === "\n") {
+      // Forced line break inside a block: layout consumes it, no glyph is drawn.
+      chars.push({ text: "\n", code: null, cjk: null, width: 0 });
+      continue;
+    }
+    if (char === "\r") {
+      continue;
+    }
     if (char === "\t") {
       chars.push({
         text: "    ",
@@ -192,13 +261,14 @@ export function measurePdfText(text: string, style: PdfTextStyle, size: number):
       continue;
     }
     const codePoint = char.codePointAt(0) ?? 0;
-    if (codePoint > 0xffff) {
-      // The UCS2 CMaps cannot address astral characters (emoji and similar), so
-      // they become a visible marker the export explains.
+    const family = codePoint > 0xffff ? null : pdfCjkFamilyForCodePoint(codePoint);
+    if (!family) {
+      // Unsupported BMP scripts and astral characters share one visible marker so
+      // the export never rewrites a character into an unrelated glyph.
       chars.push({ text: PDF_UNSUPPORTED_MARKER, code: null, cjk: "gb", width: size });
       continue;
     }
-    chars.push({ text: char, code: null, cjk: pdfCjkFamilyForCodePoint(codePoint), width: size });
+    chars.push({ text: char, code: null, cjk: family, width: size });
   }
   return chars;
 }
