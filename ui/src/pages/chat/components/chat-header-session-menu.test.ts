@@ -327,6 +327,7 @@ describe("chat header session menu", () => {
       "Fork conversation",
       "Copy",
       "Open in",
+      "Conversation as PDF",
       "Delete…",
     ]);
     expect(
@@ -623,6 +624,7 @@ describe("chat header session menu", () => {
       "Fork conversation",
       "Copy",
       "Open in",
+      "Conversation as PDF",
       "Delete…",
     ]);
     expect(menu.querySelector("[slot='submenu']")).toBeNull();
@@ -808,6 +810,28 @@ describe("chat header session menu", () => {
     expect(disabledAction.getAttribute("title")).toBe("Gateway disconnected.");
     onAction.mockClear();
     select(disconnected, "continue-in-terminal");
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("dispatches the PDF transcript export only while the history read is allowed", async () => {
+    const onAction = vi.fn<(action: HeaderMenuAction) => void>();
+    const allowed = await mountMenu({ onAction });
+    expect(item(allowed, "Conversation as PDF").disabled).toBe(false);
+    const dropdown = allowed.querySelector("wa-dropdown") as HTMLElement & { open: boolean };
+    dropdown.open = true;
+    select(allowed, "export-pdf");
+    expect(dropdown.open).toBe(false);
+    expect(onAction).toHaveBeenCalledWith({ kind: "export-pdf" });
+
+    const denied = await mountMenu({
+      actionDisabledReasons: { "export-pdf": "Connect to the Gateway." },
+      onAction,
+    });
+    const deniedAction = item(denied, "Conversation as PDF");
+    expect(deniedAction.disabled).toBe(true);
+    expect(deniedAction.getAttribute("title")).toBe("Connect to the Gateway.");
+    onAction.mockClear();
+    select(denied, "export-pdf");
     expect(onAction).not.toHaveBeenCalled();
   });
 });
