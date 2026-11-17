@@ -16,34 +16,25 @@ export function maxBytesForManagedMediaKind(
       : maxBytesForKind(kind);
 }
 
-const MANAGED_DOCUMENT_MIME_TYPES = new Set([
-  "application/json",
-  "application/msword",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/x-cfb",
-  "application/yaml",
-  "application/zip",
-  "text/csv",
-  "text/html",
-  "text/markdown",
-  "text/plain",
-]);
-
+/**
+ * Maps any stored content type to a delivery family. Unknown and active types
+ * (including SVG and octet-stream) are documents: they render as a downloadable
+ * attachment card rather than through image delivery or inline media.
+ */
 export function resolveManagedMediaKind(contentType: string | undefined): ManagedMediaKind | null {
   const normalized = normalizeMimeType(contentType);
-  if (normalized === "image/svg+xml") {
+  if (!normalized) {
     return null;
+  }
+  // SVG can execute script when navigated to and cannot be raster-optimized.
+  if (normalized === "image/svg+xml") {
+    return "document";
   }
   const kind = mediaKindFromMime(normalized);
   if (kind === "image" || kind === "audio" || kind === "video") {
     return kind;
   }
-  return normalized && MANAGED_DOCUMENT_MIME_TYPES.has(normalized) ? "document" : null;
+  return "document";
 }
 
 export function formatLimitMiB(bytes: number): string {

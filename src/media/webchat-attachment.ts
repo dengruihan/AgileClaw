@@ -1,7 +1,6 @@
 import path from "node:path";
 import { mediaKindFromMime } from "@openclaw/media-core/constants";
 import { detectMime, mimeTypeFromFilePath } from "@openclaw/media-core/mime";
-import { HostReadMediaTypeError } from "./local-media-access.js";
 import { resolveLocalMediaPath } from "./local-media-path.js";
 import { resolveOutboundAttachmentFromUrl } from "./outbound-attachment.js";
 import type { HostOutboundMediaAccess } from "./read-capability.js";
@@ -33,19 +32,18 @@ export async function resolveWebchatAttachmentFromUrl(
       const { bytesRead } = await opened.handle.read(header, 0, header.length, 0);
       const prefix = header.subarray(0, bytesRead);
       const kind = mediaKindFromMime(await detectMime({ buffer: prefix }));
-      if (kind !== "audio" && kind !== "video") {
-        throw new HostReadMediaTypeError(
-          "Host-local audio/video sends require a buffer-verified media type.",
+      if (kind === "audio" || kind === "video") {
+        const saved = await saveMediaFile(
+          opened,
+          "outbound",
+          options.localMediaMaxBytes,
+          path.basename(localPath),
+          prefix,
         );
+        return { path: saved.path, contentType: saved.contentType };
       }
-      const saved = await saveMediaFile(
-        opened,
-        "outbound",
-        options.localMediaMaxBytes,
-        path.basename(localPath),
-        prefix,
-      );
-      return { path: saved.path, contentType: saved.contentType };
+      // Extension-declared audio/video without a matching signature falls through to
+      // the generic attachment path, which keeps the original bytes as a document.
     }
   }
   return await resolveOutboundAttachmentFromUrl(mediaUrl, maxBytes, {

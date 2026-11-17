@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { lstat, realpath } from "node:fs/promises";
+import { realpath } from "node:fs/promises";
 import path from "node:path";
 import { assertNoWindowsNetworkPath, safeFileURLToPath } from "@openclaw/fs-safe/advanced";
 import { maxBytesForKind, type MediaKind } from "@openclaw/media-core/constants";
@@ -7,9 +7,7 @@ import { basenameFromAnyPath, extnameFromAnyPath } from "@openclaw/media-core/fi
 import {
   detectMime,
   extensionForMime,
-  getFileExtension,
   kindFromMime,
-  mimeTypeFromFilePath,
   normalizeMimeType,
 } from "@openclaw/media-core/mime";
 import { hasHttpUrlPrefix } from "@openclaw/net-policy/url-protocol";
@@ -21,16 +19,13 @@ import { formatErrorMessage } from "../infra/errors.js";
 import { FsSafeError } from "../infra/fs-safe.js";
 import type { PinnedDispatcherPolicy, SsrFPolicy } from "../infra/net/ssrf.js";
 import { isPathInside } from "../infra/path-guards.js";
-import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { getPluginRegistryForContext } from "../plugins/runtime/gateway-request-scope.js";
 import { captureOpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.js";
-import type { OpenClawStateWorkerContext } from "../state/openclaw-state-worker-context.types.js";
 import { resolveUserPath } from "../utils.js";
 import { readOutboundMediaFile } from "./bounded-read-file.js";
 import { readRemoteMediaBuffer } from "./fetch.js";
 import {
   pruneGeneratedHtmlProvenance,
-  readGeneratedHtmlProvenance,
   writeGeneratedHtmlProvenance,
 } from "./generated-html-provenance.js";
 import { ImageOptimizationLimitError } from "./image-optimization-error.js";
@@ -40,7 +35,6 @@ import type { OutboundMediaReadFile } from "./load-options.js";
 import {
   assertLocalMediaAllowed,
   getDefaultLocalRootsCore,
-  HostReadMediaTypeError,
   LocalMediaAccessError,
   readLocalMediaFile,
   type LocalMediaAccessErrorCode,
@@ -65,8 +59,6 @@ export type WebMediaResult = {
   contentType?: string;
   kind: MediaKind | undefined;
   fileName?: string;
-  /** Source bytes came from a generated-HTML trust boundary. */
-  trustedGeneratedHtmlSource?: boolean;
 };
 
 type WebMediaOptions = {
@@ -87,8 +79,10 @@ type WebMediaOptions = {
   /** Caller already validated the local path (sandbox/other guards); requires readFile override. */
   sandboxValidated?: boolean;
   readFile?: OutboundMediaReadFile;
-  /** Host-local fs-policy read piggyback; rejects plaintext-like document sends. */
+  /** Host-local fs-policy read piggyback; enables buffer-verified media typing. */
   hostReadCapability?: boolean;
+  /** Outbound attachment callers keep original bytes when image/media preview preparation fails. */
+  documentFallback?: boolean;
 };
 
 export type ImageQualityPreference = "auto" | "efficient" | "balanced" | "high";
@@ -166,109 +160,12 @@ function resolveWebMediaOptions(params: {
 const IMAGE_OPTIMIZE_HEADROOM_FACTOR = 4;
 
 const WINDOWS_DRIVE_RE = /^[A-Za-z]:[\\/]/;
-// file-type returns undefined (no magic bytes) for plain-text formats like CSV,
-// Markdown, TXT, JSON, and YAML, so host-read needs an explicit "this really
-// decodes as text" fallback.
-const HOST_READ_TEXT_PLAIN_ALIASES = new Set([
-  "text/csv",
-  "text/markdown",
-  "text/plain",
-  "application/json",
-  "application/yaml",
-]);
-const HOST_READ_ALLOWED_DOCUMENT_MIMES = new Set([
-  "application/msword",
-  "application/pdf",
-  "application/vnd.ms-excel",
-  "application/vnd.ms-excel.sheet.macroenabled.12",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/gzip",
-  "application/x-7z-compressed",
-  "application/x-tar",
-  "application/zip",
-  ...HOST_READ_TEXT_PLAIN_ALIASES,
-]);
-// HTML remains deliberately outside the host-read allowlist pending a separate
-// security-boundary review, but extension-declared .html files still need to
-// fail closed instead of falling through to binary/media sniffing.
-const HOST_READ_DECLARED_TEXT_MIMES = new Set([...HOST_READ_TEXT_PLAIN_ALIASES, "text/html"]);
-const HOST_READ_DECLARED_TEXT_ERROR =
-  "hostReadCapability permits only validated plain-text documents " +
-  "and trusted generated HTML reports for local reads";
 
 function stripLegacyMediaDirectivePrefix(mediaUrl: string): string {
   if (/^\s*media:\/\//i.test(mediaUrl)) {
     return mediaUrl;
   }
   return mediaUrl.replace(/^\s*MEDIA\s*:\s*/i, "");
-}
-
-function textPrintableRatio(text: string): number {
-  let printable = 0;
-  let total = 0;
-  for (const char of text) {
-    total += 1;
-    const code = char.codePointAt(0) ?? 0;
-    if (code === 9 || code === 10 || code === 13 || (code >= 32 && (code < 0x7f || code > 0x9f))) {
-      printable += 1;
-    }
-  }
-  return total === 0 ? 0 : printable / total;
-}
-
-function hasSingleByteTextShape(buffer: Buffer): boolean {
-  if (buffer.length === 0) {
-    return true;
-  }
-  let asciiText = 0;
-  let control = 0;
-  for (const byte of buffer) {
-    if (byte === 9 || byte === 10 || byte === 13 || (byte >= 0x20 && byte <= 0x7e)) {
-      asciiText += 1;
-      continue;
-    }
-    if (byte < 0x20 || byte === 0x7f) {
-      control += 1;
-    }
-  }
-  const total = buffer.length;
-  const highBytes = total - asciiText - control;
-  return control === 0 && asciiText / total >= 0.7 && highBytes / total <= 0.3;
-}
-
-function decodeHostReadText(buffer: Buffer): string | undefined {
-  // UTF-16 decoding is intentionally omitted: TextDecoder("utf-16le/be") never throws on
-  // arbitrary byte pairs, so every byte pair is a valid (if meaningless) Unicode scalar —
-  // an attacker can prepend a BOM and get a printable ratio near 1.0 on pure
-  // binary garbage. The Latin-1 path below already covers the most common non-UTF-8
-  // real-world case (Excel CSV exports with accented chars like é, ñ) while remaining
-  // safe because hasSingleByteTextShape gates on byte shape *before* any decode.
-  try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(buffer);
-  } catch {
-    if (!hasSingleByteTextShape(buffer)) {
-      return undefined;
-    }
-    // WHATWG latin1 decodes common Excel-style single-byte exports via Windows-1252 mapping.
-    return new TextDecoder("latin1").decode(buffer);
-  }
-}
-
-function getValidatedHostReadText(buffer?: Buffer): string | undefined {
-  if (!buffer) {
-    return undefined;
-  }
-  if (buffer.length === 0) {
-    return "";
-  }
-  const text = decodeHostReadText(buffer);
-  if (text === undefined) {
-    return undefined;
-  }
-  return textPrintableRatio(text) > 0.95 ? text : undefined;
 }
 
 function resolveLocalMediaFileName(filePath: string): string | undefined {
@@ -278,74 +175,11 @@ function resolveLocalMediaFileName(filePath: string): string | undefined {
     : fileName;
 }
 
-function hasHtmlDocumentShape(text: string): boolean {
-  const sample = text.trimStart().slice(0, 8192);
-  return /^(?:<!doctype\s+html\b|<html\b)/iu.test(sample) || /<\/(?:html|body)>/iu.test(sample);
-}
-
-type HostReadHtmlTrust =
-  | { source: "temp-root" }
-  | { source: "outbound"; expectedSha256: string; expectedSize: number };
-
-async function getTrustedGeneratedHtmlMarker(
-  resolvedFilePath: string,
-  context: OpenClawStateWorkerContext,
-): Promise<{ sha256: string; size: number } | undefined> {
-  try {
-    const reply = await readGeneratedHtmlProvenance(context, {
-      type: "generatedHtmlProvenance.read",
-      input: resolvedFilePath,
-    });
-    return reply?.type === "generatedHtmlProvenance.read" ? reply.marker : undefined;
-  } catch (error) {
-    // State failures must narrow trust, never turn into a permissive fallback.
-    logVerbose(
-      `trusted-html marker lookup failed (${resolvedFilePath}): ${formatErrorMessage(error)}`,
-    );
-    return undefined;
-  }
-}
-
-async function resolveTrustedGeneratedHostReadHtml(
-  filePath: string | undefined,
-): Promise<HostReadHtmlTrust | undefined> {
-  if (!filePath) {
-    return undefined;
-  }
-  let context: OpenClawStateWorkerContext | undefined;
-  try {
-    context = captureOpenClawStateWorkerContext();
-  } catch (error) {
-    // Refused storage narrows outbound trust without changing the temp-root contract.
-    logVerbose(`trusted-html admission failed: ${formatErrorMessage(error)}`);
-  }
-  const outboundPath = path.join(getMediaDir(), "outbound");
-  const info = await lstat(filePath).catch(() => undefined);
-  if (!info?.isFile() || info.isSymbolicLink() || info.nlink !== 1) {
-    return undefined;
-  }
-  const [resolvedFilePath, tmpRoot, outboundRoot] = await Promise.all([
-    realpath(filePath).catch(() => undefined),
-    realpath(resolvePreferredOpenClawTmpDir()).catch(() => undefined),
-    realpath(outboundPath).catch(() => undefined),
-  ]);
-  if (!resolvedFilePath) {
-    return undefined;
-  }
-  // Outbound staging always requires provenance, even when a custom state dir
-  // places media/outbound underneath the otherwise trusted temp root.
-  if (outboundRoot && isPathInside(outboundRoot, resolvedFilePath)) {
-    const marker = context
-      ? await getTrustedGeneratedHtmlMarker(resolvedFilePath, context)
-      : undefined;
-    return marker
-      ? { source: "outbound", expectedSha256: marker.sha256, expectedSize: marker.size }
-      : undefined;
-  }
-  return tmpRoot && isPathInside(tmpRoot, resolvedFilePath) ? { source: "temp-root" } : undefined;
-}
-
-/** Records exact-byte provenance for a trusted generated HTML staged outbound. */
+/**
+ * Legacy marker writer kept for plugin/API compatibility. Host reads admit HTML
+ * without provenance now; this records exact bytes for callers that still stage
+ * trusted generated HTML outbound.
+ */
 export async function markTrustedGeneratedHtmlPath(
   filePath: string,
   contents: Buffer,
@@ -374,42 +208,9 @@ export async function markTrustedGeneratedHtmlPath(
   });
 }
 
-/** Removes provenance whose staged regular file no longer exists. */
+/** Removes legacy trusted-HTML markers whose staged regular file no longer exists. */
 export async function pruneStaleTrustedGeneratedHtmlMarkers(): Promise<void> {
   await pruneGeneratedHtmlProvenance(captureOpenClawStateWorkerContext());
-}
-
-function isTrustedGeneratedHostReadHtml(params: {
-  sniffedContentType?: string;
-  buffer?: Buffer;
-  trustedGeneratedHtmlPath?: HostReadHtmlTrust;
-}): boolean {
-  const sniffedMime = normalizeMimeType(params.sniffedContentType);
-  if (sniffedMime && sniffedMime !== "text/html") {
-    return false;
-  }
-  if (!params.trustedGeneratedHtmlPath) {
-    return false;
-  }
-  const text = getValidatedHostReadText(params.buffer);
-  if (text === undefined || !hasHtmlDocumentShape(text)) {
-    return false;
-  }
-  if (params.trustedGeneratedHtmlPath.source === "temp-root") {
-    return true;
-  }
-  return (
-    params.buffer?.length === params.trustedGeneratedHtmlPath.expectedSize &&
-    createHash("sha256").update(params.buffer).digest("hex") ===
-      params.trustedGeneratedHtmlPath.expectedSha256
-  );
-}
-
-function isAllowedHostReadTextAlias(mime: string | undefined, filePath?: string): boolean {
-  if (!mime || !HOST_READ_TEXT_PLAIN_ALIASES.has(mime)) {
-    return false;
-  }
-  return mime !== "text/plain" || getFileExtension(filePath) === ".txt";
 }
 
 function formatCapLimit(label: string, cap: number, size: number): string {
@@ -420,85 +221,34 @@ function formatCapReduce(label: string, cap: number, size: number): string {
   return `${label} could not be reduced below ${formatMediaSize(cap)} (got ${formatMediaSize(size)})`;
 }
 
-function assertHostReadMediaAllowed(params: {
-  sniffedContentType?: string;
-  contentType?: string;
-  filePath?: string;
-  kind: MediaKind | undefined;
-  buffer?: Buffer;
-  trustedGeneratedHtmlPath?: HostReadHtmlTrust;
-}): void {
-  const declaredMime = normalizeMimeType(mimeTypeFromFilePath(params.filePath));
-  const normalizedMime = normalizeMimeType(params.contentType);
-  // For extension-declared plain-text aliases such as .csv/.html/.md, trust only the
-  // text validator path. Some opaque blobs can still produce bogus binary MIME
-  // hits (for example BOM-prefixed 0xFF data sniffing as audio/mpeg), and
-  // host-read should reject those instead of returning early on the sniff.
-  if (declaredMime && HOST_READ_DECLARED_TEXT_MIMES.has(declaredMime)) {
-    if (
-      declaredMime === "text/html" &&
-      isTrustedGeneratedHostReadHtml({
-        sniffedContentType: params.sniffedContentType,
-        buffer: params.buffer,
-        trustedGeneratedHtmlPath: params.trustedGeneratedHtmlPath,
-      })
-    ) {
-      return;
-    }
-    if (
-      isAllowedHostReadTextAlias(declaredMime, params.filePath) &&
-      !params.sniffedContentType &&
-      params.buffer &&
-      getValidatedHostReadText(params.buffer) !== undefined
-    ) {
-      return;
-    }
-    throw new HostReadMediaTypeError(HOST_READ_DECLARED_TEXT_ERROR);
+/**
+ * SVG is text that browsers execute when navigated to and that raster decoders cannot
+ * process, so it stays on the download-only document path instead of image delivery.
+ */
+function resolveWebMediaKind(mime: string | undefined): MediaKind | undefined {
+  return normalizeMimeType(mime) === "image/svg+xml" ? "document" : kindFromMime(mime);
+}
+
+/**
+ * Host reads admit every file format, but image/audio/video delivery needs buffer
+ * proof. Without a recognized media signature an extension-declared media file is
+ * only bytes, so unknown `.png`/`.mp3` names become generic download-only documents
+ * instead of broken previews. SVG stays typed by extension because browsers do not
+ * execute it inside an image element and raster decoders cannot read it.
+ */
+function resolveHostReadMime(
+  declaredMime: string | undefined,
+  sniffedMime: string | undefined,
+): string | undefined {
+  const normalized = normalizeMimeType(declaredMime);
+  if (!normalized || sniffedMime) {
+    return declaredMime;
   }
-  const sniffedKind = kindFromMime(params.sniffedContentType);
-  if (sniffedKind === "image" || sniffedKind === "audio" || sniffedKind === "video") {
-    return;
-  }
-  const sniffedMime = normalizeMimeType(params.sniffedContentType);
-  if (
-    sniffedKind === "document" &&
-    sniffedMime &&
-    HOST_READ_ALLOWED_DOCUMENT_MIMES.has(sniffedMime)
-  ) {
-    return;
-  }
-  if (
-    sniffedMime === "application/x-cfb" &&
-    [".doc", ".ppt", ".xls"].includes(getFileExtension(params.filePath) ?? "")
-  ) {
-    return;
-  }
-  // Plain-text document exception: file-type v22 returns undefined (not "text/plain")
-  // for text buffers that have no binary magic bytes. Allow these formats when:
-  // - sniffedMime is undefined (no binary signature detected by file-type)
-  // - The extension-derived MIME is an allowed text/document MIME (operator intent)
-  // - The buffer decodes as actual text instead of opaque binary bytes
-  if (
-    !sniffedMime &&
-    normalizedMime &&
-    isAllowedHostReadTextAlias(normalizedMime, params.filePath) &&
-    params.buffer &&
-    getValidatedHostReadText(params.buffer) !== undefined
-  ) {
-    return;
-  }
-  if (
-    params.kind === "document" &&
-    normalizedMime &&
-    HOST_READ_ALLOWED_DOCUMENT_MIMES.has(normalizedMime)
-  ) {
-    throw new HostReadMediaTypeError(
-      `Host-local media sends require buffer-verified media/document types (got fallback ${normalizedMime}).`,
-    );
-  }
-  throw new HostReadMediaTypeError(
-    `Host-local media sends only allow buffer-verified images, audio, video, PDF, Office documents, archives, and validated plain-text documents (got ${sniffedMime ?? normalizedMime ?? "unknown"}).`,
-  );
+  const kind = kindFromMime(normalized);
+  return normalized === "image/svg+xml" ||
+    (kind !== "image" && kind !== "audio" && kind !== "video")
+    ? declaredMime
+    : "application/octet-stream";
 }
 
 function toImageFileName(fileName: string | undefined, mimeType: string): string | undefined {
@@ -820,6 +570,7 @@ async function loadWebMediaInternal(
     sandboxValidated = false,
     readFile: readFileOverride,
     hostReadCapability = false,
+    documentFallback = false,
     imageCompression,
   } = options;
   mediaUrl = stripLegacyMediaDirectivePrefix(mediaUrl);
@@ -841,28 +592,50 @@ async function loadWebMediaInternal(
     // If caller explicitly provides maxBytes, trust it (for channels that handle large files).
     // Otherwise fall back to per-kind defaults.
     const cap = maxBytes !== undefined ? maxBytes : maxBytesForKind(params.kind ?? "document");
-    if (params.kind === "image") {
-      if (optimizeImages) {
-        return await optimizeImageBufferForWebMedia({
-          buffer: params.buffer,
-          contentType: params.contentType,
-          fileName: params.fileName,
-          maxBytes: cap,
-          imageCompression,
-        });
+    const finalizeDocumentFallback = (error: unknown): WebMediaResult => {
+      const documentCap = maxBytes ?? maxBytesForKind("document");
+      if (params.buffer.length > documentCap) {
+        throw error;
       }
-      const imageCap = effectiveImageBytesCap(cap, imageCompression) ?? cap;
-      const isGif = params.contentType === "image/gif";
-      if (params.buffer.length > imageCap) {
-        throw new Error(formatCapLimit(isGif ? "GIF" : "Media", imageCap, params.buffer.length));
-      }
-      assertImageSatisfiesHardDimensionPolicy(params.buffer, imageCompression);
+      logVerbose(`media preview fallback to document: ${formatErrorMessage(error)}`);
       return {
         buffer: params.buffer,
-        contentType: params.contentType,
-        kind: params.kind,
+        contentType: "application/octet-stream",
+        kind: "document",
         fileName: params.fileName,
       };
+    };
+    if (params.kind === "image") {
+      try {
+        if (optimizeImages) {
+          return await optimizeImageBufferForWebMedia({
+            buffer: params.buffer,
+            contentType: params.contentType,
+            fileName: params.fileName,
+            maxBytes: cap,
+            imageCompression,
+          });
+        }
+        const imageCap = effectiveImageBytesCap(cap, imageCompression) ?? cap;
+        const isGif = params.contentType === "image/gif";
+        if (params.buffer.length > imageCap) {
+          throw new Error(formatCapLimit(isGif ? "GIF" : "Media", imageCap, params.buffer.length));
+        }
+        assertImageSatisfiesHardDimensionPolicy(params.buffer, imageCompression);
+        return {
+          buffer: params.buffer,
+          contentType: params.contentType,
+          kind: params.kind,
+          fileName: params.fileName,
+        };
+      } catch (error) {
+        // Outbound attachments keep the original bytes when image preview preparation
+        // cannot decode or compress them, as long as the document budget still fits.
+        if (!documentFallback) {
+          throw error;
+        }
+        return finalizeDocumentFallback(error);
+      }
     }
     if (params.buffer.length > cap) {
       throw new Error(formatCapLimit("Media", cap, params.buffer.length));
@@ -872,7 +645,6 @@ async function loadWebMediaInternal(
       contentType: params.contentType ?? undefined,
       kind: params.kind,
       fileName: params.fileName,
-      ...(params.trustedGeneratedHtmlSource ? { trustedGeneratedHtmlSource: true } : {}),
     };
   };
 
@@ -911,7 +683,7 @@ async function loadWebMediaInternal(
       trustExplicitProxyDns,
     });
     const { buffer, contentType, fileName } = fetched;
-    const kind = kindFromMime(contentType);
+    const kind = resolveWebMediaKind(contentType);
     return await clampAndFinalize({ buffer, contentType, kind, fileName });
   }
 
@@ -939,17 +711,6 @@ async function loadWebMediaInternal(
   // Guard local reads against allowed directory roots to prevent file exfiltration.
   if (readFileOverride && !(sandboxValidated || localRoots === "any")) {
     await assertLocalMediaAllowed(mediaUrl, localRoots, { inboundRoots });
-  }
-
-  const hostReadDeclaredMime = hostReadCapability
-    ? normalizeMimeType(mimeTypeFromFilePath(mediaUrl))
-    : undefined;
-  const htmlTrust =
-    hostReadDeclaredMime === "text/html"
-      ? await resolveTrustedGeneratedHostReadHtml(mediaUrl)
-      : undefined;
-  if (hostReadDeclaredMime === "text/html" && !htmlTrust) {
-    throw new HostReadMediaTypeError(HOST_READ_DECLARED_TEXT_ERROR);
   }
 
   let data: Buffer;
@@ -999,18 +760,9 @@ async function loadWebMediaInternal(
     }
   }
   const sniffedMime = hostReadCapability ? await detectMime({ buffer: data }) : undefined;
-  const mime = await detectMime({ buffer: data, filePath: mediaUrl });
-  const kind = kindFromMime(mime);
-  if (hostReadCapability) {
-    assertHostReadMediaAllowed({
-      sniffedContentType: sniffedMime,
-      contentType: mime,
-      filePath: mediaUrl,
-      kind,
-      buffer: data,
-      trustedGeneratedHtmlPath: htmlTrust,
-    });
-  }
+  const detectedMime = await detectMime({ buffer: data, filePath: mediaUrl });
+  const mime = hostReadCapability ? resolveHostReadMime(detectedMime, sniffedMime) : detectedMime;
+  const kind = resolveWebMediaKind(mime);
   let fileName = resolveLocalMediaFileName(mediaUrl);
   if (fileName && !extnameFromAnyPath(fileName) && mime) {
     const ext = extensionForMime(mime);
@@ -1023,7 +775,6 @@ async function loadWebMediaInternal(
     contentType: mime,
     kind,
     fileName,
-    trustedGeneratedHtmlSource: Boolean(htmlTrust && hostReadDeclaredMime === "text/html"),
   });
 }
 

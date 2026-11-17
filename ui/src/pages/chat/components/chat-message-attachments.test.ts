@@ -593,6 +593,47 @@ describe("attachment sidebar source ownership", () => {
     container.remove();
   });
 
+  it("keeps a managed generic artifact named .png as a download card", async () => {
+    const attachmentId = crypto.randomUUID();
+    const source = `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`;
+    const container = document.body.appendChild(document.createElement("div"));
+    const rerender = () =>
+      render(
+        renderAssistantAttachments(
+          [
+            {
+              type: "attachment",
+              attachment: {
+                kind: "document",
+                label: "broken.png",
+                mimeType: "application/octet-stream",
+                url: source,
+                artifactId: `artifact_managed_media_${attachmentId}`,
+              },
+            },
+          ],
+          {
+            onRequestUpdate: rerender,
+            resolveArtifactDownload: async () => ({
+              url: `${source}?mediaTicket=fallback`,
+            }),
+          },
+        ),
+        container,
+      );
+    subscribers.add(rerender);
+
+    rerender();
+    await flushAttachmentResolution();
+
+    expect(container.querySelector("img.chat-message-image")).toBeNull();
+    expect(container.querySelector("openclaw-chat-svg-attachment")).toBeNull();
+    expect(container.querySelector(".chat-assistant-attachment-card")).not.toBeNull();
+    expect(
+      container.querySelector(".chat-assistant-attachment-card__title")?.textContent,
+    ).toContain("broken.png");
+  });
+
   it("does not expose a Files action without a sidebar owner", () => {
     const container = document.body.appendChild(document.createElement("div"));
     render(
@@ -727,7 +768,7 @@ describe("attachment sidebar source ownership", () => {
     {
       code: "unsupported-format",
       label: "settings.toml",
-      reason: "Rejected by the local attachment allowlist. Send a supported file type.",
+      reason: "Delivery failed. Try sending this file again.",
     },
     {
       code: "invalid-reference",

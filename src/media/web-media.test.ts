@@ -67,17 +67,6 @@ async function expectAccessError(promise: Promise<unknown>, code = "path-not-all
   await expect(promise).rejects.toMatchObject({ code });
 }
 
-async function inState(run: (root: string) => Promise<void>, parent?: string) {
-  const root = tempDirs.make("web-media-state-", parent);
-  await withEnvAsync({ OPENCLAW_STATE_DIR: root }, () => run(root));
-}
-
-async function stageHtml(body = Buffer.from("<!doctype html><h1>report</h1>")) {
-  const { saveMediaBuffer } = await import("./store.js");
-  const saved = await saveMediaBuffer(body, "text/html", "outbound", 1024 * 1024, "report.html");
-  return { path: saved.path, body };
-}
-
 function colorBlockPng(size: number, transparent = false) {
   const pixels = Buffer.alloc(size * size * 4);
   for (let y = 0; y < size; y += 1) {
@@ -447,8 +436,10 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/plain");
   });
 
-  it("rejects host-read LOG files even though they map to text/plain", async () => {
-    await expectAccessError(hostDocument("debug.log", "plain text\n"));
+  it("allows host-read LOG files as plain text", async () => {
+    const result = await hostDocument("debug.log", "plain text\n");
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe("text/plain");
   });
 
   it("allows byte-verified XLSM without changing its name or bytes", async () => {
@@ -460,13 +451,74 @@ describe("loadWebMedia", () => {
     expect(result.buffer).toEqual(body);
   });
 
-  it("rejects text disguised as an allowed binary document", async () => {
-    await expectAccessError(hostDocument("secret.pdf", "secret"));
+  it("keeps text with a binary document extension as inert bytes", async () => {
+    const result = await hostDocument("secret.pdf", "secret");
+    expect(result.kind).toBe("document");
+    expect(result.buffer).toEqual(Buffer.from("secret"));
   });
 
-  it("rejects unverified text named as XLSM", async () => {
-    await expectAccessError(hostDocument("report.xlsm", "not a workbook"));
+  it("delivers unverified text named as XLSM as opaque bytes", async () => {
+    const result = await hostDocument("report.xlsm", "not a workbook");
+    expect(result.buffer).toEqual(Buffer.from("not a workbook"));
+    expect(result.fileName).toBe("report.xlsm");
   });
+
+  it.each([
+    [
+      "vector.svg",
+      '<svg xmlns="http://www.w3.org/2000/svg"><script/></svg>\n',
+      "document",
+      "image/svg+xml",
+    ],
+    ["script.js", "export default true;\n", "document", "text/javascript"],
+    ["config.xml", "<config/>\n", "document", "text/xml"],
+  ] as const)(
+    "delivers %s as a document without rewriting its bytes",
+    async (name, body, kind, contentType) => {
+      const result = await hostDocument(name, body);
+      expect(result.kind).toBe(kind);
+      expect(result.contentType).toBe(contentType);
+      expect(result.fileName).toBe(name);
+      expect(result.buffer).toEqual(Buffer.from(body));
+    },
+  );
+
+  it.each(["script.js", "vector.svg", "payload.bin"])(
+    "keeps root and byte boundaries for newly admitted %s files",
+    async (name) => {
+      const body = Buffer.from("export default true;\n");
+      const file = await writeFile(name, body);
+      const readFile = vi.fn((source: string) => fs.readFile(source));
+      await expectAccessError(
+        media.loadWebMedia(file, {
+          localRoots: [workspaceDir],
+          readFile,
+          hostReadCapability: true,
+        }),
+      );
+      expect(readFile).not.toHaveBeenCalled();
+      await expect(
+        media.loadWebMedia(file, {
+          maxBytes: body.length - 1,
+          localRoots: [fixtureRoot],
+          readFile,
+          hostReadCapability: true,
+        }),
+      ).rejects.toThrow(/exceeds.*limit/i);
+    },
+  );
+
+  it.each(["payload.bin", "payload"])(
+    "delivers extensionless and unrecognized binaries as documents",
+    async (name) => {
+      const body = Buffer.from([0x00, 0x01, 0x02, 0x03, 0xff]);
+      const result = await hostDocument(name, body);
+      expect(result.kind).toBeUndefined();
+      expect(result.contentType).toBeUndefined();
+      expect(result.fileName).toBe(name);
+      expect(result.buffer).toEqual(body);
+    },
+  );
 
   it("keeps the host-read XLSM root boundary and byte limit", async () => {
     const body = await xlsmFixture();
@@ -486,171 +538,68 @@ describe("loadWebMedia", () => {
     ).rejects.toThrow(/exceeds.*limit/i);
   });
 
-  it("allows generated HTML under the trusted temp root", async () => {
-    const result = await hostDocument(
-      "report.html",
-      "<!doctype html><title>Report</title><h1>Report</h1>\n",
-    );
+  it("delivers an ordinary workspace HTML file as a document without provenance", async () => {
+    const body = "<!doctype html><title>Report</title><h1>Ready</h1>\n";
+    const file = await writeFile("report.html", body, tempDirs.make("ordinary-html-"));
+    const result = await loadWithHostRead(file);
     expect(result.kind).toBe("document");
     expect(result.contentType).toBe("text/html");
+    expect(result.fileName).toBe("report.html");
+    expect(result.buffer).toEqual(Buffer.from(body));
   });
 
-  it("allows exact marked outbound HTML bytes and rejects same-size replacements", async () => {
-    await inState(async () => {
-      const original = Buffer.from("<!doctype html><h1>A</h1>");
-      const replacement = Buffer.from("<!doctype html><h1>B</h1>");
-      expect(replacement.length).toBe(original.length);
-      const saved = await stageHtml(original);
-      await media.markTrustedGeneratedHtmlPath(saved.path, original);
-      const allowed = await loadWithHostRead(saved.path);
-      expect(allowed.buffer).toEqual(original);
-      expect(allowed.fileName).toBe("report.html");
-      expect(allowed.trustedGeneratedHtmlSource).toBe(true);
-      await fs.writeFile(saved.path, replacement);
-      await expectAccessError(loadWithHostRead(saved.path));
-    });
+  it("reloads outbound-staged HTML bytes without a provenance marker", async () => {
+    const { saveMediaBuffer } = await import("./store.js");
+    const body = Buffer.from("<!doctype html><h1>Staged</h1>");
+    const saved = await saveMediaBuffer(body, "text/html", "outbound", 1024 * 1024, "report.html");
+    const result = await loadWithHostRead(saved.path);
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe("text/html");
+    expect(result.buffer).toEqual(body);
   });
 
-  it("requires provenance even when outbound staging is under the trusted temp root", async () => {
-    await inState(async () => {
-      const saved = await stageHtml();
-      expect(path.resolve(saved.path)).toContain(path.resolve(resolvePreferredOpenClawTmpDir()));
-      await expectAccessError(loadWithHostRead(saved.path));
-    }, resolvePreferredOpenClawTmpDir());
+  it("delivers opaque bytes under an HTML extension unchanged", async () => {
+    const body = Buffer.from(Array.from({ length: 9000 }, (_, index) => (index % 255) + 1));
+    const result = await hostDocument("opaque.html", body);
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe("text/html");
+    expect(result.buffer).toEqual(body);
   });
 
-  it("keeps HTML provenance when filesystem inspection fails transiently", async () => {
-    await inState(async () => {
-      const saved = await stageHtml();
-      await media.markTrustedGeneratedHtmlPath(saved.path, saved.body);
-      const lstat = vi
-        .spyOn(fs, "lstat")
-        .mockRejectedValueOnce(Object.assign(new Error("busy"), { code: "EMFILE" }));
-      try {
-        await media.pruneStaleTrustedGeneratedHtmlMarkers();
-      } finally {
-        lstat.mockRestore();
-      }
-      expect((await loadWithHostRead(saved.path)).buffer).toEqual(saved.body);
-    });
-  });
-
-  it("prunes more stale HTML markers than one SQLite parameter batch", async () => {
-    await inState(async (root) => {
-      const { executeSqliteQuerySync, executeSqliteQueryTakeFirstSync, getNodeSqliteKysely } =
-        await import("../infra/kysely-sync.js");
-      const { openOpenClawStateDatabase, runOpenClawStateWriteTransaction } =
-        await import("../state/openclaw-state-db.js");
-      type ProvenanceDb = {
-        outbound_media_provenance: {
-          realpath: string;
-          kind: string;
-          version: number;
-          sha256: string;
-          size_bytes: number;
-          created_at_ms: number;
-        };
-      };
-      runOpenClawStateWriteTransaction(({ db }) => {
-        executeSqliteQuerySync(
-          db,
-          getNodeSqliteKysely<ProvenanceDb>(db)
-            .insertInto("outbound_media_provenance")
-            .values(
-              Array.from({ length: 1_001 }, (_, index) => ({
-                realpath: path.join(root, `missing-${index}.html`),
-                kind: "trusted-generated-html",
-                version: 1,
-                sha256: "0".repeat(64),
-                size_bytes: 1,
-                created_at_ms: 1,
-              })),
-            ),
-        );
-      });
-      await media.pruneStaleTrustedGeneratedHtmlMarkers();
-      const { db } = openOpenClawStateDatabase();
-      const count = executeSqliteQueryTakeFirstSync(
-        db,
-        getNodeSqliteKysely<ProvenanceDb>(db)
-          .selectFrom("outbound_media_provenance")
-          .select(({ fn }) => fn.countAll<number>().as("count")),
-      );
-      expect(Number(count?.count)).toBe(0);
-    });
-  });
-
-  it("refuses to mark paths outside outbound staging", async () => {
-    const file = await writeFile(
-      "report.html",
-      "<!doctype html><h1>outside</h1>",
-      tempDirs.make("marker-outside-"),
-    );
-    await expect(media.markTrustedGeneratedHtmlPath(file, await fs.readFile(file))).rejects.toThrow(
-      /outside outbound staging/i,
-    );
-  });
-
-  it("rejects host-read HTML outside the trusted temp root", async () => {
-    const file = await writeFile(
-      "report.html",
-      "<!doctype html><h1>outside</h1>",
-      tempDirs.make("html-outside-"),
-    );
-    await expectAccessError(loadWithHostRead(file));
-  });
-
-  it.each(["symlink", "hardlink"] as const)(
-    "rejects a trusted HTML %s to an outside file",
-    async (kind) => {
-      const root = tempDirs.make("html-outside-", path.dirname(resolvePreferredOpenClawTmpDir()));
-      const outside = await writeFile(
-        "report.html",
-        "<!doctype html><title>Outside</title><body>secret</body>\n",
-        root,
-      );
-      const link = path.join(fixtureRoot, `${kind}-report.html`);
-      try {
-        if (kind === "symlink") {
-          await fs.symlink(outside, link);
-        } else {
-          await fs.link(outside, link);
-        }
-      } catch (error) {
-        if (
-          (kind === "symlink" && (error as NodeJS.ErrnoException).code === "EPERM") ||
-          (kind === "hardlink" && (error as NodeJS.ErrnoException).code === "EXDEV")
-        ) {
-          return;
-        }
-        throw error;
-      }
-      try {
-        await expectAccessError(loadWithHostRead(link));
-      } finally {
-        await fs.rm(link, { force: true });
-      }
+  it.each(["payload.mp3", "payload.png", "payload.mp4"])(
+    "treats unverified media-extension %s bytes as a generic document",
+    async (name) => {
+      const body = Buffer.from([0x00, 0x01, 0x02, 0x03, 0xff]);
+      const result = await hostDocument(name, body);
+      expect(result.kind).toBe("document");
+      expect(result.contentType).toBe("application/octet-stream");
+      expect(result.fileName).toBe(name);
+      expect(result.buffer).toEqual(body);
     },
   );
 
-  it("rejects trusted HTML paths without HTML document shape", async () => {
-    await expectAccessError(hostDocument("report.html", "status,value\nok,1\n"));
+  it("falls back undecodable image bytes to a download-only document", async () => {
+    const body = Buffer.concat([Buffer.from("89504e470d0a1a0a", "hex"), Buffer.alloc(64, 0x41)]);
+    const file = await writeFile("broken.png", body);
+    const result = await media.loadWebMedia(file, {
+      maxBytes: 1024 * 1024,
+      localRoots: "any",
+      readFile: (source) => fs.readFile(source),
+      hostReadCapability: true,
+      documentFallback: true,
+    });
+    expect(result.kind).toBe("document");
+    expect(result.contentType).toBe("application/octet-stream");
+    expect(result.fileName).toBe("broken.png");
+    expect(result.buffer).toEqual(body);
   });
 
-  it("rejects opaque non-NUL binary data disguised as HTML", async () => {
-    const body = Buffer.from(Array.from({ length: 9000 }, (_, index) => (index % 255) + 1));
-    await expectAccessError(hostDocument("opaque.html", body));
-  });
-
-  it("rejects a CSV binary tail after the old text sample window", async () => {
+  it("delivers a CSV binary tail without rewriting its bytes", async () => {
     const prefix = Buffer.from(`name,value\n${"row,1\n".repeat(1400)}`);
     expect(prefix.length).toBeGreaterThan(8192);
-    await expectAccessError(
-      hostDocument(
-        "prefix-tail.csv",
-        Buffer.concat([prefix, Buffer.from([0x00, 0xff, 0x10, 0x80])]),
-      ),
-    );
+    const body = Buffer.concat([prefix, Buffer.from([0x00, 0xff, 0x10, 0x80])]);
+    const result = await hostDocument("prefix-tail.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
   it("allows single-byte encoded host-read CSV", async () => {
@@ -659,16 +608,18 @@ describe("loadWebMedia", () => {
     expect(result.contentType).toBe("text/csv");
   });
 
-  it("rejects BOM-prefixed binary despite a misleading media signature", async () => {
+  it("delivers BOM-prefixed binary despite a misleading media signature", async () => {
     const body = Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.alloc(9000, 0xff)]);
-    await expectAccessError(hostDocument("bom-binary.csv", body));
+    const result = await hostDocument("bom-binary.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
-  it("rejects alternating ASCII and high bytes at the former 50% threshold", async () => {
+  it("delivers alternating ASCII and high bytes without a text-shape verdict", async () => {
     const body = Buffer.from(
       Array.from({ length: 9000 }, (_, index) => (index % 2 === 0 ? 0x41 : 0xff)),
     );
-    await expectAccessError(hostDocument("alternating-high.csv", body));
+    const result = await hostDocument("alternating-high.csv", body);
+    expect(result.buffer).toEqual(body);
   });
 
   it("rejects traversal-style canvas media paths", async () => {

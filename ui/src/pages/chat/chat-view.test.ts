@@ -1551,7 +1551,7 @@ describe("chat transcript rendering", () => {
         );
       }
       expect(mixedAnnouncement).toBe(
-        "settings.toml: Not sent. Rejected by the local attachment allowlist. Send a supported file type. Partial result",
+        "settings.toml: Not sent. Delivery failed. Try sending this file again. Partial result",
       );
     },
   );

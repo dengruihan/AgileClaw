@@ -2,15 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const loadWebMedia = vi.hoisted(() => vi.fn());
-const markTrustedGeneratedHtmlPath = vi.hoisted(() => vi.fn());
 const saveMediaBuffer = vi.hoisted(() => vi.fn());
-const rm = vi.hoisted(() => vi.fn(async () => {}));
-
-vi.mock("node:fs/promises", () => ({ rm }));
 
 vi.mock("./web-media.js", () => ({
   loadWebMedia,
-  markTrustedGeneratedHtmlPath,
 }));
 
 vi.mock("./store.js", () => ({
@@ -37,52 +32,64 @@ describe("resolveOutboundAttachmentFromUrl", () => {
 
     await resolveOutboundAttachmentFromUrl("./report.pdf", 1024);
 
+    expect(loadWebMedia).toHaveBeenCalledWith(
+      "./report.pdf",
+      expect.objectContaining({ documentFallback: true }),
+    );
     expect(saveMediaBuffer).toHaveBeenCalledWith(
       buffer,
       "application/pdf",
       "outbound",
       1024,
       "report.pdf",
+      undefined,
+      { preserveContentType: false },
     );
-    expect(markTrustedGeneratedHtmlPath).not.toHaveBeenCalled();
   });
 
-  it("marks staged trusted HTML with its exact bytes", async () => {
+  it("pins a loader-classified generic document through staging", async () => {
+    const buffer = Buffer.from([0, 1, 2, 3]);
+    loadWebMedia.mockResolvedValueOnce({
+      buffer,
+      contentType: "application/octet-stream",
+      fileName: "broken.mp3",
+    });
+    saveMediaBuffer.mockResolvedValueOnce({
+      path: "/tmp/media/outbound/broken---uuid.mp3",
+      contentType: "application/octet-stream",
+    });
+
+    await resolveOutboundAttachmentFromUrl("/tmp/workspace/broken.mp3", 1024);
+
+    expect(saveMediaBuffer).toHaveBeenCalledWith(
+      buffer,
+      "application/octet-stream",
+      "outbound",
+      1024,
+      "broken.mp3",
+      undefined,
+      { preserveContentType: true },
+    );
+  });
+
+  it("stages HTML through the same attachment path without a preview failure", async () => {
     const buffer = Buffer.from("<!doctype html><title>report</title>");
     loadWebMedia.mockResolvedValueOnce({
       buffer,
       contentType: "text/html",
       fileName: "report.html",
-      trustedGeneratedHtmlSource: true,
     });
     saveMediaBuffer.mockResolvedValueOnce({
       path: "/tmp/media/outbound/report---uuid.html",
       contentType: "text/html",
     });
 
-    await resolveOutboundAttachmentFromUrl("/tmp/openclaw/report.html", 1024);
+    const result = await resolveOutboundAttachmentFromUrl("/tmp/workspace/report.html", 1024);
 
-    expect(markTrustedGeneratedHtmlPath).toHaveBeenCalledWith(
-      "/tmp/media/outbound/report---uuid.html",
-      buffer,
-    );
-  });
-
-  it("removes the staged file and propagates marker write failures", async () => {
-    const buffer = Buffer.from("<!doctype html><title>report</title>");
-    const stagedPath = "/tmp/media/outbound/report---uuid.html";
-    loadWebMedia.mockResolvedValueOnce({
-      buffer,
+    expect(result).toEqual({
+      path: "/tmp/media/outbound/report---uuid.html",
       contentType: "text/html",
-      trustedGeneratedHtmlSource: true,
     });
-    saveMediaBuffer.mockResolvedValueOnce({ path: stagedPath, contentType: "text/html" });
-    markTrustedGeneratedHtmlPath.mockRejectedValueOnce(new Error("marker write failed"));
-
-    await expect(
-      resolveOutboundAttachmentFromUrl("/tmp/openclaw/report.html", 1024),
-    ).rejects.toThrow("marker write failed");
-    expect(rm).toHaveBeenCalledWith(stagedPath, { force: true });
   });
 });
 

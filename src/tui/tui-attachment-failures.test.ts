@@ -97,8 +97,7 @@ describe("TUI attachment failure presentation", () => {
     {
       kind: "video",
       code: "unsupported-format",
-      expected:
-        "⚠️ video attachment: Rejected by the local attachment allowlist. Send a supported file type.",
+      expected: "⚠️ video attachment: Delivery failed. Try sending this file again.",
     },
     {
       kind: "document",

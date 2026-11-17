@@ -460,8 +460,7 @@ describe("createReplyMediaPathNormalizer", () => {
       name: "host-read media type rejection",
       error: new HostReadMediaTypeError("unsupported test fixture"),
       mediaUrl: "./out/settings.toml",
-      expectedText:
-        "⚠️ settings.toml: Rejected by the local attachment allowlist. Send a supported file type.",
+      expectedText: "⚠️ settings.toml: Delivery failed. Try sending this file again.",
       verifyMetadata: (result) => {
         expect(getReplyPayloadMetadata(result)?.assistantMediaFailures).toMatchObject([
           { code: "unsupported-format", label: "settings.toml" },
