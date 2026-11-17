@@ -225,12 +225,21 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
     const continueInTerminalDisabledReason = row
       ? this.continueInTerminalDisabledReason(row)
       : undefined;
+    // The PDF export reads the same complete history as "Conversation as Markdown".
+    const transcriptReadAccess = readSessionMethodAccess(this.context.gateway.snapshot, {
+      method: "chat.history",
+      requiredScope: "operator.read",
+      sessionScope: true,
+    });
+    const exportPdfDisabledReason =
+      row && !transcriptReadAccess.allowed ? transcriptReadAccess.reason : undefined;
     const actionDisabledReasons = this.headerReasonsMemo.read(
       [
         ...Object.entries(sessionActionDisabledReasons).flat(),
         assignmentAccess?.allowed,
         assignmentAccess && !assignmentAccess.allowed ? assignmentAccess.reason : undefined,
         continueInTerminalDisabledReason,
+        exportPdfDisabledReason,
       ],
       () => ({
         ...sessionActionDisabledReasons,
@@ -240,6 +249,7 @@ export abstract class ChatPaneHeader extends ChatPaneDiscussion {
         ...(continueInTerminalDisabledReason
           ? { "continue-in-terminal": continueInTerminalDisabledReason }
           : {}),
+        ...(exportPdfDisabledReason ? { "export-pdf": exportPdfDisabledReason } : {}),
       }),
     );
     const desktopEnvironmentId = resolveChatPaneDesktopTarget(row);

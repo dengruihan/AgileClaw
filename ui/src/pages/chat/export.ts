@@ -1,13 +1,5 @@
-import { timestampMsToIsoString } from "@openclaw/normalization-core/number-coercion";
-import { t } from "../../i18n/index.ts";
-import { extractTextCached } from "../../lib/chat/message-extract.ts";
-import {
-  normalizeRoleForGrouping,
-  resolveMessageRole,
-  resolveMessageSenderLabel,
-} from "../../lib/chat/message-normalizer.ts";
-import { visibleChatHistoryMessages } from "../../lib/chat/message-visibility.ts";
 import { downloadTextFile } from "../../lib/download.ts";
+import { buildChatTranscript } from "./export-transcript.ts";
 
 export type ChatExportResult = "downloaded" | "empty";
 
@@ -21,23 +13,17 @@ export function exportChatMarkdown(messages: unknown[], assistantName: string): 
 }
 
 export function buildChatMarkdown(messages: unknown[], assistantName: string): string | null {
-  const history = visibleChatHistoryMessages(messages);
   const lines: string[] = [];
-  for (const msg of history) {
-    const content = extractTextCached(msg) ?? "";
-    if (!content.trim()) {
+  for (const entry of buildChatTranscript(messages, assistantName)) {
+    if (!entry.text.trim()) {
       continue;
     }
-    const m = msg as Record<string, unknown>;
-    const role = normalizeRoleForGrouping(resolveMessageRole(msg));
-    const speaker =
-      role === "user"
-        ? (resolveMessageSenderLabel(msg) ?? t("chat.messages.unattributedSender"))
-        : role === "assistant"
-          ? (resolveMessageSenderLabel(msg) ?? assistantName)
-          : "Tool";
-    const ts = timestampMsToIsoString(m.timestamp) ?? "";
-    lines.push(`## ${speaker}${ts ? ` (${ts})` : ""}`, "", content, "");
+    lines.push(
+      `## ${entry.speaker}${entry.timestampIso ? ` (${entry.timestampIso})` : ""}`,
+      "",
+      entry.text,
+      "",
+    );
   }
   return lines.length > 0 ? [`# Chat with ${assistantName}`, "", ...lines].join("\n") : null;
 }

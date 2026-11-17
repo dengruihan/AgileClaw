@@ -998,6 +998,7 @@ export const en: TranslationMap & {
     copySessionLink: "Session link",
     copySessionPreviewLink: "Preview link",
     copyMarkdown: "Conversation as Markdown",
+    exportPdf: "Conversation as PDF",
     openNewTab: "New tab",
     openNewWindow: "New window",
     splitBelow: "Split below",
@@ -3027,6 +3028,12 @@ export const en: TranslationMap & {
     sessionHeader: {
       panels: "Panels",
       layout: "Layout",
+      exportPdf: {
+        preparing: "Preparing PDF…",
+        busy: "A PDF export of this conversation is already running.",
+        downloaded: "PDF saved.",
+        tooLarge: "This conversation is too large to export as PDF.",
+      },
       continueInTerminal: {
         action: "Continue in terminal…",
         title: "Continue in terminal",
@@ -3522,6 +3529,12 @@ export const en: TranslationMap & {
       untitled: "Image",
     },
     externalImage: { notLoaded: "External image not loaded", open: "Open image" },
+    exportPdf: {
+      exportedAt: "Exported {date}",
+      attachmentsOmitted: "Attachments are not included in this export.",
+      continued: "continued",
+      pageOf: "Page {page} of {count}",
+    },
     messages: {
       copySelection: "Copy",
       replyingTo: "Replying to {name}",

@@ -52,9 +52,23 @@ export function canCopySessionMarkdown(snapshot: ApplicationGatewaySnapshot | un
   }).allowed;
 }
 
-async function copySessionMarkdown<TRouteId extends string>(
+export type FullSessionTranscript = {
+  /** Chronological visible-history payload, newest paging order reversed. */
+  messages: unknown[];
+  agentId: string;
+  assistantName: string;
+};
+
+/**
+ * Loads the complete paginated transcript for one session snapshot.
+ *
+ * Offsets are relative to the live tail, so every page must still belong to the
+ * captured session, branch, and message count; a changed conversation fails
+ * instead of producing a plausible but mixed export.
+ */
+export async function loadFullSessionTranscript<TRouteId extends string>(
   params: SessionNavigationTarget<TRouteId>,
-): Promise<boolean> {
+): Promise<FullSessionTranscript> {
   const { context, session } = params;
   const gateway = context.gateway;
   const client = gateway.snapshot.client;
@@ -89,8 +103,6 @@ async function copySessionMarkdown<TRouteId extends string>(
   let snapshot: ChatHistoryResult | undefined;
   while (true) {
     const page = await requestHistory(offset);
-    // Offsets are relative to the current tail. Never stitch different sessions,
-    // branches, or growing transcripts into a seemingly complete export.
     if (
       !isCurrent() ||
       (session.sessionId && page.sessionId !== session.sessionId) ||
@@ -139,11 +151,28 @@ async function copySessionMarkdown<TRouteId extends string>(
   const assistantName =
     context.agents.state.agentsList?.agents.find((agent) => agent.id === agentId)?.name ??
     "AgileClaw";
-  const markdown = buildChatMarkdown(pages.toReversed().flat(), assistantName);
+  return { messages: pages.toReversed().flat(), agentId, assistantName };
+}
+
+async function copySessionMarkdown<TRouteId extends string>(
+  params: SessionNavigationTarget<TRouteId>,
+): Promise<boolean> {
+  const gateway = params.context.gateway;
+  const client = gateway.snapshot.client;
+  const hello = gateway.snapshot.hello;
+  const { messages, assistantName } = await loadFullSessionTranscript(params);
+  const markdown = buildChatMarkdown(messages, assistantName);
   if (!markdown) {
     throw new Error(t("chat.commandResults.emptyExport"));
   }
-  return copyToClipboard(markdown, isCurrent);
+  return copyToClipboard(
+    markdown,
+    () =>
+      params.isCurrent() &&
+      gateway.snapshot.client === client &&
+      gateway.snapshot.phase === "connected" &&
+      gateway.snapshot.hello === hello,
+  );
 }
 
 export async function runSessionNavigationAction<TRouteId extends string>(

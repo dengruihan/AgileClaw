@@ -26,7 +26,10 @@ import {
   resolveUiConfiguredMainKey,
   resolveUiConversationIdentity,
 } from "../../lib/sessions/session-key.ts";
-import { runSessionNavigationAction } from "../../lib/sessions/session-menu-navigation.ts";
+import {
+  loadFullSessionTranscript,
+  runSessionNavigationAction,
+} from "../../lib/sessions/session-menu-navigation.ts";
 import { showToast } from "../../lib/toast.ts";
 import { runControlUiPluginAction } from "../../plugins/control-ui-actions.ts";
 import { ChatPaneContext } from "./chat-pane-context.ts";
@@ -37,6 +40,7 @@ import { buildContinueInTerminalCommand } from "./continue-in-terminal-command.t
 
 export abstract class ChatPaneSessionMenu extends ChatPaneContext {
   private readonly headerSessionDataMemo = new ChatPaneHeaderMemo<SessionMenuData>();
+  private pendingTranscriptPdf: string | null = null;
   protected resolveHeaderSessionTitle(row: GatewaySessionRow | undefined): string {
     // The roster owns accepted titles; pane metadata fills absent cross-agent rows.
     return (
@@ -142,6 +146,10 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
   protected async handleHeaderSessionAction(action: HeaderMenuAction, row: GatewaySessionRow) {
     if (action.kind === "stop-cloud-worker") {
       return this.reclaimHeaderPlacement(row);
+    }
+    if (action.kind === "export-pdf") {
+      await this.exportHeaderSessionPdf(row);
+      return;
     }
     if (action.kind === "toggle-archived" && !row.archived && !this.canArchiveHeaderSession(row)) {
       return;
@@ -362,6 +370,94 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
         this.publishHeaderError(error, owner);
       }
     }
+  }
+
+  /**
+   * Exports the captured session's complete history as a light-background PDF.
+   *
+   * The action pins the visible row's key and session ID, reads every page through
+   * the shared transcript loader, and re-checks the pane's ownership before the
+   * download so a session switch can never attribute the result to another chat.
+   */
+  protected async exportHeaderSessionPdf(row: GatewaySessionRow): Promise<void> {
+    const owner = this.headerOutcomeOwner;
+    if (!this.captureHeaderSessionActionScope()) {
+      this.publishHeaderError(t("sessionsView.actionRequiresConnection"));
+      return;
+    }
+    const access = readSessionMethodAccess(this.context.gateway.snapshot, {
+      method: "chat.history",
+      requiredScope: "operator.read",
+      sessionScope: true,
+    });
+    if (!access.allowed) {
+      this.publishHeaderError(access.reason);
+      return;
+    }
+    if (!row.sessionId) {
+      this.publishHeaderError(t("sessionsView.actionUnavailable"));
+      return;
+    }
+    if (this.pendingTranscriptPdf) {
+      showToast({ message: t("chat.sessionHeader.exportPdf.busy") });
+      return;
+    }
+    const exportId = `${row.key}:${row.sessionId}`;
+    const sessionId = row.sessionId;
+    // The pane's own conversation must still be the captured snapshot, never the
+    // sidebar selection or another split pane's session.
+    const stillPresenting = () =>
+      this.ownsHeaderOutcome(owner) &&
+      this.isConnected &&
+      this.presentedSessionMatches(row.key, sessionId);
+    this.pendingTranscriptPdf = exportId;
+    this.requestUpdate();
+    showToast({ message: t("chat.sessionHeader.exportPdf.preparing"), durationMs: 120_000 });
+    try {
+      const state = this.state;
+      const { messages, assistantName } = await loadFullSessionTranscript({
+        context: this.context,
+        session: { key: row.key, sessionId },
+        agentId: state ? resolveChatAgentId(state) : row.agentId,
+        isCurrent: stillPresenting,
+      });
+      const { exportChatPdf } = await import("./export-pdf/index.ts");
+      if (!stillPresenting()) {
+        return;
+      }
+      const result = exportChatPdf({
+        messages,
+        assistantName,
+        title: this.resolveHeaderSessionTitle(row),
+      });
+      if (result === "empty") {
+        showToast({ message: t("chat.commandResults.emptyExport") });
+        return;
+      }
+      if (result === "too-large") {
+        showToast({ message: t("chat.sessionHeader.exportPdf.tooLarge") });
+        return;
+      }
+      showToast({ message: t("chat.sessionHeader.exportPdf.downloaded") });
+    } catch (error) {
+      if (this.ownsHeaderOutcome(owner)) {
+        this.publishHeaderError(error, owner);
+      }
+    } finally {
+      if (this.pendingTranscriptPdf === exportId) {
+        this.pendingTranscriptPdf = null;
+      }
+      this.requestUpdate();
+    }
+  }
+
+  private presentedSessionMatches(key: string, sessionId: string | null): boolean {
+    const row = this.state ? selectedChatSessionRow(this.state) : undefined;
+    return Boolean(
+      row &&
+      areUiSessionKeysEquivalent(row.key, key) &&
+      (sessionId === null || row.sessionId === sessionId),
+    );
   }
 
   private resolveContinueInTerminalCommand(row: GatewaySessionRow, client: GatewayBrowserClient) {

@@ -33,6 +33,7 @@ import {
 export type HeaderMenuAction =
   | SessionManagementAction
   | { kind: "continue-in-terminal" }
+  | { kind: "export-pdf" }
   | { kind: "stop-cloud-worker" }
   | { kind: "plugin"; id: string };
 export type HeaderMenuActionKind = HeaderMenuAction["kind"];
@@ -202,7 +203,10 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
       event.preventDefault();
       return;
     }
-    if (value === "continue-in-terminal" && !this.actionDisabledReasons[value]) {
+    if (
+      (value === "continue-in-terminal" || value === "export-pdf") &&
+      !this.actionDisabledReasons[value]
+    ) {
       event.currentTarget.open = false;
       this.onAction({ kind: value });
     }
@@ -383,10 +387,24 @@ class ChatHeaderSessionMenu extends OpenClawLightDomElement {
       ${this.managementActions.renderOrganizationActions()}
       ${this.renderQuickActionItems("session", this.sessionActions, true)}
       <div class="session-menu__separator" role="separator"></div>
-      ${this.managementActions.renderTransferActions()}
+      ${this.managementActions.renderTransferActions()} ${this.renderExportPdfAction()}
       <div class="session-menu__separator" role="separator"></div>
       ${this.managementActions.renderDeleteAction()}
     `;
+  }
+
+  /** Header-only export: the chat pane owns the session snapshot and full-history read. */
+  private renderExportPdfAction() {
+    const reason = this.actionDisabledReasons["export-pdf"];
+    return html`<wa-dropdown-item
+      class="session-menu__item"
+      value="export-pdf"
+      ?disabled=${Boolean(reason)}
+      title=${reason ?? nothing}
+    >
+      <span slot="icon" class="session-menu__icon" aria-hidden="true">${icons.file}</span>
+      <span class="session-menu__text">${t("sessionsView.exportPdf")}</span>
+    </wa-dropdown-item>`;
   }
 
   private renderTerminalAction(inline: boolean) {
