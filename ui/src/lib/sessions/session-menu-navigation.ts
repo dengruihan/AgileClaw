@@ -72,14 +72,24 @@ export async function loadFullSessionTranscript<TRouteId extends string>(
   const { context, session } = params;
   const gateway = context.gateway;
   const client = gateway.snapshot.client;
-  const access = readSessionMethodAccess(gateway.snapshot, {
-    method: "chat.history",
-    requiredScope: "operator.read",
-    sessionScope: true,
-  });
+  const readAccess = () =>
+    readSessionMethodAccess(gateway.snapshot, {
+      method: "chat.history",
+      requiredScope: "operator.read",
+      sessionScope: true,
+    });
+  const access = readAccess();
   if (!access.allowed || !client) {
     throw new Error(access.allowed ? t("sessionsView.actionRequiresConnection") : access.reason);
   }
+  // A revoked scope or role can arrive in place on the same hello object, so every
+  // awaited page re-reads live access instead of trusting the captured identity.
+  const assertReadAccess = () => {
+    const current = readAccess();
+    if (!current.allowed) {
+      throw new Error(current.reason);
+    }
+  };
   const agentId =
     parseAgentSessionKey(session.key)?.agentId ??
     resolveSessionNavigationAgentId(context, params.agentId);
@@ -103,6 +113,7 @@ export async function loadFullSessionTranscript<TRouteId extends string>(
   let snapshot: ChatHistoryResult | undefined;
   while (true) {
     const page = await requestHistory(offset);
+    assertReadAccess();
     if (
       !isCurrent() ||
       (session.sessionId && page.sessionId !== session.sessionId) ||
@@ -138,6 +149,7 @@ export async function loadFullSessionTranscript<TRouteId extends string>(
     // Only tail pages carry the branch marker and history cursor. Re-read the
     // tail after paging so a branch switch or rewrite cannot mix transcripts.
     const tail = await requestHistory(0, 1);
+    assertReadAccess();
     if (
       !isCurrent() ||
       tail.sessionId !== snapshot.sessionId ||

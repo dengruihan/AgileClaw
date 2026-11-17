@@ -68,14 +68,28 @@ describe("exportChatPdf", () => {
         assistantName: "AgileClaw",
         title: "Release: planning/2026",
         now: Date.parse("2026-11-17T09:30:00Z"),
+        authorize: () => true,
       }),
-    ).toBe("downloaded");
+    ).toEqual({ status: "downloaded", unsupportedCharacters: 0 });
 
     const download = vi.mocked(downloadBlobFile);
     expect(download).toHaveBeenCalledOnce();
     // Unsafe filename characters never reach the download name.
     expect(download.mock.calls[0]![0]).toBe("openclaw-chat-Release-planning2026-202611170930.pdf");
     expect(download.mock.calls[0]![1].type).toBe("application/pdf");
+  });
+
+  it("refuses the download when live authority is revoked before the side effect", () => {
+    expect(
+      exportChatPdf({
+        messages: transcript,
+        assistantName: "AgileClaw",
+        title: "Release planning",
+        now: Date.parse("2026-11-17T09:30:00Z"),
+        authorize: () => false,
+      }),
+    ).toEqual({ status: "denied" });
+    expect(downloadBlobFile).not.toHaveBeenCalled();
   });
 
   it("reports an empty transcript without creating a download", () => {
@@ -85,8 +99,9 @@ describe("exportChatPdf", () => {
         assistantName: "AgileClaw",
         title: "Empty",
         now: Date.parse("2026-11-17T09:30:00Z"),
+        authorize: () => true,
       }),
-    ).toBe("empty");
+    ).toEqual({ status: "empty" });
     expect(
       buildChatPdfBytes({ messages: [], assistantName: "AgileClaw", title: "Empty" }),
     ).toBeNull();
@@ -98,20 +113,38 @@ describe("exportChatPdf", () => {
       { role: "user", content: "Summarize this." },
       { role: "assistant", content: "x".repeat(1_500_001) },
     ];
-    expect(exportChatPdf({ messages, assistantName: "AgileClaw", title: "Huge" })).toBe(
-      "too-large",
-    );
+    expect(
+      exportChatPdf({ messages, assistantName: "AgileClaw", title: "Huge", authorize: () => true }),
+    ).toEqual({ status: "too-large" });
   });
 
   it("writes a PDF document that starts with the PDF signature", () => {
-    const bytes = buildChatPdfBytes({
+    const built = buildChatPdfBytes({
       messages: transcript,
       assistantName: "AgileClaw",
       title: "Release planning",
       now: Date.parse("2026-11-17T09:30:00Z"),
     });
-    expect(bytes).not.toBeNull();
-    const header = new TextDecoder("latin1").decode(bytes!.subarray(0, 8));
+    expect(built).not.toBeNull();
+    const header = new TextDecoder("latin1").decode(built!.bytes.subarray(0, 8));
     expect(header).toBe("%PDF-1.4");
+  });
+
+  it("keeps emoji content visible as an explained marker instead of a silent ?", () => {
+    const built = buildChatPdfBytes({
+      messages: [
+        { role: "user", content: "Emoji fidelity: \u{1F99E} \u{1F600}" },
+        { role: "assistant", content: "Two emoji above." },
+      ],
+      assistantName: "AgileClaw",
+      title: "Emoji",
+      now: Date.parse("2026-11-17T09:30:00Z"),
+    });
+    expect(built?.unsupportedCharacters).toBe(2);
+    const document = new TextDecoder("latin1").decode(built!.bytes);
+    // The marker is a real CID glyph, and the document explains the replacement.
+    expect(document).toContain("25A1");
+    expect(document).toContain("characters outside the PDF font range appear as");
+    expect(document).not.toContain("? ?");
   });
 });

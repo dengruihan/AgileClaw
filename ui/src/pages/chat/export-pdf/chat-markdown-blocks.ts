@@ -1,9 +1,16 @@
 import MarkdownIt, { type Token } from "markdown-it";
 import markdownItCjkFriendly from "markdown-it-cjk-friendly";
 import type { PdfTextStyle } from "./pdf-text.ts";
+import type { PdfRgb } from "./pdf-writer.ts";
 
 /** One styled inline fragment of a block; "\n" forces a line break. */
-export type PdfSpan = { text: string; style: PdfTextStyle };
+export type PdfSpan = {
+  text: string;
+  style: PdfTextStyle;
+  /** Overrides the block font size (document header lines use this). */
+  size?: number;
+  color?: PdfRgb;
+};
 
 export type PdfBlock =
   | { kind: "heading"; level: number; spans: PdfSpan[] }
@@ -145,9 +152,12 @@ export function markdownToPdfBlocks(markdown: string): PdfBlock[] {
       case "bullet_list_open":
         lists.push({ ordered: false, index: 1 });
         break;
-      case "ordered_list_open":
-        lists.push({ ordered: true, index: 1 });
+      case "ordered_list_open": {
+        // Authored start numbers (including nested lists) replace Markdown's 1-based default.
+        const start = Number(token.attrGet("start") ?? 1);
+        lists.push({ ordered: true, index: Number.isInteger(start) && start >= 0 ? start : 1 });
         break;
+      }
       case "bullet_list_close":
       case "ordered_list_close":
         lists.pop();

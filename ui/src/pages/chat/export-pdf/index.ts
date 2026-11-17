@@ -2,8 +2,9 @@ import { t } from "../../../i18n/index.ts";
 import { downloadBlobFile } from "../../../lib/download.ts";
 import { buildChatTranscript } from "../export-transcript.ts";
 import { buildChatPdf, ChatPdfTooLargeError, type ChatPdfEntry } from "./chat-pdf.ts";
+import { countUnsupportedPdfChars } from "./pdf-text.ts";
 
-export type ChatPdfExportParams = {
+export type ChatPdfBuildParams = {
   messages: unknown[];
   assistantName: string;
   /** Session title used as the document heading and file stem. */
@@ -11,7 +12,22 @@ export type ChatPdfExportParams = {
   now?: number;
 };
 
-export type ChatPdfExportResult = "downloaded" | "empty" | "too-large";
+export type ChatPdfExportParams = ChatPdfBuildParams & {
+  /** Live authority gate, called immediately before the download side effect. */
+  authorize: () => boolean;
+};
+
+export type ChatPdfBuildOutcome = {
+  bytes: Uint8Array;
+  /** Characters the PDF fonts cannot carry, rendered as a visible marker. */
+  unsupportedCharacters: number;
+};
+
+export type ChatPdfExportResult =
+  | { status: "downloaded"; unsupportedCharacters: number }
+  | { status: "empty" }
+  | { status: "too-large" }
+  | { status: "denied" };
 
 const MAX_TRANSCRIPT_CHARS = 1_500_000;
 
@@ -57,7 +73,7 @@ export function buildChatPdfEntries(messages: unknown[], assistantName: string):
     }));
 }
 
-export function buildChatPdfBytes(params: ChatPdfExportParams): Uint8Array | null {
+export function buildChatPdfBytes(params: ChatPdfBuildParams): ChatPdfBuildOutcome | null {
   const entries = buildChatPdfEntries(params.messages, params.assistantName);
   if (entries.length === 0) {
     return null;
@@ -66,11 +82,19 @@ export function buildChatPdfBytes(params: ChatPdfExportParams): Uint8Array | nul
   if (chars > MAX_TRANSCRIPT_CHARS) {
     throw new ChatPdfTooLargeError();
   }
+  const unsupportedCharacters =
+    countUnsupportedPdfChars(params.title) +
+    entries.reduce(
+      (total, entry) =>
+        total + countUnsupportedPdfChars(entry.speaker) + countUnsupportedPdfChars(entry.body),
+      0,
+    );
   const now = params.now ?? Date.now();
-  return buildChatPdf({
+  const bytes = buildChatPdf({
     title: params.title,
     exportedAt: now,
     entries,
+    unsupportedCharacters,
     labels: {
       meta: `${t("chat.exportPdf.exportedAt", { date: timestampLabel(now) })} · ${t(
         entries.length === 1 ? "chat.sessionHeader.oneMessage" : "chat.sessionHeader.messages",
@@ -80,27 +104,37 @@ export function buildChatPdfBytes(params: ChatPdfExportParams): Uint8Array | nul
       continued: t("chat.exportPdf.continued"),
       pageOf: (page, count) =>
         t("chat.exportPdf.pageOf", { page: String(page), count: String(count) }),
+      unsupportedGlyphs: (count) =>
+        t(count === 1 ? "chat.exportPdf.unsupportedGlyph" : "chat.exportPdf.unsupportedGlyphs", {
+          count: String(count),
+        }),
     },
   });
+  return { bytes, unsupportedCharacters };
 }
 
 export function exportChatPdf(params: ChatPdfExportParams): ChatPdfExportResult {
-  let bytes: Uint8Array | null;
+  let built: ChatPdfBuildOutcome | null;
   try {
-    bytes = buildChatPdfBytes(params);
+    built = buildChatPdfBytes(params);
   } catch (error) {
     if (error instanceof ChatPdfTooLargeError) {
-      return "too-large";
+      return { status: "too-large" };
     }
     throw error;
   }
-  if (!bytes) {
-    return "empty";
+  if (!built) {
+    return { status: "empty" };
+  }
+  // Nothing awaits between this authority read and the download, so a revoked
+  // role or scope cannot slip in after the check.
+  if (!params.authorize()) {
+    return { status: "denied" };
   }
   const now = params.now ?? Date.now();
   downloadBlobFile(
     `openclaw-chat-${sanitizeFileStem(params.title)}-${fileTimestamp(now)}.pdf`,
-    new Blob([new Uint8Array(bytes).buffer], { type: "application/pdf" }),
+    new Blob([new Uint8Array(built.bytes).buffer], { type: "application/pdf" }),
   );
-  return "downloaded";
+  return { status: "downloaded", unsupportedCharacters: built.unsupportedCharacters };
 }

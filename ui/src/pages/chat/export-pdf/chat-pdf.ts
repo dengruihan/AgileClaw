@@ -24,6 +24,8 @@ export type ChatPdfLabels = {
   attachmentsOmitted: string;
   continued: string;
   pageOf: (page: number, count: number) => string;
+  /** Explains the visible replacement marker used for characters the fonts cannot carry. */
+  unsupportedGlyphs: (count: number) => string;
 };
 
 export type ChatPdfInput = {
@@ -31,6 +33,8 @@ export type ChatPdfInput = {
   exportedAt: number;
   entries: readonly ChatPdfEntry[];
   labels: ChatPdfLabels;
+  /** Characters outside the PDF font range that the document renders as a marker. */
+  unsupportedCharacters?: number;
 };
 
 export class ChatPdfTooLargeError extends Error {
@@ -68,7 +72,14 @@ const HEADING_SIZE: Record<number, number> = { 1: 15, 2: 13.5, 3: 12, 4: 11, 5: 
 
 const MAX_PAGES = 400;
 
-type Unit = { style: PdfTextStyle; size: number; text: string; width: number; space: boolean };
+type Unit = {
+  style: PdfTextStyle;
+  size: number;
+  text: string;
+  width: number;
+  space: boolean;
+  color?: PdfRgb;
+};
 
 type Run = {
   text: string;
@@ -95,8 +106,12 @@ type LaidLine = {
 function buildUnits(spans: readonly PdfSpan[], size: number, maxWidth: number): Unit[] {
   const units: Unit[] = [];
   for (const span of spans) {
-    const spanSize = span.style.code ? size * 0.92 : size;
+    const spanSize = span.size ?? (span.style.code ? size * 0.92 : size);
+    const color = span.color;
     const chars = measurePdfText(span.text, span.style, spanSize);
+    const push = (unit: Omit<Unit, "color">) => {
+      units.push(color ? { ...unit, color } : unit);
+    };
     let word = "";
     let wordWidth = 0;
     const flushWord = () => {
@@ -105,7 +120,7 @@ function buildUnits(spans: readonly PdfSpan[], size: number, maxWidth: number): 
       }
       if (wordWidth > maxWidth) {
         for (const char of measurePdfText(word, span.style, spanSize)) {
-          units.push({
+          push({
             style: span.style,
             size: spanSize,
             text: char.text,
@@ -114,7 +129,7 @@ function buildUnits(spans: readonly PdfSpan[], size: number, maxWidth: number): 
           });
         }
       } else {
-        units.push({
+        push({
           style: span.style,
           size: spanSize,
           text: word,
@@ -128,12 +143,12 @@ function buildUnits(spans: readonly PdfSpan[], size: number, maxWidth: number): 
     for (const char of chars) {
       if (char.text === "\n") {
         flushWord();
-        units.push({ style: span.style, size: spanSize, text: "\n", width: 0, space: false });
+        push({ style: span.style, size: spanSize, text: "\n", width: 0, space: false });
         continue;
       }
       if (char.text === " ") {
         flushWord();
-        units.push({
+        push({
           style: span.style,
           size: spanSize,
           text: " ",
@@ -195,7 +210,8 @@ function runsForLine(units: readonly Unit[]): Run[] {
       last.style.bold === unit.style.bold &&
       last.style.code === unit.style.code &&
       last.style.italic === unit.style.italic &&
-      last.size === unit.size
+      last.size === unit.size &&
+      last.color === unit.color
     ) {
       last.text += unit.text;
       last.width += unit.width;
@@ -206,6 +222,7 @@ function runsForLine(units: readonly Unit[]): Run[] {
         size: unit.size,
         x,
         width: unit.width,
+        ...(unit.color ? { color: unit.color } : {}),
       });
     }
     x += unit.width;
@@ -364,37 +381,22 @@ function layoutBlock(block: PdfBlock): LaidLine[] {
 }
 
 function layoutEntry(entry: ChatPdfEntry, labels: ChatPdfLabels): LaidLine[] {
-  const lines: LaidLine[] = [];
   const accent = entry.role === "user" ? USER_NAME : ASSISTANT_NAME;
-  const speakerWidth = measurePdfWidth(entry.speaker, { bold: true }, 9.5);
-  lines.push({
-    height: 19,
-    ascent: 12,
+  // Speaker and timestamp share the wrapped body width, so a long name never
+  // pushes the timestamp past the page margin.
+  const headerSpans = [
+    { text: entry.speaker, style: { bold: true }, size: 9.5, color: accent },
+    ...(entry.timestampIso
+      ? [{ text: `  ${entry.timestampIso}`, style: {}, size: 8, color: DIM }]
+      : []),
+  ];
+  const lines: LaidLine[] = textLine(headerSpans, {
+    size: 9.5,
+    leading: 15,
+    width: BODY_WIDTH,
     indent: 0,
-    runs: [
-      {
-        text: entry.speaker,
-        style: { bold: true },
-        size: 9.5,
-        x: 0,
-        width: speakerWidth,
-        color: accent,
-      },
-      ...(entry.timestampIso
-        ? [
-            {
-              text: `  ${entry.timestampIso}`,
-              style: {},
-              size: 8,
-              x: speakerWidth,
-              width: measurePdfWidth(`  ${entry.timestampIso}`, {}, 8),
-              color: DIM,
-            },
-          ]
-        : []),
-    ],
-    spaceBefore: 0,
-    spaceAfter: 0,
+    spaceBefore: 2,
+    spaceAfter: 3,
   });
   for (const block of markdownToPdfBlocks(entry.body)) {
     lines.push(...layoutBlock(block));
@@ -442,6 +444,31 @@ function titleLines(input: ChatPdfInput): LaidLine[] {
       spaceBefore: 2,
       spaceAfter: 0,
     },
+    ...(input.unsupportedCharacters && input.unsupportedCharacters > 0
+      ? [
+          {
+            height: 14,
+            ascent: 10,
+            indent: -PANEL_PAD_X,
+            runs: [
+              {
+                text: input.labels.unsupportedGlyphs(input.unsupportedCharacters),
+                style: { italic: true },
+                size: 8,
+                x: 0,
+                width: measurePdfWidth(
+                  input.labels.unsupportedGlyphs(input.unsupportedCharacters),
+                  {},
+                  8,
+                ),
+                color: DIM,
+              },
+            ],
+            spaceBefore: 0,
+            spaceAfter: 0,
+          },
+        ]
+      : []),
     {
       height: 14,
       ascent: 10,

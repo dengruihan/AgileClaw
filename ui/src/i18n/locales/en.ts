@@ -3032,6 +3032,7 @@ export const en: TranslationMap & {
         preparing: "Preparing PDF…",
         busy: "A PDF export of this conversation is already running.",
         downloaded: "PDF saved.",
+        downloadedWithReplacements: "PDF saved. {count} characters appear as \u25A1.",
         tooLarge: "This conversation is too large to export as PDF.",
       },
       continueInTerminal: {
@@ -3534,6 +3535,8 @@ export const en: TranslationMap & {
       attachmentsOmitted: "Attachments are not included in this export.",
       continued: "continued",
       pageOf: "Page {page} of {count}",
+      unsupportedGlyph: "1 character outside the PDF font range appears as \u25A1.",
+      unsupportedGlyphs: "{count} characters outside the PDF font range appear as \u25A1.",
     },
     messages: {
       copySelection: "Copy",

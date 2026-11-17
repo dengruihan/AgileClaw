@@ -7,6 +7,8 @@ const labels = {
   attachmentsOmitted: "Attachments are not included in this export.",
   continued: "continued",
   pageOf: (page: number, count: number) => `Page ${page} of ${count}`,
+  unsupportedGlyphs: (count: number) =>
+    `${count} characters outside the PDF font range appear as \u25A1.`,
 };
 
 function pdfText(bytes: Uint8Array): string {
@@ -163,6 +165,47 @@ describe("buildChatPdf", () => {
     expect(document).toContain("(\\240\\240indented\\(\\)) Tj");
   });
 
+  it("wraps a long speaker name instead of clipping it or the timestamp", () => {
+    const speaker = "W".repeat(100);
+    const document = pdfText(
+      buildChatPdf(
+        input([
+          {
+            speaker,
+            role: "user",
+            timestampIso: "2026-11-17T09:00:00.000Z",
+            body: "Body stays inside the page.",
+            attachments: 0,
+          },
+        ]),
+      ),
+    );
+    const speakerRuns = [...document.matchAll(/\((W+)\) Tj/gu)].map((match) => match[1]);
+    // A single header run would run past the right margin; wrapping splits it.
+    expect(speakerRuns.length).toBeGreaterThan(1);
+    expect(speakerRuns.join("")).toBe(speaker);
+    expect(document).toContain("(2026-11-17T09:00:00.000Z) Tj");
+  });
+
+  it("renders an unsupported character as the explained marker", () => {
+    const document = pdfText(
+      buildChatPdf({
+        ...input([
+          {
+            speaker: "You",
+            role: "user",
+            timestampIso: null,
+            body: "Emoji: \u{1F99E}",
+            attachments: 0,
+          },
+        ]),
+        unsupportedCharacters: 1,
+      }),
+    );
+    expect(document).toContain("<25A1> Tj");
+    expect(document).toContain("1 characters outside the PDF font range appear as");
+  });
+
   it("notes attachments without inventing body text", () => {
     const document = pdfText(
       buildChatPdf(
@@ -236,6 +279,14 @@ describe("markdownToPdfBlocks", () => {
     ).toMatchObject({ code: true });
     const quote = blocks[4];
     expect(quote?.kind === "paragraph" && quote.quote).toBe(true);
+  });
+
+  it("keeps authored ordered-list start numbers, including nested lists", () => {
+    const blocks = markdownToPdfBlocks("5. fifth\n6. sixth\n\n   7. nested\n   8. nested next");
+    const markers = blocks
+      .filter((block) => block.kind === "listItem")
+      .map((block) => (block.kind === "listItem" ? block.marker : ""));
+    expect(markers).toEqual(["5.", "6.", "7.", "8."]);
   });
 
   it("keeps raw HTML as inert text", () => {

@@ -11,6 +11,20 @@ export type PdfTextStyle = { bold?: boolean; italic?: boolean; code?: boolean };
 
 export type PdfFontKey = "regular" | "bold" | "italic" | "boldItalic" | "code" | "codeBold" | "cjk";
 
+/** Visible replacement for characters the predefined CID font cannot encode. */
+export const PDF_UNSUPPORTED_MARKER = "\u25A1";
+
+/** Counts astral characters that the PDF font range cannot carry. */
+export function countUnsupportedPdfChars(text: string): number {
+  let count = 0;
+  for (const char of text) {
+    if ((char.codePointAt(0) ?? 0) > 0xffff) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
 export type PdfChar = {
   /** Text written to the page; astral and unencodable characters become "?". */
   text: string;
@@ -138,10 +152,11 @@ export function measurePdfText(text: string, style: PdfTextStyle, size: number):
       chars.push({ text: char, code, wide: false, width: (metric / 1000) * size });
       continue;
     }
-    const codePoint = char.codePointAt(0) ?? 0x3f;
+    const codePoint = char.codePointAt(0) ?? 0;
     if (codePoint > 0xffff) {
-      // The CID font's UCS2 encoding cannot address astral characters.
-      chars.push({ text: "?", code: 0x3f, wide: false, width: (556 / 1000) * size });
+      // The CID font's UCS2 encoding cannot address astral characters (emoji
+      // and similar), so they become a visible marker the export explains.
+      chars.push({ text: PDF_UNSUPPORTED_MARKER, code: null, wide: true, width: size });
       continue;
     }
     chars.push({ text: char, code: null, wide: true, width: size });

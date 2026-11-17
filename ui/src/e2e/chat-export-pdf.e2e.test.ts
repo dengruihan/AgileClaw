@@ -256,10 +256,14 @@ suite.define(() => {
           }
         ).openclawControlUiE2eGateway;
         const release = { current: false };
-        (window as unknown as { openclawReleasePdfPage?: () => void }).openclawReleasePdfPage =
-          () => {
-            release.current = true;
-          };
+        const state = window as unknown as {
+          openclawReleasePdfPage?: () => void;
+          openclawPdfHeldPageDelivered?: boolean;
+        };
+        state.openclawPdfHeldPageDelivered = false;
+        state.openclawReleasePdfPage = () => {
+          release.current = true;
+        };
         mockGateway.setRequestHandler("chat.history", ({ params, respond }) => {
           const query = (params ?? {}) as { offset?: number; limit?: number; sessionKey?: string };
           const offset = typeof query.offset === "number" ? query.offset : 0;
@@ -292,6 +296,7 @@ suite.define(() => {
           }
           const wait = () => {
             if (release.current) {
+              state.openclawPdfHeldPageDelivered = true;
               answer(false);
               return;
             }
@@ -315,8 +320,26 @@ suite.define(() => {
       await page.evaluate(() => {
         (window as unknown as { openclawReleasePdfPage?: () => void }).openclawReleasePdfPage?.();
       });
-      // The captured pane is gone, so the pending export must retire without a download.
-      await expect.poll(() => downloads.length, { timeout: 2_000 }).toBe(0);
+      // The zero-download assertion must follow the real continuation: wait until the
+      // held page was actually delivered, then give the retired export its settle window.
+      await expect
+        .poll(
+          () =>
+            page.evaluate(
+              () =>
+                (window as unknown as { openclawPdfHeldPageDelivered?: boolean })
+                  .openclawPdfHeldPageDelivered === true,
+            ),
+          { timeout: 5_000 },
+        )
+        .toBe(true);
+      await page.waitForTimeout(600);
+      expect(downloads).toEqual([]);
+      // The new conversation still owns the transcript: no stale export output replaced it.
+      await page
+        .locator('openclaw-chat-pane[aria-hidden="false"]')
+        .getByText("Other session body", { exact: true })
+        .waitFor();
     });
   });
 });

@@ -385,11 +385,7 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
       this.publishHeaderError(t("sessionsView.actionRequiresConnection"));
       return;
     }
-    const access = readSessionMethodAccess(this.context.gateway.snapshot, {
-      method: "chat.history",
-      requiredScope: "operator.read",
-      sessionScope: true,
-    });
+    const access = this.transcriptReadAccess();
     if (!access.allowed) {
       this.publishHeaderError(access.reason);
       return;
@@ -422,6 +418,15 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
         isCurrent: stillPresenting,
       });
       const { exportChatPdf } = await import("./export-pdf/index.ts");
+      // Revalidate after the awaited import: a role or scope revocation can arrive
+      // inside the same hello object, so live access is read again, not remembered.
+      const commitAccess = this.transcriptReadAccess();
+      if (!commitAccess.allowed) {
+        if (stillPresenting()) {
+          this.publishHeaderError(commitAccess.reason, owner);
+        }
+        return;
+      }
       if (!stillPresenting()) {
         return;
       }
@@ -429,18 +434,37 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
         messages,
         assistantName,
         title: this.resolveHeaderSessionTitle(row),
+        // The download owner refuses without live access at the side effect itself.
+        authorize: () => this.transcriptReadAccess().allowed && stillPresenting(),
       });
-      if (result === "empty") {
-        showToast({ message: t("chat.commandResults.emptyExport") });
-        return;
+      switch (result.status) {
+        case "denied": {
+          const denied = this.transcriptReadAccess();
+          if (denied.allowed || !stillPresenting()) {
+            return;
+          }
+          this.publishHeaderError(denied.reason, owner);
+          return;
+        }
+        case "empty":
+          showToast({ message: t("chat.commandResults.emptyExport") });
+          return;
+        case "too-large":
+          showToast({ message: t("chat.sessionHeader.exportPdf.tooLarge") });
+          return;
+        case "downloaded":
+          showToast({
+            message:
+              result.unsupportedCharacters > 0
+                ? t("chat.sessionHeader.exportPdf.downloadedWithReplacements", {
+                    count: String(result.unsupportedCharacters),
+                  })
+                : t("chat.sessionHeader.exportPdf.downloaded"),
+          });
       }
-      if (result === "too-large") {
-        showToast({ message: t("chat.sessionHeader.exportPdf.tooLarge") });
-        return;
-      }
-      showToast({ message: t("chat.sessionHeader.exportPdf.downloaded") });
     } catch (error) {
-      if (this.ownsHeaderOutcome(owner)) {
+      // A retired export reports nothing: the pane already shows another session.
+      if (stillPresenting()) {
         this.publishHeaderError(error, owner);
       }
     } finally {
@@ -449,6 +473,15 @@ export abstract class ChatPaneSessionMenu extends ChatPaneContext {
       }
       this.requestUpdate();
     }
+  }
+
+  /** Live `chat.history` access for the current connection and session. */
+  private transcriptReadAccess() {
+    return readSessionMethodAccess(this.context.gateway.snapshot, {
+      method: "chat.history",
+      requiredScope: "operator.read",
+      sessionScope: true,
+    });
   }
 
   private presentedSessionMatches(key: string, sessionId: string | null): boolean {
