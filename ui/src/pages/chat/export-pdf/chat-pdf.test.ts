@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { markdownToPdfBlocks } from "./chat-markdown-blocks.ts";
-import { buildChatPdf, ChatPdfTooLargeError, type ChatPdfInput } from "./chat-pdf.ts";
+import {
+  buildChatPdf,
+  ChatPdfTooLargeError,
+  type ChatPdfEntry,
+  type ChatPdfInput,
+} from "./chat-pdf.ts";
 import { countUnsupportedPdfChars } from "./pdf-text.ts";
 
 const labels = {
@@ -132,7 +137,7 @@ describe("buildChatPdf", () => {
   });
 
   it("reports a transcript that exceeds the page budget instead of truncating it", () => {
-    const entries: ChatPdfInput["entries"] = [];
+    const entries: ChatPdfEntry[] = [];
     for (let index = 0; index < 1200; index += 1) {
       const rows: string[] = [];
       for (let row = 0; row < 30; row += 1) {
@@ -194,15 +199,15 @@ describe("buildChatPdf", () => {
       "Arabic: \u0645\u0631\u062D\u0628\u0627 Hebrew: \u05E9\u05DC\u05D5\u05DD Thai: \u0E2A\u0E27\u0E31\u0E2A\u0E14\u0E35 Armenian: \u0532\u0561\u0580\u0587";
     const letters = countUnsupportedPdfChars(body);
     const document = pdfText(
-      buildChatPdf({
-        ...input([{ speaker: "You", role: "user", timestampIso: null, body, attachments: 0 }]),
-        unsupportedCharacters: letters,
-      }),
+      buildChatPdf(
+        input([{ speaker: "You", role: "user", timestampIso: null, body, attachments: 0 }]),
+      ),
     );
     expect(letters).toBeGreaterThan(15);
     expect(letters).toBe(19);
     expect(document).toContain("<25A1> Tj");
-    expect(document).toContain("characters outside the PDF font range appear as");
+    // The document derives its own count; it must match the measured loss.
+    expect(document).toContain(`${letters} characters outside the PDF font range appear as`);
     // None of the source scripts reach a CID ordering, so no wrong glyphs can appear.
     for (const source of ["0645", "05E9", "0E2A", "0532"]) {
       expect(document).not.toContain(`<${source}`);

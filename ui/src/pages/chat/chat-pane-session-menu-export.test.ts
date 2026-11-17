@@ -58,7 +58,7 @@ function sessionsResult(rows: (typeof session)[]) {
 }
 
 function createFixture(
-  request: Parameters<typeof createGatewayBrowserClientFixture>[0]["request"],
+  request: NonNullable<Parameters<typeof createGatewayBrowserClientFixture>[0]>["request"],
 ) {
   const client = createGatewayBrowserClientFixture({ request });
   const { pane, state } = createTestChatPane({
@@ -131,13 +131,15 @@ describe("chat pane PDF export authority boundary", () => {
       expect(pane.context.gateway.snapshot.hello).toBe(hello);
       expect(downloadBlobFile).not.toHaveBeenCalled();
       // The pane surfaces the same live denial the transcript read hit.
-      expect(state.chatError).toBe(
-        readSessionMethodAccess(pane.context.gateway.snapshot, {
-          method: "chat.history",
-          requiredScope: "operator.read",
-          sessionScope: true,
-        }).reason,
-      );
+      const liveAccess = readSessionMethodAccess(pane.context.gateway.snapshot, {
+        method: "chat.history",
+        requiredScope: "operator.read",
+        sessionScope: true,
+      });
+      if (liveAccess.allowed) {
+        throw new Error("expected live history access to be denied");
+      }
+      expect(state.chatError).toBe(liveAccess.reason);
     },
   );
 
