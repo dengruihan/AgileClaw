@@ -97,15 +97,31 @@ export function pdfCjkFamilyForCodePoint(codePoint: number): PdfCjkFamily | null
   return null;
 }
 
-function isUnsupportedCodePoint(char: string): boolean {
+/**
+ * Control characters are layout, not content. `\n` breaks the line, `\t` becomes
+ * spaces, and every other C0 code or DEL is omitted — never drawn as a marker.
+ * Rendering and counting both read this classification so the marker count and
+ * the page can never disagree.
+ */
+function pdfControlKind(char: string): "break" | "tab" | "omitted" | null {
+  if (char === "\n") {
+    return "break";
+  }
+  if (char === "\t") {
+    return "tab";
+  }
   const codePoint = char.codePointAt(0) ?? 0;
-  // Control characters only steer layout and never reach the page as text.
   if (codePoint < 0x20 || codePoint === 0x7f) {
+    return "omitted";
+  }
+  return null;
+}
+
+function isUnsupportedCodePoint(char: string): boolean {
+  if (pdfControlKind(char) !== null || winAnsiCode(char) !== null) {
     return false;
   }
-  if (winAnsiCode(char) !== null) {
-    return false;
-  }
+  const codePoint = char.codePointAt(0) ?? 0;
   return codePoint > 0xffff || pdfCjkFamilyForCodePoint(codePoint) === null;
 }
 
@@ -237,15 +253,16 @@ export function measurePdfText(text: string, style: PdfTextStyle, size: number):
   const spaceMetric = table ? (table[0x20 - 32] ?? 278) : 600;
   const chars: PdfChar[] = [];
   for (const char of text) {
-    if (char === "\n") {
+    const control = pdfControlKind(char);
+    if (control === "break") {
       // Forced line break inside a block: layout consumes it, no glyph is drawn.
       chars.push({ text: "\n", code: null, cjk: null, width: 0 });
       continue;
     }
-    if (char === "\r") {
+    if (control === "omitted") {
       continue;
     }
-    if (char === "\t") {
+    if (control === "tab") {
       chars.push({
         text: "    ",
         code: 0x20,

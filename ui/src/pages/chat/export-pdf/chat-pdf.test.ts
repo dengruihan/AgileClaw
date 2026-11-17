@@ -12,8 +12,8 @@ const labels = {
     `${count} characters outside the PDF font range appear as \u25A1.`,
 };
 
-function pdfText(bytes: Uint8Array): string {
-  return new TextDecoder("latin1").decode(bytes);
+function pdfText(result: { bytes: Uint8Array }): string {
+  return new TextDecoder("latin1").decode(result.bytes);
 }
 
 function pagesOf(document: string): number {
@@ -281,8 +281,8 @@ describe("buildChatPdf", () => {
 
   it("renders an unsupported character as the explained marker", () => {
     const document = pdfText(
-      buildChatPdf({
-        ...input([
+      buildChatPdf(
+        input([
           {
             speaker: "You",
             role: "user",
@@ -291,8 +291,7 @@ describe("buildChatPdf", () => {
             attachments: 0,
           },
         ]),
-        unsupportedCharacters: 1,
-      }),
+      ),
     );
     expect(document).toContain("<25A1> Tj");
     expect(document).toContain("1 characters outside the PDF font range appear as");

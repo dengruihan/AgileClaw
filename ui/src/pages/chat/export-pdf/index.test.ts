@@ -158,6 +158,37 @@ describe("exportChatPdf", () => {
     );
   });
 
+  it("omits invisible control characters without counting or drawing markers", () => {
+    const body = "A\u0001B\u0007C\bD\u000bE\u000cF\u000eG\u007fH\nI\tJ";
+    const built = buildChatPdfBytes({
+      messages: [{ role: "user", content: body }],
+      assistantName: "AgileClaw",
+      title: "Controls",
+      now: Date.parse("2026-11-17T09:30:00Z"),
+    });
+    expect(built?.unsupportedCharacters).toBe(0);
+    const document = new TextDecoder("latin1").decode(built!.bytes);
+    // Omitted control characters leave no marker, so the header note never appears.
+    expect(document).not.toContain("25A1");
+    expect(document).not.toContain("outside the PDF font range");
+    // The hard newline still splits lines and the tab still expands to spaces.
+    expect(document).toContain("(ABCDEFGH) Tj");
+    expect(document).toContain("(I    J) Tj");
+  });
+
+  it("counts the replacement a NUL becomes after Markdown normalization", () => {
+    const built = buildChatPdfBytes({
+      messages: [{ role: "user", content: "A\u0000B" }],
+      assistantName: "AgileClaw",
+      title: "NUL",
+      now: Date.parse("2026-11-17T09:30:00Z"),
+    });
+    expect(built?.unsupportedCharacters).toBe(1);
+    const document = new TextDecoder("latin1").decode(built!.bytes);
+    expect(document).toContain("25A1");
+    expect(document).toContain("1 character outside the PDF font range appear");
+  });
+
   it("keeps emoji content visible as an explained marker instead of a silent ?", () => {
     const built = buildChatPdfBytes({
       messages: [

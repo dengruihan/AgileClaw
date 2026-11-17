@@ -1,5 +1,10 @@
 import { markdownToPdfBlocks, type PdfBlock, type PdfSpan } from "./chat-markdown-blocks.ts";
-import { measurePdfText, measurePdfWidth, type PdfTextStyle } from "./pdf-text.ts";
+import {
+  countUnsupportedPdfChars,
+  measurePdfText,
+  measurePdfWidth,
+  type PdfTextStyle,
+} from "./pdf-text.ts";
 import {
   PDF_PAGE_HEIGHT,
   PDF_PAGE_WIDTH,
@@ -33,8 +38,12 @@ export type ChatPdfInput = {
   exportedAt: number;
   entries: readonly ChatPdfEntry[];
   labels: ChatPdfLabels;
-  /** Characters outside the PDF font range that the document renders as a marker. */
-  unsupportedCharacters?: number;
+};
+
+export type ChatPdfResult = {
+  bytes: Uint8Array;
+  /** Characters of exported conversation text drawn as the replacement marker. */
+  unsupportedCharacters: number;
 };
 
 export class ChatPdfTooLargeError extends Error {
@@ -381,7 +390,11 @@ function layoutBlock(block: PdfBlock): LaidLine[] {
   }
 }
 
-function layoutEntry(entry: ChatPdfEntry, labels: ChatPdfLabels): LaidLine[] {
+function layoutEntry(
+  entry: ChatPdfEntry,
+  labels: ChatPdfLabels,
+  blocks: readonly PdfBlock[],
+): LaidLine[] {
   const accent = entry.role === "user" ? USER_NAME : ASSISTANT_NAME;
   // Speaker and timestamp share the wrapped body width, so a long name never
   // pushes the timestamp past the page margin.
@@ -399,7 +412,7 @@ function layoutEntry(entry: ChatPdfEntry, labels: ChatPdfLabels): LaidLine[] {
     spaceBefore: 2,
     spaceAfter: 3,
   });
-  for (const block of markdownToPdfBlocks(entry.body)) {
+  for (const block of blocks) {
     lines.push(...layoutBlock(block));
   }
   if (entry.attachments > 0) {
@@ -418,7 +431,40 @@ function layoutEntry(entry: ChatPdfEntry, labels: ChatPdfLabels): LaidLine[] {
   return lines;
 }
 
-function titleLines(input: ChatPdfInput): LaidLine[] {
+/**
+ * Counts the replacement markers the document will draw for conversation text.
+ *
+ * The count reads the same Markdown block model the layout renders, so a control
+ * character normalized by the parser, a character for another script, or an
+ * astral code point is counted exactly once and the header, the toast, and the
+ * page can never disagree.
+ */
+export function countChatPdfUnsupportedCharacters(
+  input: Pick<ChatPdfInput, "title" | "entries">,
+): number {
+  let count = countUnsupportedPdfChars(input.title);
+  for (const entry of input.entries) {
+    count += countUnsupportedPdfChars(entry.speaker);
+    for (const block of markdownToPdfBlocks(entry.body)) {
+      if (block.kind === "rule") {
+        continue;
+      }
+      if (block.kind === "code") {
+        count += countUnsupportedPdfChars(block.text);
+        continue;
+      }
+      for (const span of block.spans) {
+        count += countUnsupportedPdfChars(span.text);
+      }
+      if (block.kind === "listItem") {
+        count += countUnsupportedPdfChars(block.marker);
+      }
+    }
+  }
+  return count;
+}
+
+function titleLines(input: ChatPdfInput, unsupportedCharacters: number): LaidLine[] {
   // The heading gutter matches the panel edge, so it sits left of the message text.
   const heading = textLine([{ text: input.title, style: { bold: true } }], {
     size: 17,
@@ -445,7 +491,7 @@ function titleLines(input: ChatPdfInput): LaidLine[] {
       spaceBefore: 2,
       spaceAfter: 0,
     },
-    ...(input.unsupportedCharacters && input.unsupportedCharacters > 0
+    ...(unsupportedCharacters > 0
       ? [
           {
             height: 14,
@@ -453,12 +499,12 @@ function titleLines(input: ChatPdfInput): LaidLine[] {
             indent: -PANEL_PAD_X,
             runs: [
               {
-                text: input.labels.unsupportedGlyphs(input.unsupportedCharacters),
+                text: input.labels.unsupportedGlyphs(unsupportedCharacters),
                 style: { italic: true },
                 size: 8,
                 x: 0,
                 width: measurePdfWidth(
-                  input.labels.unsupportedGlyphs(input.unsupportedCharacters),
+                  input.labels.unsupportedGlyphs(unsupportedCharacters),
                   {},
                   8,
                 ),
@@ -569,9 +615,11 @@ function drawLine(composer: PdfComposer, line: LaidLine, pageIndex: number): voi
 }
 
 /** Renders the chat transcript into a light-background A4 PDF. */
-export function buildChatPdf(input: ChatPdfInput): Uint8Array {
+export function buildChatPdf(input: ChatPdfInput): ChatPdfResult {
+  const blocks = input.entries.map((entry) => markdownToPdfBlocks(entry.body));
+  const unsupportedCharacters = countChatPdfUnsupportedCharacters(input);
   const composer = new PdfComposer();
-  for (const line of titleLines(input)) {
+  for (const line of titleLines(input, unsupportedCharacters)) {
     if (composer.remaining < line.spaceBefore + line.height && !composer.atPageTop) {
       composer.newPage();
     }
@@ -580,8 +628,8 @@ export function buildChatPdf(input: ChatPdfInput): Uint8Array {
     composer.cursor += line.spaceAfter;
   }
 
-  for (const entry of input.entries) {
-    const lines = layoutEntry(entry, input.labels);
+  for (const [index, entry] of input.entries.entries()) {
+    const lines = layoutEntry(entry, input.labels, blocks[index]!);
     const bodyHeight = lines.reduce(
       (height, line) => height + line.spaceBefore + line.height + line.spaceAfter,
       0,
@@ -647,7 +695,7 @@ export function buildChatPdf(input: ChatPdfInput): Uint8Array {
   }
 
   addFooters(composer, input.labels);
-  return serializePdf(composer.pages);
+  return { bytes: serializePdf(composer.pages), unsupportedCharacters };
 }
 
 function addFooters(composer: PdfComposer, labels: ChatPdfLabels): void {

@@ -2,7 +2,6 @@ import { t } from "../../../i18n/index.ts";
 import { downloadBlobFile } from "../../../lib/download.ts";
 import { buildChatTranscript } from "../export-transcript.ts";
 import { buildChatPdf, ChatPdfTooLargeError, type ChatPdfEntry } from "./chat-pdf.ts";
-import { countUnsupportedPdfChars } from "./pdf-text.ts";
 
 export type ChatPdfBuildParams = {
   messages: unknown[];
@@ -82,19 +81,11 @@ export function buildChatPdfBytes(params: ChatPdfBuildParams): ChatPdfBuildOutco
   if (chars > MAX_TRANSCRIPT_CHARS) {
     throw new ChatPdfTooLargeError();
   }
-  const unsupportedCharacters =
-    countUnsupportedPdfChars(params.title) +
-    entries.reduce(
-      (total, entry) =>
-        total + countUnsupportedPdfChars(entry.speaker) + countUnsupportedPdfChars(entry.body),
-      0,
-    );
   const now = params.now ?? Date.now();
-  const bytes = buildChatPdf({
+  const { bytes, unsupportedCharacters } = buildChatPdf({
     title: params.title,
     exportedAt: now,
     entries,
-    unsupportedCharacters,
     labels: {
       meta: `${t("chat.exportPdf.exportedAt", { date: timestampLabel(now) })} · ${t(
         entries.length === 1 ? "chat.sessionHeader.oneMessage" : "chat.sessionHeader.messages",
