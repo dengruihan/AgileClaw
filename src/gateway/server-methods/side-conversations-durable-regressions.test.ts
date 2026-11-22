@@ -7,6 +7,7 @@ import {
   replaceSessionEntrySync,
 } from "../../config/sessions/session-accessor.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
+import { beginSessionWorkAdmission } from "../../sessions/session-lifecycle-admission.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import {
@@ -16,6 +17,7 @@ import {
 } from "../test/server-sessions.test-helpers.js";
 import { disposeSessionReadContexts } from "./sessions-read-cache.test-support.js";
 import { archiveSideConversationChildrenInParentFence } from "./side-conversations-fence.js";
+import { closePersistentSideConversation } from "./side-conversations-lifecycle.js";
 import type { GatewayRequestContext } from "./types.js";
 
 const mockState = vi.hoisted(() => ({
@@ -352,4 +354,141 @@ test("registry cleanup failure stays visible and is retried by the next create",
   expect(healed.payload?.sideConversations.map((row) => row.sessionKey).toSorted()).toEqual(
     [first, second].toSorted(),
   );
+});
+
+test("close refuses worker work that appears at the final commit guard", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath);
+  const childKey = await createSide(storePath, "close-worker-intent");
+  const child = readEntry(storePath, childKey)!;
+  let armed = false;
+  const context = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    terminalSessions: {
+      beginAgentSessionDrain: () => {
+        armed = true;
+        return { drained: Promise.resolve(), hasWork: () => false, release: () => {} };
+      },
+    } as never,
+    workerSessionPlacementService: {
+      getMany: (sessionIds: string[]) =>
+        new Map(
+          armed
+            ? sessionIds.map((sessionId) => [
+                sessionId,
+                { turnClaim: { sessionId, runId: "close-late-run" } },
+              ])
+            : [],
+        ),
+      listPendingWorkspaceResultsAsync: async () => [],
+      waitForTurnClaimRelease: async () => true,
+    } as never,
+  });
+  const closed = await closePersistentSideConversation({
+    cfg: getRuntimeConfig(),
+    context,
+    client: null,
+    parentSessionKey: parentKey,
+    sessionKey: childKey,
+    assertCurrent: () => {},
+  });
+  expect(closed).toMatchObject({
+    ok: false,
+    error: { code: "UNAVAILABLE", retryable: true },
+  });
+  expect(readEntry(storePath, childKey)?.sideConversation?.state).toBe("open");
+  expect(
+    readEntry(storePath, parentKey)?.sideConversations?.conversations["close-worker-intent"]?.state,
+  ).toBe("open");
+  // The drain was released even though the commit was refused.
+  const lease = await beginSessionWorkAdmission({
+    scope: storePath,
+    identities: [childKey, child.sessionId],
+    assertAllowed: () => {},
+  });
+  lease.release();
+});
+
+test("close refuses terminal work that appears at the final commit guard", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath);
+  const childKey = await createSide(storePath, "close-terminal-intent");
+  const child = readEntry(storePath, childKey)!;
+  const context = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    terminalSessions: {
+      beginAgentSessionDrain: () => ({
+        drained: Promise.resolve(),
+        hasWork: () => false,
+        release: () => {},
+      }),
+      hasAgentSessionWork: () => true,
+    } as never,
+  });
+  const closed = await closePersistentSideConversation({
+    cfg: getRuntimeConfig(),
+    context,
+    client: null,
+    parentSessionKey: parentKey,
+    sessionKey: childKey,
+    assertCurrent: () => {},
+  });
+  expect(closed).toMatchObject({
+    ok: false,
+    error: { code: "UNAVAILABLE", retryable: true },
+  });
+  expect(readEntry(storePath, childKey)?.sideConversation?.state).toBe("open");
+  const lease = await beginSessionWorkAdmission({
+    scope: storePath,
+    identities: [childKey, child.sessionId],
+    assertAllowed: () => {},
+  });
+  lease.release();
+});
+
+test("delete reports already-deleted children when the parent commit guard fails", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath);
+  const childKey = await createSide(storePath, "parent-guard-fail-intent");
+  let bumped = false;
+  const context = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    workerSessionPlacementService: {
+      getMany: () => {
+        if (!bumped && readEntry(storePath, childKey) === undefined) {
+          bumped = true;
+          const current = readEntry(storePath, parentKey)!;
+          replaceSessionEntrySync(
+            { agentId: "main", sessionKey: parentKey, storePath },
+            { ...current, lifecycleRevision: "parent-moved-after-child-delete" },
+          );
+        }
+        return new Map();
+      },
+      listPendingWorkspaceResultsAsync: async () => [],
+      waitForTurnClaimRelease: async () => true,
+    } as never,
+  });
+  const deleted = await directSessionReq<{
+    deleted: boolean;
+    partial?: boolean;
+    deletedKeys?: string[];
+    remainingSideConversations?: unknown[];
+    cleanupPending?: unknown[];
+  }>("sessions.delete", { key: parentKey }, { client, context });
+  expect(deleted.ok, JSON.stringify(deleted.error)).toBe(true);
+  expect(deleted.payload).toMatchObject({
+    deleted: false,
+    partial: true,
+    deletedKeys: [childKey],
+    remainingSideConversations: [],
+  });
+  expect(readEntry(storePath, parentKey)).toBeTruthy();
+  expect(readEntry(storePath, childKey)).toBeUndefined();
+  expect(
+    readEntry(storePath, parentKey)?.sideConversations?.conversations["parent-guard-fail-intent"],
+  ).toBeUndefined();
 });

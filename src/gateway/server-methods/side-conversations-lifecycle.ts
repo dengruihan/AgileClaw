@@ -55,6 +55,12 @@ import type { GatewayClient, GatewayRequestContext } from "./types.js";
 
 const log = createSubsystemLogger("gateway/side-conversations");
 
+/** The child acquired authoritative work while the close was committing. */
+class SideConversationCloseBusyError extends Error {}
+
+/** The captured child incarnation/marker moved before the close commit. */
+class SideConversationCloseChangedError extends Error {}
+
 type ParentTarget = {
   canonicalKey: string;
   entry: InternalSessionEntry;
@@ -636,7 +642,7 @@ async function transitionSideConversation(params: {
           currentMarker.intentId !== marker.intentId ||
           currentMarker.state !== state
         ) {
-          return null;
+          throw new SideConversationCloseChangedError();
         }
         return {
           ...current,
@@ -648,8 +654,44 @@ async function transitionSideConversation(params: {
           },
         };
       },
-      { replaceEntry: true, skipMaintenance: true },
+      {
+        replaceEntry: true,
+        skipMaintenance: true,
+        ...(drain
+          ? {
+              // Caller authority and the drain's canonical work facts are
+              // checked synchronously inside the commit transaction, not after.
+              assertCommitAllowed: () => {
+                params.assertCurrent();
+                if (drain!.hasAuthoritativeWork()) {
+                  throw new SideConversationCloseBusyError();
+                }
+              },
+            }
+          : {}),
+      },
     );
+  } catch (error) {
+    if (error instanceof SideConversationCloseBusyError) {
+      return {
+        ok: false,
+        error: errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Side conversation ${sessionKey} is still active; retry the close.`,
+          { retryable: true },
+        ),
+      };
+    }
+    if (error instanceof SideConversationCloseChangedError) {
+      return {
+        ok: false,
+        error: errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Side conversation ${sessionKey} changed before the update. Retry.`,
+        ),
+      };
+    }
+    throw error;
   } finally {
     drain?.release();
   }
