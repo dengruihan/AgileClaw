@@ -6,6 +6,15 @@ export type SessionsPatchResult = {
   entry: Record<string, unknown>;
   /** Worktrees preserved while applying the patch (parent and hidden children). */
   preservedWorktrees?: import("./schema/sessions-delete.js").PreservedSessionWorktree[];
+  /** Archive applied to the parent row; hidden children are reported separately. */
+  parentArchived?: boolean;
+  applied?: boolean;
+  /** Hidden children archived by this parent archive. */
+  archivedKeys?: string[];
+  /** Hidden children left unarchived, with the blocking reason. */
+  remainingSideConversations?: import("./schema/side-conversations.js").SideConversationRemainder[];
+  /** True when a parent archive committed but at least one child remained. */
+  partial?: boolean;
   resolved?: {
     modelProvider?: string;
     model?: string;

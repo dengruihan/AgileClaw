@@ -350,6 +350,7 @@ test("parent delete refuses work accepted after the child preflight", async () =
   });
   const blocked = await deleteSideConversationChildrenInParentFence({
     agentId: "main",
+    cfg: getRuntimeConfig(),
     context,
     parentEntry: parent,
     parentSessionKey: parentKey,
@@ -357,7 +358,11 @@ test("parent delete refuses work accepted after the child preflight", async () =
     deleteTranscript: true,
     commitGuard: () => {},
   });
-  expect(blocked).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(blocked).toMatchObject({
+    ok: true,
+    deletedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
   expect(readEntry(storePath, created.sessionKey)).toBeTruthy();
   lease.release();
 
@@ -366,6 +371,7 @@ test("parent delete refuses work accepted after the child preflight", async () =
   let admissionAttempt: Promise<unknown> | undefined;
   const deleted = await deleteSideConversationChildrenInParentFence({
     agentId: "main",
+    cfg: getRuntimeConfig(),
     context,
     parentEntry: parent,
     parentSessionKey: parentKey,
@@ -379,7 +385,11 @@ test("parent delete refuses work accepted after the child preflight", async () =
       }).catch((error: unknown) => error);
     },
   });
-  expect(deleted).toMatchObject({ ok: true, deletedKeys: [created.sessionKey] });
+  expect(deleted).toMatchObject({
+    ok: true,
+    deletedKeys: [created.sessionKey],
+    remaining: [],
+  });
   expect(await admissionAttempt).toBeInstanceOf(Error);
   expect(readEntry(storePath, created.sessionKey)).toBeUndefined();
 });
@@ -404,7 +414,10 @@ test("archive fence refuses a child that owns authoritative work", async () => {
     storePath,
     commitGuard: () => {},
   });
-  expect(archived).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(archived).toMatchObject({
+    archivedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
   expect(readEntry(storePath, created.sessionKey)?.archivedAt).toBeUndefined();
   lease.release();
 });
@@ -454,6 +467,7 @@ test("canonical worker and terminal work block parent delete and keep the child"
   });
   const blockedByClaim = await deleteSideConversationChildrenInParentFence({
     agentId: "main",
+    cfg: getRuntimeConfig(),
     context: claimContext,
     parentEntry: parent,
     parentSessionKey: parentKey,
@@ -461,7 +475,11 @@ test("canonical worker and terminal work block parent delete and keep the child"
     deleteTranscript: true,
     commitGuard: () => {},
   });
-  expect(blockedByClaim).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(blockedByClaim).toMatchObject({
+    ok: true,
+    deletedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
   expect(readEntry(storePath, created.sessionKey)).toBeTruthy();
 
   const terminalContext = createDirectChatContext({
@@ -471,6 +489,7 @@ test("canonical worker and terminal work block parent delete and keep the child"
   });
   const blockedByTerminal = await deleteSideConversationChildrenInParentFence({
     agentId: "main",
+    cfg: getRuntimeConfig(),
     context: terminalContext,
     parentEntry: parent,
     parentSessionKey: parentKey,
@@ -478,7 +497,11 @@ test("canonical worker and terminal work block parent delete and keep the child"
     deleteTranscript: true,
     commitGuard: () => {},
   });
-  expect(blockedByTerminal).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(blockedByTerminal).toMatchObject({
+    ok: true,
+    deletedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
   expect(readEntry(storePath, created.sessionKey)?.sessionId).toBe(child.sessionId);
 });
 
@@ -724,7 +747,238 @@ test("archive never emits a non-preservation lifecycle reason as preserved", asy
       }
     },
   });
-  expect(archived).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(archived).toMatchObject({
+    archivedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ARCHIVE_FAILED" }],
+  });
   expect(readEntry(storePath, created.sessionKey)?.archivedAt).toBeUndefined();
   expect(child.worktree?.id).toBe("wt-invalid-preserved");
+});
+
+function lateClaimContext(isActive: (sessionId: string) => boolean): GatewayRequestContext {
+  return createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    workerSessionPlacementService: {
+      getMany: (sessionIds: string[]) =>
+        new Map(
+          sessionIds
+            .filter((sessionId) => isActive(sessionId))
+            .map((sessionId) => [sessionId, { turnClaim: { sessionId, runId: "late-run" } }]),
+        ),
+      listPendingWorkspaceResultsAsync: async () => [],
+      waitForTurnClaimRelease: async () => true,
+    } as never,
+  });
+}
+
+test("archive final durable write runs the guard after a microtask activation", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("final-guard-intent");
+  const parent = readEntry(storePath, parentKey)!;
+  let active = false;
+  let calls = 0;
+  const archived = await archiveSideConversationChildrenInParentFence({
+    cfg: getRuntimeConfig(),
+    agentId: "main",
+    context: lateClaimContext(() => active),
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    commitGuard: () => {
+      calls += 1;
+      if (calls === 1) {
+        queueMicrotask(() => {
+          active = true;
+        });
+      }
+    },
+  });
+  expect(archived).toMatchObject({
+    archivedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
+  const child = readEntry(storePath, created.sessionKey)!;
+  expect(child.archivedAt).toBeUndefined();
+  expect(child.sideConversation?.state).toBe("open");
+});
+
+test("archive final durable write runs the guard after a terminal microtask activation", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("final-terminal-intent");
+  const parent = readEntry(storePath, parentKey)!;
+  let active = false;
+  let calls = 0;
+  const context = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    terminalSessions: { hasAgentSessionWork: () => active } as never,
+  });
+  const archived = await archiveSideConversationChildrenInParentFence({
+    cfg: getRuntimeConfig(),
+    agentId: "main",
+    context,
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    commitGuard: () => {
+      calls += 1;
+      if (calls === 1) {
+        queueMicrotask(() => {
+          active = true;
+        });
+      }
+    },
+  });
+  expect(archived).toMatchObject({
+    archivedKeys: [],
+    remaining: [{ key: created.sessionKey, code: "CHILD_ACTIVE" }],
+  });
+  expect(readEntry(storePath, created.sessionKey)?.archivedAt).toBeUndefined();
+});
+
+test("parent archive returns an explicit partial result when the second child activates", async () => {
+  const { storePath } = await createSessionStoreDir();
+  const parent = await createParent(storePath, "anthropic/claude-opus-4-6");
+  const first = await createSide("partial-archive-first");
+  const second = await createSide("partial-archive-second");
+  const secondChild = readEntry(storePath, second.sessionKey)!;
+  const context = lateClaimContext(
+    (sessionId) =>
+      sessionId === secondChild.sessionId &&
+      readEntry(storePath, first.sessionKey)?.archivedAt !== undefined,
+  );
+  const archived = await directSessionReq<{
+    parentArchived?: boolean;
+    applied?: boolean;
+    archivedKeys?: string[];
+    remainingSideConversations?: Array<{ key: string; code: string }>;
+    partial?: boolean;
+  }>(
+    "sessions.patch",
+    { key: parentKey, archived: true, expectedSessionId: parent.sessionId },
+    { client, context },
+  );
+  expect(archived.ok, JSON.stringify(archived.error)).toBe(true);
+  expect(archived.payload).toMatchObject({
+    parentArchived: true,
+    applied: true,
+    archivedKeys: [first.sessionKey],
+    remainingSideConversations: [{ key: second.sessionKey, code: "CHILD_ACTIVE" }],
+    partial: true,
+  });
+  expect(readEntry(storePath, parentKey)?.archivedAt).toBeTruthy();
+  expect(readEntry(storePath, first.sessionKey)?.archivedAt).toBeTruthy();
+  expect(readEntry(storePath, first.sessionKey)?.sideConversation?.state).toBe("closed");
+  expect(readEntry(storePath, second.sessionKey)?.archivedAt).toBeUndefined();
+  expect(readEntry(storePath, second.sessionKey)?.sideConversation?.state).toBe("open");
+});
+
+test("parent delete returns an explicit partial result and keeps the parent and later child", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const first = await createSide("partial-delete-first");
+  const second = await createSide("partial-delete-second");
+  const secondChild = readEntry(storePath, second.sessionKey)!;
+  const context = lateClaimContext(
+    (sessionId) =>
+      sessionId === secondChild.sessionId && readEntry(storePath, first.sessionKey) === undefined,
+  );
+  const deleted = await directSessionReq<{
+    deleted: boolean;
+    partial?: boolean;
+    deletedKeys?: string[];
+    remainingSideConversations?: Array<{ key: string; code: string }>;
+  }>("sessions.delete", { key: parentKey }, { client, context });
+  expect(deleted.ok, JSON.stringify(deleted.error)).toBe(true);
+  expect(deleted.payload).toMatchObject({
+    deleted: false,
+    partial: true,
+    deletedKeys: [first.sessionKey],
+    remainingSideConversations: [{ key: second.sessionKey, code: "CHILD_ACTIVE" }],
+  });
+  expect(readEntry(storePath, parentKey)).toBeTruthy();
+  expect(readEntry(storePath, first.sessionKey)).toBeUndefined();
+  expect(readEntry(storePath, second.sessionKey)?.sessionId).toBe(secondChild.sessionId);
+  const parentAfter = readEntry(storePath, parentKey)!;
+  expect(Object.keys(parentAfter.sideConversations?.conversations ?? {})).toEqual([
+    "partial-delete-second",
+  ]);
+  const listed = await directSessionReq<{
+    sessions: Array<{ key: string; sideConversationCount?: number }>;
+    sideConversations?: Array<{ sessionKey: string }>;
+  }>("sessions.list", { agentId: "main" }, { client });
+  expect(listed.payload?.sessions.find((row) => row.key === parentKey)?.sideConversationCount).toBe(
+    1,
+  );
+  const listedSides = await directSessionReq<{ sideConversations: Array<{ sessionKey: string }> }>(
+    "sideConversations.list",
+    { parentSessionKey: parentKey },
+    { client },
+  );
+  expect(listedSides.payload?.sideConversations.map((row) => row.sessionKey)).toEqual([
+    second.sessionKey,
+  ]);
+});
+
+test("direct archive with two children reports the active second child partially", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const first = await createSide("direct-partial-archive-first");
+  const second = await createSide("direct-partial-archive-second");
+  const secondChild = readEntry(storePath, second.sessionKey)!;
+  const parent = readEntry(storePath, parentKey)!;
+  const archived = await archiveSideConversationChildrenInParentFence({
+    cfg: getRuntimeConfig(),
+    agentId: "main",
+    context: lateClaimContext(
+      (sessionId) =>
+        sessionId === secondChild.sessionId &&
+        readEntry(storePath, first.sessionKey)?.archivedAt !== undefined,
+    ),
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    commitGuard: () => {},
+  });
+  expect(archived).toMatchObject({
+    archivedKeys: [first.sessionKey],
+    remaining: [{ key: second.sessionKey, code: "CHILD_ACTIVE" }],
+  });
+  expect(readEntry(storePath, first.sessionKey)?.archivedAt).toBeTruthy();
+  expect(readEntry(storePath, second.sessionKey)?.archivedAt).toBeUndefined();
+});
+
+test("direct delete with two children reports the deleted first and keeps registry consistent", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const first = await createSide("direct-partial-delete-first");
+  const second = await createSide("direct-partial-delete-second");
+  const secondChild = readEntry(storePath, second.sessionKey)!;
+  const parent = readEntry(storePath, parentKey)!;
+  const deleted = await deleteSideConversationChildrenInParentFence({
+    agentId: "main",
+    cfg: getRuntimeConfig(),
+    context: lateClaimContext(
+      (sessionId) =>
+        sessionId === secondChild.sessionId && readEntry(storePath, first.sessionKey) === undefined,
+    ),
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    deleteTranscript: true,
+    commitGuard: () => {},
+  });
+  expect(deleted).toMatchObject({
+    ok: true,
+    deletedKeys: [first.sessionKey],
+    remaining: [{ key: second.sessionKey, code: "CHILD_ACTIVE" }],
+  });
+  expect(readEntry(storePath, first.sessionKey)).toBeUndefined();
+  expect(readEntry(storePath, second.sessionKey)?.sessionId).toBe(secondChild.sessionId);
+  expect(
+    Object.keys(readEntry(storePath, parentKey)?.sideConversations?.conversations ?? {}),
+  ).toEqual(["direct-partial-delete-second"]);
 });

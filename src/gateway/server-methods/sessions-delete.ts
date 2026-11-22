@@ -6,6 +6,7 @@ import {
   type PreservedSessionWorktree,
   type SessionsDeleteParams,
   type SessionsDeleteResult,
+  type SideConversationRemainder,
   validateSessionsDeleteParams,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { tryResolveAgentOperationAgentId } from "../../agents/agent-scope-config.js";
@@ -67,6 +68,15 @@ class SessionDeletionError extends Error {
     super(error.message);
   }
 }
+
+/** The parent is kept because an earlier child delete succeeded and a later one failed. */
+type PartialSideDelete = {
+  partialSide: {
+    deletedKeys: string[];
+    remaining: SideConversationRemainder[];
+    preserved: PreservedSessionWorktree[];
+  };
+};
 
 /** Shared lifecycle owner for operator deletion and automatic Incognito expiry. */
 export async function deleteGatewaySession({
@@ -273,6 +283,7 @@ export async function deleteGatewaySession({
             }) ?? entry!;
           const sideChildren = await deleteSideConversationChildrenInParentFence({
             agentId: target.agentId,
+            cfg,
             context,
             parentEntry: parentSideRegistryEntry,
             parentSessionKey: target.canonicalKey,
@@ -281,7 +292,24 @@ export async function deleteGatewaySession({
             commitGuard,
           });
           if (!sideChildren.ok) {
-            throw new SessionDeletionError(sideChildren.error);
+            throw new SessionDeletionError(
+              sideChildren.error ??
+                errorShape(
+                  ErrorCodes.UNAVAILABLE,
+                  `Session ${key} could not prepare side conversations.`,
+                ),
+            );
+          }
+          if (sideChildren.remaining.length > 0) {
+            // Earlier children are already durably deleted; the parent and every
+            // unprocessed child stay intact and are reported explicitly.
+            return {
+              partialSide: {
+                deletedKeys: sideChildren.deletedKeys,
+                remaining: sideChildren.remaining,
+                preserved: sideChildren.preserved,
+              },
+            } satisfies PartialSideDelete;
           }
           preservedChildWorktrees = sideChildren.preserved;
           const mutationCleanupError = await cleanupSessionBeforeMutation({
@@ -412,6 +440,33 @@ export async function deleteGatewaySession({
       throw error;
     }
     return { ok: false, error: error.error };
+  }
+  if ("partialSide" in deletion) {
+    const partial = deletion.partialSide;
+    const response: SessionsDeleteResult = {
+      ok: true,
+      key: target.canonicalKey,
+      deleted: false,
+      archived: [],
+      partial: true,
+      ...(partial.deletedKeys.length > 0 ? { deletedKeys: partial.deletedKeys } : {}),
+      remainingSideConversations: partial.remaining,
+      ...(partial.preserved.length > 0
+        ? {
+            worktreePreserved: partial.preserved[0],
+            preservedWorktrees: partial.preserved,
+          }
+        : {}),
+    };
+    onDeleted?.(response);
+    for (const deletedKey of partial.deletedKeys) {
+      emitSessionsChanged(context, {
+        sessionKey: deletedKey,
+        agentId: target.agentId,
+        reason: "delete",
+      });
+    }
+    return { ok: true, result: response };
   }
   const preservedWorktrees = [
     ...(worktreePreserved ? [worktreePreserved] : []),

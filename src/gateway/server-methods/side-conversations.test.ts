@@ -265,14 +265,23 @@ test("close quiesces without deleting, reopen restores open, parent delete seria
   expect(reopened.ok, JSON.stringify(reopened.error)).toBe(true);
   expect(reopened.payload?.conversation.state).toBe("open");
 
-  // An active hidden child blocks the parent delete with a retryable error.
+  // An active hidden child keeps the parent and is reported explicitly.
   await patchSessionEntryCore(
     { agentId: "main", sessionKey: childKey, storePath },
     (current) => ({ ...current, status: "running" }),
     { replaceEntry: true, skipMaintenance: true },
   );
-  const blocked = await directSessionReq("sessions.delete", { key: parentKey }, { client });
-  expect(blocked).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  const blocked = await directSessionReq<{
+    deleted: boolean;
+    partial?: boolean;
+    remainingSideConversations?: Array<{ key: string; code: string }>;
+  }>("sessions.delete", { key: parentKey }, { client });
+  expect(blocked.ok, JSON.stringify(blocked.error)).toBe(true);
+  expect(blocked.payload).toMatchObject({
+    deleted: false,
+    partial: true,
+    remainingSideConversations: [{ key: childKey, code: "CHILD_ACTIVE" }],
+  });
   expect(readEntry(storePath, parentKey)).toBeTruthy();
 
   await patchSessionEntryCore(

@@ -1,5 +1,6 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
+import { SessionsDeleteResultSchema } from "./sessions-delete.js";
 import { SessionsListParamsSchema } from "./sessions-list.js";
 import {
   SideConversationsCloseParamsSchema,
@@ -105,6 +106,31 @@ describe("side conversation protocol schemas", () => {
       }),
     ).toBe(true);
     expect(Value.Check(SideConversationsCloseParamsSchema, { parentSessionKey })).toBe(false);
+  });
+
+  it("accepts a partial delete result that keeps the parent", () => {
+    expect(
+      Value.Check(SessionsDeleteResultSchema, {
+        ok: true,
+        key: parentSessionKey,
+        deleted: false,
+        archived: [],
+        partial: true,
+        deletedKeys: [childSessionKey],
+        remainingSideConversations: [
+          { key: "agent:main:dashboard:side-later", code: "CHILD_ACTIVE", message: "active" },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SessionsDeleteResultSchema, {
+        ok: true,
+        key: parentSessionKey,
+        deleted: false,
+        archived: [],
+        remainingSideConversations: [{ key: childSessionKey, code: 3, message: "bad" }],
+      }),
+    ).toBe(false);
   });
 
   it("lists hidden side rows only on request", () => {

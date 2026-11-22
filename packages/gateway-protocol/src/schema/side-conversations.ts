@@ -60,6 +60,13 @@ export const SideConversationRowMarkerSchema = closedObject({
   closedAt: Type.Optional(Type.Number({ minimum: 0 })),
 });
 
+/** One side-conversation child left unprocessed by a partial parent action. */
+export const SideConversationRemainderSchema = closedObject({
+  key: NonEmptyString,
+  code: NonEmptyString,
+  message: Type.String(),
+});
+
 /** One registered side conversation as returned by the new RPCs. */
 export const SideConversationSummarySchema = closedObject({
   sessionKey: NonEmptyString,
@@ -128,6 +135,7 @@ export const SideConversationsTransitionResultSchema = closedObject({
   conversation: SideConversationSummarySchema,
 });
 
+export type SideConversationRemainder = Static<typeof SideConversationRemainderSchema>;
 export type SideConversationState = Static<typeof SideConversationStateSchema>;
 export type SideConversationSnapshotFacts = Static<typeof SideConversationSnapshotFactsSchema>;
 export type SideConversationRowMarker = Static<typeof SideConversationRowMarkerSchema>;

@@ -142,6 +142,11 @@ export type SessionsPatchResult = SessionsPatchResultBase<SessionEntry> & {
   entry: SessionEntry;
   /** Worktrees preserved while applying this patch (parent and hidden children). */
   preservedWorktrees?: import("../../packages/gateway-protocol/src/index.js").PreservedSessionWorktree[];
+  parentArchived?: boolean;
+  applied?: boolean;
+  archivedKeys?: string[];
+  remainingSideConversations?: import("../../packages/gateway-protocol/src/index.js").SideConversationRemainder[];
+  partial?: boolean;
   resolved?: {
     modelProvider?: string;
     model?: string;

@@ -6,6 +6,7 @@ import {
   type PreservedSessionWorktree,
   type SessionCreatedActor,
   type SessionsPatchParams,
+  type SideConversationRemainder,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { ModelCatalogSnapshot } from "../../agents/model-catalog.js";
 import type { SessionEntry } from "../../config/sessions.js";
@@ -57,13 +58,36 @@ import {
 } from "./side-conversations-fence.js";
 import type { GatewayRequestContext } from "./types.js";
 
-const preservedWorktreesByCommittedEntry = new WeakMap<object, PreservedSessionWorktree[]>();
+type ArchivePartialRecord = {
+  archivedKeys: string[];
+  remaining: SideConversationRemainder[];
+  preservedWorktrees: PreservedSessionWorktree[];
+};
 
-/** Worktrees preserved by the archive afterCommit for this exact committed entry. */
-export function readArchivePreservedWorktrees(
-  entry: object,
-): PreservedSessionWorktree[] | undefined {
-  return preservedWorktreesByCommittedEntry.get(entry);
+const archivePartialByCommittedEntry = new WeakMap<object, ArchivePartialRecord>();
+
+/**
+ * Explicit partial-archive projection for the exact committed parent entry.
+ *
+ * The parent row is committed before children are processed, so the response
+ * reports what actually happened instead of presenting a post-commit failure or
+ * a log-only success.
+ */
+export function projectArchivePartialResult(entry: object) {
+  const record = archivePartialByCommittedEntry.get(entry);
+  if (!record) {
+    return {};
+  }
+  return {
+    parentArchived: true as const,
+    applied: true as const,
+    archivedKeys: record.archivedKeys,
+    remainingSideConversations: record.remaining,
+    partial: record.remaining.length > 0,
+    ...(record.preservedWorktrees.length > 0
+      ? { preservedWorktrees: record.preservedWorktrees }
+      : {}),
+  };
 }
 
 export type SessionPatchArchivePreparation = {
@@ -401,7 +425,6 @@ export async function prepareSessionPatchArchiveTransition(params: {
 }): Promise<{
   assertCommitAllowed: () => void;
   afterCommit?: (entry: SessionEntry) => Promise<void>;
-  preservedWorktrees: PreservedSessionWorktree[];
 }> {
   const placementTarget = {
     context: params.context,
@@ -441,7 +464,6 @@ export async function prepareSessionPatchArchiveTransition(params: {
     storePath: params.scope.storePath,
   };
   const sideStorePath = params.scope.storePath;
-  const sidePreservedWorktrees: PreservedSessionWorktree[] = [];
   const sideParentEntry =
     params.archived && sideStorePath
       ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
@@ -512,15 +534,13 @@ export async function prepareSessionPatchArchiveTransition(params: {
             storePath: sideStorePath,
             commitGuard,
           });
-          if (archived.ok && archived.preserved.length > 0) {
-            sidePreservedWorktrees.push(...archived.preserved);
-            preservedWorktreesByCommittedEntry.set(entry, [...sidePreservedWorktrees]);
-          } else if (!archived.ok) {
-            sessionLog.warn(
-              `sessions.patch: side conversation archive deferred for ${params.scope.sessionKey}: ${archived.error.message}`,
-            );
-          }
+          // Never throw after the parent commit: report the real partial state.
+          archivePartialByCommittedEntry.set(entry, {
+            archivedKeys: archived.archivedKeys,
+            remaining: archived.remaining,
+            preservedWorktrees: archived.preserved,
+          });
         }
       : undefined;
-  return { assertCommitAllowed, afterCommit, preservedWorktrees: sidePreservedWorktrees };
+  return { assertCommitAllowed, afterCommit };
 }
