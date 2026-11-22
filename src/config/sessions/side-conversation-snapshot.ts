@@ -21,7 +21,9 @@
  *   display-hidden (`display: false`) but stays in model context:
  *   `excludeFromContext` is never set.
  * - Copied rows form one linear visible chain: parent pointers are rebuilt in
- *   copied order and side-append markers are not carried over.
+ *   copied order and side-append markers are not carried over. Each complete
+ *   tool round is emitted as one contiguous block (assistant then its claimed
+ *   results, in document order), so replay pairing never guesses ownership.
  * - The boundary row is a model-only custom message; the UI hides it.
  */
 import { parseDateStringTimestampMs } from "@openclaw/normalization-core/number-coercion";
@@ -384,7 +386,7 @@ function projectBashExecutionMessage(entry: ParsedMessageEntry): Record<string, 
  */
 function matchToolRounds(candidates: readonly ParsedMessageEntry[]): {
   retainedAssistants: Set<number>;
-  retainedResults: Set<number>;
+  claimedResults: Map<number, number[]>;
   droppedIncompleteToolRounds: number;
   droppedOrphanToolResults: number;
 } {
@@ -406,7 +408,7 @@ function matchToolRounds(candidates: readonly ParsedMessageEntry[]): {
   }
 
   const retainedAssistants = new Set<number>();
-  const retainedResults = new Set<number>();
+  const claimedResults = new Map<number, number[]>();
   let droppedIncompleteToolRounds = 0;
 
   for (const [index, parsed] of candidates.entries()) {
@@ -434,11 +436,12 @@ function matchToolRounds(candidates: readonly ParsedMessageEntry[]): {
       continue;
     }
     retainedAssistants.add(index);
-    for (const resultIndex of matched) {
-      retainedResults.add(resultIndex);
+    if (matched.length > 0) {
+      claimedResults.set(index, matched);
     }
   }
 
+  const retainedResults = new Set([...claimedResults.values()].flat());
   let droppedOrphanToolResults = 0;
   for (const [index, parsed] of candidates.entries()) {
     if (parsed.message.role === "toolResult" && !retainedResults.has(index)) {
@@ -448,7 +451,7 @@ function matchToolRounds(candidates: readonly ParsedMessageEntry[]): {
 
   return {
     retainedAssistants,
-    retainedResults,
+    claimedResults,
     droppedIncompleteToolRounds,
     droppedOrphanToolResults,
   };
@@ -514,14 +517,26 @@ export function projectSideConversationSnapshot(params: {
 
   const {
     retainedAssistants,
-    retainedResults,
+    claimedResults,
     droppedIncompleteToolRounds,
     droppedOrphanToolResults,
   } = matchToolRounds(candidates);
   const kept: KeptMessage[] = [];
+  const emitted = new Set<number>();
   let droppedIncompleteAssistantMessages = 0;
 
+  const pushKept = (parsed: ParsedMessageEntry, message: Record<string, unknown>) => {
+    kept.push({
+      id: parsed.id,
+      timestamp: resolveEntryTimestamp(parsed.message, parsed.entry),
+      message,
+    });
+  };
+
   for (const [index, parsed] of candidates.entries()) {
+    if (emitted.has(index)) {
+      continue;
+    }
     const role = parsed.message.role;
 
     if (role === "assistant") {
@@ -534,42 +549,38 @@ export function projectSideConversationSnapshot(params: {
       if (!retainedAssistants.has(index)) {
         continue;
       }
-      kept.push({
-        id: parsed.id,
-        timestamp: resolveEntryTimestamp(parsed.message, parsed.entry),
-        message: projectAssistantMessage(parsed),
-      });
+      pushKept(parsed, projectAssistantMessage(parsed));
+      emitted.add(index);
+      // Replay pairing owns results locally: one assistant's results must
+      // directly follow it. Displaced async results therefore move into their
+      // owner's block instead of sitting after a later assistant turn.
+      const claimed = claimedResults.get(index);
+      if (!claimed) {
+        continue;
+      }
+      for (const resultIndex of [...claimed].toSorted((left, right) => left - right)) {
+        const result = candidates[resultIndex];
+        if (!result || emitted.has(resultIndex)) {
+          continue;
+        }
+        pushKept(result, projectToolResultMessage(result));
+        emitted.add(resultIndex);
+      }
       continue;
     }
 
+    // Results leave their document position with their owner (or are dropped).
     if (role === "toolResult") {
-      // Results whose assistant round was dropped never reach a retained call.
-      if (!retainedResults.has(index)) {
-        continue;
-      }
-      kept.push({
-        id: parsed.id,
-        timestamp: resolveEntryTimestamp(parsed.message, parsed.entry),
-        message: projectToolResultMessage(parsed),
-      });
       continue;
     }
 
     if (role === "user") {
-      kept.push({
-        id: parsed.id,
-        timestamp: resolveEntryTimestamp(parsed.message, parsed.entry),
-        message: projectUserMessage(parsed),
-      });
+      pushKept(parsed, projectUserMessage(parsed));
       continue;
     }
 
     if (role === "bashExecution") {
-      kept.push({
-        id: parsed.id,
-        timestamp: resolveEntryTimestamp(parsed.message, parsed.entry),
-        message: projectBashExecutionMessage(parsed),
-      });
+      pushKept(parsed, projectBashExecutionMessage(parsed));
       continue;
     }
 

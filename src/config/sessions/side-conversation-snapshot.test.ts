@@ -2,10 +2,14 @@
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { convertToLlm } from "../../../packages/agent-core/src/harness/messages.js";
-import { projectSessionEntryMessage } from "../../../packages/agent-core/src/harness/session/session.js";
+import {
+  buildSessionContext,
+  projectSessionEntryMessage,
+} from "../../../packages/agent-core/src/harness/session/session.js";
 import type { SessionTreeEntry } from "../../../packages/agent-core/src/harness/types.js";
 import type { AgentMessage } from "../../../packages/agent-core/src/types.js";
 import { normalizeMessagesForLlmBoundary } from "../../agents/embedded-agent-runner/run/attempt-llm-boundary.js";
+import { repairToolUseResultPairing } from "../../agents/session-transcript-repair.js";
 import { projectChatDisplayMessages } from "../../gateway/chat-display-projection.js";
 import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
 import { replaceSessionEntry, replaceTranscriptEvents } from "./session-accessor.js";
@@ -189,19 +193,127 @@ describe("projectSideConversationSnapshot", () => {
       toolResultMessage("r1", "a2", "call-1"),
     ]);
 
+    // The result moves into its owner's block so replay pairing cannot award it
+    // to the continuation turn; the continuation follows the closed round.
     expect(projection.events.map(entryId)).toEqual([
       "u1",
       "a1",
-      "a2",
       "r1",
+      "a2",
       SNAPSHOT_BOUNDARY_ENTRY_ID,
     ]);
-    expect(projection.events.slice(0, 4).map(entryParentId)).toEqual([null, "u1", "a1", "a2"]);
+    expect(projection.events.slice(0, 4).map(entryParentId)).toEqual([null, "u1", "a1", "r1"]);
     expect(projection.facts).toMatchObject({
       retainedMessages: 4,
       droppedIncompleteToolRounds: 0,
       droppedOrphanToolResults: 0,
     });
+  });
+
+  it("orders duplicate async rounds so replay pairing keeps both real results", () => {
+    const projection = project([
+      userMessage("u1", null, "start two reads"),
+      assistantMessage("a1", "u1", [toolCallBlock("dup", { arguments: { phase: "first" } })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [toolCallBlock("dup", { arguments: { phase: "second" } })], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a2", "dup", [{ type: "text", text: "FIRST" }]),
+      toolResultMessage("r2", "r1", "dup", [{ type: "text", text: "SECOND" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+      "r2",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(projection.events.slice(0, 5).map(entryParentId)).toEqual([
+      null,
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+    ]);
+
+    const context = buildSessionContext(projection.events as unknown as SessionTreeEntry[]);
+    const repaired = repairToolUseResultPairing(context.messages);
+    expect(repaired.added).toHaveLength(0);
+    expect(repaired.discarded).toHaveLength(0);
+    expect(repaired.droppedDuplicateCount).toBe(0);
+
+    const ownership: Array<[string, string]> = [];
+    let callPhase = "";
+    for (const message of repaired.messages) {
+      if (message.role === "assistant") {
+        const call = message.content.find((block) => block.type === "toolCall");
+        callPhase = call && call.type === "toolCall" ? String(call.arguments.phase) : "";
+        continue;
+      }
+      if (message.role === "toolResult") {
+        const text = message.content.find((block) => block.type === "text");
+        ownership.push([callPhase, text && text.type === "text" ? text.text : ""]);
+      }
+    }
+    // FIRST belongs to the first call occurrence, SECOND to the second.
+    expect(ownership).toEqual([
+      ["first", "FIRST"],
+      ["second", "SECOND"],
+    ]);
+    expect(repaired.messages.filter((message) => message.role === "toolResult")).toHaveLength(2);
+  });
+
+  it("groups displaced results for several calls under their owner", () => {
+    const projection = project([
+      userMessage("u1", null, "run two tools"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-a"), toolCallBlock("call-b")], {
+        stopReason: "toolUse",
+      }),
+      bashEntry("b1", "a1", "git diff --stat", "2 files changed"),
+      assistantMessage("a2", "b1", [{ type: "text", text: "still running" }]),
+      toolResultMessage("rb", "a2", "call-b", [{ type: "text", text: "B" }]),
+      toolResultMessage("ra", "rb", "call-a", [{ type: "text", text: "A" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "rb",
+      "ra",
+      "b1",
+      "a2",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(convertToLlm(projectAll(projection.events)).map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "toolResult",
+      "toolResult",
+      "user",
+      "assistant",
+      "user",
+    ]);
+
+    const repaired = repairToolUseResultPairing(
+      buildSessionContext(projection.events as unknown as SessionTreeEntry[]).messages,
+    );
+    expect(repaired.added).toHaveLength(0);
+    expect(repaired.discarded).toHaveLength(0);
+    const resultTextByCallId = new Map(
+      repaired.messages
+        .filter((message) => message.role === "toolResult")
+        .map((message) => {
+          const text = message.content.find((block) => block.type === "text");
+          return [message.toolCallId, text && text.type === "text" ? text.text : ""] as const;
+        }),
+    );
+    expect([...resultTextByCallId]).toEqual([
+      ["call-a", "A"],
+      ["call-b", "B"],
+    ]);
   });
 
   it("drops an async tool round that never received its result", () => {
