@@ -644,7 +644,7 @@ describe("direct upload capacity and shutdown interleavings", () => {
 
     // Even if a maintenance generation re-opens admission, this admitted begin
     // belongs to the retired generation and must not land.
-    startChatAttachmentUploadMaintenance();
+    await startChatAttachmentUploadMaintenance();
     releaseOpen.resolve();
     await expect(lateBegin).rejects.toMatchObject({ code: "shutting-down" });
     expect(await stagingFiles()).toEqual([]);
@@ -718,6 +718,196 @@ describe("direct upload capacity and shutdown interleavings", () => {
     ).toThrow(/unknown, expired, or already used/);
     expect(await inboundFiles()).toEqual(inboundBefore);
     expect(await stagingFiles()).toEqual([]);
+  });
+});
+
+describe("maintenance generation ownership", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("keeps a replacement generation's upload after the previous shutdown settles", async () => {
+    // An upload admitted by the current generation.
+    const oldUpload = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: 4,
+      maxBytes: 1024,
+      fileName: "old.bin",
+      mimeType: "application/octet-stream",
+    });
+
+    // Hold an old-generation mutation so the shutdown drain stays pending.
+    const hold = deferred();
+    const oldMutation = runStagedChatAttachmentMutation("old-generation", async () => {
+      await hold.promise;
+    });
+    const oldShutdown = shutdownChatAttachmentUploads();
+    const activation = startChatAttachmentUploadMaintenance();
+    await Promise.resolve();
+
+    // The replacement must not accept uploads while the old drain is held.
+    await expect(
+      beginStagedChatAttachment({ scope: PARSE_SCOPE, declaredBytes: 4, maxBytes: 1024 }),
+    ).rejects.toMatchObject({ code: "shutting-down" });
+
+    hold.resolve();
+    await oldMutation;
+    await oldShutdown;
+    await activation;
+
+    // The old generation's staged upload is gone, and its ID is fenced.
+    expect(await stagingFiles()).toEqual([]);
+    await expect(
+      writeStagedChatAttachmentPart({
+        uploadId: oldUpload.uploadId,
+        offset: 0,
+        stream: (async function* () {
+          yield Buffer.alloc(4);
+        })(),
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).rejects.toMatchObject({ code: "unknown-upload" });
+
+    // A new-generation upload stays writable and committable after the old discard.
+    const payload = Buffer.from("fresh");
+    const fresh = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: payload.length,
+      maxBytes: 1024,
+      fileName: "fresh.pdf",
+      mimeType: "application/pdf",
+    });
+    await writeStagedChatAttachmentPart({
+      uploadId: fresh.uploadId,
+      offset: 0,
+      stream: (async function* () {
+        yield payload;
+      })(),
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    await expect(
+      commitStagedChatAttachment({
+        uploadId: fresh.uploadId,
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).resolves.toMatchObject({ sizeBytes: payload.length });
+    const media = consumeStagedChatAttachment(fresh.uploadId, PARSE_SCOPE, { maxBytes: 1024 });
+    expect(await fs.readFile(media.path)).toEqual(payload);
+    await fs.rm(media.path, { force: true });
+  });
+
+  it("does not retire an admitted begin when initial maintenance activates", async () => {
+    const openEntered = deferred();
+    const releaseOpen = deferred();
+    const realOpen = fs.open.bind(fs);
+    let gateNextStagingOpen = true;
+    vi.spyOn(fs, "open").mockImplementation((async (
+      target: string,
+      flags: string,
+      mode?: number,
+    ) => {
+      const handle = await realOpen(target as never, flags as never, mode as never);
+      if (gateNextStagingOpen && flags === "wx") {
+        gateNextStagingOpen = false;
+        openEntered.resolve();
+        await releaseOpen.promise;
+      }
+      return handle;
+    }) as typeof fs.open);
+
+    const payload = Buffer.from("startup");
+    const begin = beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: payload.length,
+      maxBytes: 1024,
+      fileName: "startup.pdf",
+      mimeType: "application/pdf",
+    });
+    await openEntered.promise;
+
+    // Initial activation of an already-open store must not retire this admission.
+    await startChatAttachmentUploadMaintenance();
+    releaseOpen.resolve();
+
+    const admitted = await begin;
+    await writeStagedChatAttachmentPart({
+      uploadId: admitted.uploadId,
+      offset: 0,
+      stream: (async function* () {
+        yield payload;
+      })(),
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    await expect(
+      commitStagedChatAttachment({
+        uploadId: admitted.uploadId,
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).resolves.toMatchObject({ sizeBytes: payload.length });
+    const media = consumeStagedChatAttachment(admitted.uploadId, PARSE_SCOPE, { maxBytes: 1024 });
+    await fs.rm(media.path, { force: true });
+  });
+
+  it("keeps an admitted commit usable across initial maintenance activation", async () => {
+    const closeEntered = deferred();
+    const releaseClose = deferred();
+    const realOpen = fs.open.bind(fs);
+    let gateStagingClose = true;
+    vi.spyOn(fs, "open").mockImplementation((async (
+      target: string,
+      flags: string,
+      mode?: number,
+    ) => {
+      const handle = await realOpen(target as never, flags as never, mode as never);
+      if (gateStagingClose && flags === "wx") {
+        gateStagingClose = false;
+        const realClose = handle.close.bind(handle);
+        handle.close = (async () => {
+          closeEntered.resolve();
+          await releaseClose.promise;
+          return await realClose();
+        }) as typeof handle.close;
+      }
+      return handle;
+    }) as typeof fs.open);
+
+    const payload = Buffer.from("activation commit");
+    const begin = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: payload.length,
+      maxBytes: 1024,
+      fileName: "activation.pdf",
+      mimeType: "application/pdf",
+    });
+    await writeStagedChatAttachmentPart({
+      uploadId: begin.uploadId,
+      offset: 0,
+      stream: (async function* () {
+        yield payload;
+      })(),
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    const commit = commitStagedChatAttachment({
+      uploadId: begin.uploadId,
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    await closeEntered.promise;
+
+    await startChatAttachmentUploadMaintenance();
+    releaseClose.resolve();
+
+    await expect(commit).resolves.toMatchObject({ sizeBytes: payload.length });
+    const media = consumeStagedChatAttachment(begin.uploadId, PARSE_SCOPE, { maxBytes: 1024 });
+    expect(await fs.readFile(media.path)).toEqual(payload);
+    await fs.rm(media.path, { force: true });
   });
 });
 

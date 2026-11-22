@@ -531,10 +531,14 @@ export function startGatewayMaintenanceTimers(params: {
       return;
     }
     mediaCleanupStarted = true;
-    // A new maintenance generation re-opens admission its predecessor fenced at stop.
-    startChatAttachmentUploadMaintenance();
     // A stuck prior generation defers only media cleanup, never Gateway readiness.
-    void waitForMediaCleanupDrainsToSettle().then(() => {
+    void waitForMediaCleanupDrainsToSettle().then(async () => {
+      if (mediaScheduler.signal.aborted) {
+        return;
+      }
+      // Re-open upload admission only after the prior generation's shutdown and
+      // final discard settled, so an old owner cannot clear the new generation.
+      await startChatAttachmentUploadMaintenance();
       if (mediaScheduler.signal.aborted) {
         return;
       }

@@ -62,6 +62,8 @@ export type ChatAttachmentUploadScope = {
 
 type StagedUpload = ChatAttachmentUploadScope & {
   id: string;
+  /** Admission generation that owns this entry and its staging file. */
+  generation: number;
   fileName?: string;
   mimeType?: string;
   declaredBytes: number;
@@ -75,6 +77,8 @@ type StagedUpload = ChatAttachmentUploadScope & {
 
 type CommittedUpload = ChatAttachmentUploadScope & {
   id: string;
+  /** Admission generation that published this entry's media. */
+  generation: number;
   media: SavedMedia;
   fileName?: string;
   createdAtMs: number;
@@ -230,8 +234,18 @@ export function assertChatAttachmentUploadId(uploadId: string | undefined): stri
   return id;
 }
 
-/** Re-opens admission when a new maintenance generation starts. */
-export function startChatAttachmentUploadMaintenance(): void {
+/**
+ * Activation for a maintenance generation. It never retires admissions of an
+ * already-open store; it only reopens a fenced store, and only after any prior
+ * generation's shutdown and final discard settled.
+ */
+export async function startChatAttachmentUploadMaintenance(): Promise<void> {
+  for (let pending = shutdownInFlight; pending; pending = shutdownInFlight) {
+    await pending.catch(() => undefined);
+  }
+  if (!closing) {
+    return;
+  }
   closing = false;
   admissionGeneration += 1;
 }
@@ -294,6 +308,7 @@ export async function beginStagedChatAttachment(params: {
   }
   staged.set(id, {
     id,
+    generation,
     ...params.scope,
     ...(params.fileName ? { fileName: params.fileName } : {}),
     ...(params.mimeType ? { mimeType: params.mimeType } : {}),
@@ -483,6 +498,7 @@ export async function commitStagedChatAttachment(params: {
   }
   committed.set(id, {
     id,
+    generation: entry.generation,
     media,
     ...(entry.ownerKey ? { ownerKey: entry.ownerKey } : {}),
     ...(entry.sessionKey ? { sessionKey: entry.sessionKey } : {}),
@@ -537,33 +553,59 @@ export function consumeStagedChatAttachment(
   return { ...entry.media, ...(entry.fileName ? { fileName: entry.fileName } : {}) };
 }
 
-/** Drops staging and committed bytes that no message will reference. */
-export async function discardChatAttachmentUploads(): Promise<void> {
+/**
+ * Drops staging and committed bytes that no message will reference. A scoped
+ * discard only touches entries (and files) owned by that admission generation,
+ * so an older shutdown can never clear state a replacement generation admitted.
+ */
+export async function discardChatAttachmentUploads(options?: {
+  generation?: number;
+}): Promise<void> {
+  const owns = (entry: { generation: number }) =>
+    options?.generation === undefined || entry.generation === options.generation;
+  const stagedEntries = [...staged.values()].filter(owns);
+  const committedEntries = [...committed.values()].filter(owns);
   const files = [
-    ...[...staged.values()].map((entry) => entry.filePath),
-    ...[...committed.values()].map((entry) => entry.media.path),
+    ...stagedEntries.map((entry) => entry.filePath),
+    ...committedEntries.map((entry) => entry.media.path),
   ];
-  for (const entry of staged.values()) {
+  for (const entry of stagedEntries) {
     void entry.handle?.close().catch(() => undefined);
+    staged.delete(entry.id);
   }
-  staged.clear();
-  committed.clear();
+  for (const entry of committedEntries) {
+    committed.delete(entry.id);
+  }
   await Promise.allSettled(files.map((filePath) => fs.rm(filePath, { force: true })));
 }
 
+let shutdownInFlight: Promise<void> | undefined;
+
 /**
  * Shutdown cleanup: fences new admission, joins in-flight mutations so none can
- * publish after the discard, then removes staging plus unsent committed media.
- * The Gateway maintenance owner awaits this before the HTTP listener closes.
+ * publish after the discard, then removes the staging and unsent media owned by
+ * this generation. Single-flight so overlapping stop calls share one discard,
+ * and generation-scoped so a later generation's uploads are untouched. The
+ * Gateway maintenance owner awaits this before the HTTP listener closes.
  */
-export async function shutdownChatAttachmentUploads(): Promise<void> {
+export function shutdownChatAttachmentUploads(): Promise<void> {
+  if (shutdownInFlight) {
+    return shutdownInFlight;
+  }
   closing = true;
+  const generation = admissionGeneration;
   admissionGeneration += 1;
-  // Bounded join: a stalled transport must not hold shutdown open. Any commit
-  // that lands after this discard re-checks the fence and deletes its media.
-  await settlesWithin(Promise.allSettled(activeMutations), MUTATION_DRAIN_TIMEOUT_MS);
-  await discardChatAttachmentUploads();
-  stagingRootPromise = undefined;
+  const run = (async () => {
+    // Bounded join: a stalled transport must not hold shutdown open. Any commit
+    // that lands after this discard re-checks the fence and deletes its media.
+    await settlesWithin(Promise.allSettled(activeMutations), MUTATION_DRAIN_TIMEOUT_MS);
+    await discardChatAttachmentUploads({ generation });
+    stagingRootPromise = undefined;
+  })();
+  shutdownInFlight = run.finally(() => {
+    shutdownInFlight = undefined;
+  });
+  return shutdownInFlight;
 }
 
 export function resetChatAttachmentUploadsForTests(options?: {
@@ -576,6 +618,7 @@ export function resetChatAttachmentUploadsForTests(options?: {
   closing = false;
   admissionGeneration += 1;
   activeMutations.clear();
+  shutdownInFlight = undefined;
 }
 
 /** Serializes part and commit mutations per upload, and tracks them for shutdown. */
