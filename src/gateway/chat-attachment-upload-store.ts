@@ -86,6 +86,12 @@ const uploadQueue = new KeyedAsyncQueue();
 const activeMutations = new Set<Promise<unknown>>();
 /** Shutdown fence: set before the final discard so no new upload can be admitted. */
 let closing = false;
+/**
+ * Admission generation. Bumped whenever the fence opens or closes, so an
+ * operation admitted before a maintenance restart cannot publish into the new
+ * generation's maps.
+ */
+let admissionGeneration = 0;
 let stagingRootPromise: Promise<string> | undefined;
 let stagingRootOverride: (() => Promise<string>) | undefined;
 
@@ -162,13 +168,18 @@ function reservedBytes(): number {
   return total;
 }
 
-function assertUploadsOpen(): void {
-  if (closing) {
+function assertUploadsOpen(admittedGeneration?: number): void {
+  if (closing || (admittedGeneration !== undefined && admittedGeneration !== admissionGeneration)) {
     throw new ChatAttachmentUploadError(
       "shutting-down",
       "attachment uploads are closing; retry after the Gateway restarts",
     );
   }
+}
+
+function currentAdmissionGeneration(): number {
+  assertUploadsOpen();
+  return admissionGeneration;
 }
 
 async function sweepExpired(now = Date.now()): Promise<void> {
@@ -222,6 +233,7 @@ export function assertChatAttachmentUploadId(uploadId: string | undefined): stri
 /** Re-opens admission when a new maintenance generation starts. */
 export function startChatAttachmentUploadMaintenance(): void {
   closing = false;
+  admissionGeneration += 1;
 }
 
 /**
@@ -242,7 +254,7 @@ export async function beginStagedChatAttachment(params: {
   mimeType?: string;
   partBytes?: number;
 }): Promise<{ uploadId: string; partBytes: number }> {
-  assertUploadsOpen();
+  const generation = currentAdmissionGeneration();
   await sweepExpired();
   if (staged.size >= MAX_STAGED_UPLOADS) {
     throw new ChatAttachmentUploadError(
@@ -271,6 +283,15 @@ export async function beginStagedChatAttachment(params: {
   const id = randomUUID();
   const filePath = path.join(await stagingRoot(), `${id}.part`);
   const handle = await fs.open(filePath, "wx", 0o600);
+  // The staging file exists now; a shutdown that began during the awaits must
+  // not leave it behind or hand out an ID it already discarded.
+  try {
+    assertUploadsOpen(generation);
+  } catch (error) {
+    await handle.close().catch(() => undefined);
+    await fs.rm(filePath, { force: true }).catch(() => undefined);
+    throw error;
+  }
   staged.set(id, {
     id,
     ...params.scope,
@@ -293,7 +314,7 @@ export async function writeStagedChatAttachmentPart(params: {
   scope: ChatAttachmentUploadScope;
   maxBytes: number;
 }): Promise<{ uploadId: string; receivedBytes: number }> {
-  assertUploadsOpen();
+  const generation = currentAdmissionGeneration();
   await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
   const entry = staged.get(id);
@@ -311,7 +332,18 @@ export async function writeStagedChatAttachmentPart(params: {
       entry.receivedBytes,
     );
   }
+  const openedHere = !entry.handle;
   const handle = entry.handle ?? (await fs.open(entry.filePath, "a", 0o600));
+  if (openedHere) {
+    // Do not recreate a staging file the final discard already removed.
+    try {
+      assertUploadsOpen(generation);
+    } catch (error) {
+      await handle.close().catch(() => undefined);
+      await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
+      throw error;
+    }
+  }
   entry.handle = handle;
   let partBytes = 0;
   try {
@@ -353,6 +385,15 @@ export async function writeStagedChatAttachmentPart(params: {
       entry.receivedBytes,
     );
   }
+  try {
+    assertUploadsOpen(generation);
+  } catch {
+    throw new ChatAttachmentUploadError(
+      "shutting-down",
+      "attachment uploads are closing; retry after the Gateway restarts",
+      entry.receivedBytes + partBytes,
+    );
+  }
   entry.receivedBytes += partBytes;
   return { uploadId: id, receivedBytes: entry.receivedBytes };
 }
@@ -363,7 +404,7 @@ export async function commitStagedChatAttachment(params: {
   maxBytes: number;
   assertCommitAllowed?: () => void;
 }): Promise<{ uploadId: string; sizeBytes: number; mimeType: string; fileName?: string }> {
-  assertUploadsOpen();
+  const generation = currentAdmissionGeneration();
   await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
   const replay = committed.get(id);
@@ -396,16 +437,32 @@ export async function commitStagedChatAttachment(params: {
   await entry.handle?.close().catch(() => undefined);
   entry.handle = undefined;
   params.assertCommitAllowed?.();
+  // Closing the staging handle is another await: re-check admission before the
+  // publication read, which a final discard may already have unlinked.
+  try {
+    assertUploadsOpen(generation);
+  } catch (error) {
+    await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
+    throw error;
+  }
   // A failed publication keeps the staging file so the client can retry commit.
-  const media = await saveMediaStream(
-    createReadStream(entry.filePath),
-    entry.mimeType,
-    "inbound",
-    params.maxBytes,
-    entry.fileName,
-    undefined,
-    { assertCommitAllowed: params.assertCommitAllowed },
-  );
+  let media;
+  try {
+    media = await saveMediaStream(
+      createReadStream(entry.filePath),
+      entry.mimeType,
+      "inbound",
+      params.maxBytes,
+      entry.fileName,
+      undefined,
+      { assertCommitAllowed: params.assertCommitAllowed },
+    );
+  } catch (error) {
+    // A discard during publication removes the staging file; report the fence,
+    // not the resulting read error.
+    assertUploadsOpen(generation);
+    throw error;
+  }
   if (media.size !== entry.declaredBytes) {
     // A partially written chunk must not publish bytes the client never declared.
     await fs.rm(media.path, { force: true }).catch(() => undefined);
@@ -415,17 +472,15 @@ export async function commitStagedChatAttachment(params: {
       entry.receivedBytes,
     );
   }
-  if (closing) {
-    // Shutdown may have discarded the maps while this commit was publishing.
+  try {
+    // Synchronous transfer with the fence check: reservedBytes never misses these
+    // bytes, and a shutdown/restart cannot interleave between the two map writes.
+    assertUploadsOpen(generation);
+  } catch (error) {
     await fs.rm(media.path, { force: true }).catch(() => undefined);
     await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
-    throw new ChatAttachmentUploadError(
-      "shutting-down",
-      "attachment uploads are closing; retry after the Gateway restarts",
-    );
+    throw error;
   }
-  staged.delete(id);
-  await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
   committed.set(id, {
     id,
     media,
@@ -435,6 +490,9 @@ export async function commitStagedChatAttachment(params: {
     ...(entry.fileName ? { fileName: entry.fileName } : {}),
     createdAtMs: Date.now(),
   });
+  staged.delete(id);
+  // The reservation has moved; the staging file is no longer accounted for.
+  await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
   return {
     uploadId: id,
     sizeBytes: media.size,
@@ -500,6 +558,7 @@ export async function discardChatAttachmentUploads(): Promise<void> {
  */
 export async function shutdownChatAttachmentUploads(): Promise<void> {
   closing = true;
+  admissionGeneration += 1;
   // Bounded join: a stalled transport must not hold shutdown open. Any commit
   // that lands after this discard re-checks the fence and deletes its media.
   await settlesWithin(Promise.allSettled(activeMutations), MUTATION_DRAIN_TIMEOUT_MS);
@@ -515,6 +574,7 @@ export function resetChatAttachmentUploadsForTests(options?: {
   stagingRootOverride = options?.stagingRoot;
   stagingRootPromise = undefined;
   closing = false;
+  admissionGeneration += 1;
   activeMutations.clear();
 }
 

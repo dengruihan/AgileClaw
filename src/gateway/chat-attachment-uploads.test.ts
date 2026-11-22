@@ -7,7 +7,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   beginStagedChatAttachment,
@@ -17,6 +17,7 @@ import {
   resetChatAttachmentUploadsForTests,
   runStagedChatAttachmentMutation,
   shutdownChatAttachmentUploads,
+  startChatAttachmentUploadMaintenance,
   writeStagedChatAttachmentPart,
 } from "./chat-attachment-upload-store.js";
 import { handleChatAttachmentUploadHttpRequest } from "./chat-attachment-uploads.js";
@@ -156,6 +157,14 @@ function streamPart(
       request.end();
     })().catch(reject);
   });
+}
+
+function deferred() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 async function stagingFiles(): Promise<string[]> {
@@ -524,6 +533,189 @@ describe("direct chat attachment uploads", () => {
     await shutdown;
     expect(mutationSettled).toBe(true);
     // Final discard removed the published media and every staging file.
+    expect(await inboundFiles()).toEqual(inboundBefore);
+    expect(await stagingFiles()).toEqual([]);
+  });
+});
+
+describe("direct upload capacity and shutdown interleavings", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("counts a committing upload while its staging unlink is still pending", async () => {
+    // Three 1 GiB reservations plus a real 100-byte upload that is parked at
+    // the post-publication staging unlink. The accounting transfer is already
+    // committed, so a further 1 GiB begin must not fit.
+    for (let index = 0; index < 3; index += 1) {
+      await beginStagedChatAttachment({ scope: PARSE_SCOPE, declaredBytes: GIB, maxBytes: GIB });
+    }
+    const tiny = Buffer.alloc(100, 3);
+    const begin = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: tiny.length,
+      maxBytes: 1024,
+      fileName: "tiny.pdf",
+      mimeType: "application/pdf",
+    });
+    await writeStagedChatAttachmentPart({
+      uploadId: begin.uploadId,
+      offset: 0,
+      stream: (async function* () {
+        yield tiny;
+      })(),
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+
+    const unlinkEntered = deferred();
+    const releaseUnlink = deferred();
+    const stagingPath = path.join(stagingRoot, `${begin.uploadId}.part`);
+    const realRm = fs.rm.bind(fs);
+    let gated = true;
+    vi.spyOn(fs, "rm").mockImplementation((async (target: string, options?: unknown) => {
+      if (gated && String(target) === stagingPath) {
+        gated = false;
+        unlinkEntered.resolve();
+        await releaseUnlink.promise;
+      }
+      return await realRm(target, options as never);
+    }) as typeof fs.rm);
+
+    const commit = commitStagedChatAttachment({
+      uploadId: begin.uploadId,
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    await unlinkEntered.promise;
+
+    // While the unlink is held, the reservation must already be committed.
+    await expect(
+      beginStagedChatAttachment({ scope: PARSE_SCOPE, declaredBytes: GIB, maxBytes: GIB }),
+    ).rejects.toMatchObject({ code: "capacity" });
+    // The exact boundary stays admissible: 4 GiB - 3 GiB - 100 bytes.
+    const remaining = 4 * GIB - 3 * GIB - tiny.length;
+    await expect(
+      beginStagedChatAttachment({
+        scope: PARSE_SCOPE,
+        declaredBytes: remaining,
+        maxBytes: remaining,
+      }),
+    ).resolves.toBeTruthy();
+
+    releaseUnlink.resolve();
+    await expect(commit).resolves.toMatchObject({ sizeBytes: tiny.length });
+  });
+
+  it("rejects a begin that finishes opening its staging file after the final discard", async () => {
+    const openEntered = deferred();
+    const releaseOpen = deferred();
+    const realOpen = fs.open.bind(fs);
+    let gateNextStagingOpen = true;
+    vi.spyOn(fs, "open").mockImplementation((async (
+      target: string,
+      flags: string,
+      mode?: number,
+    ) => {
+      const handle = await realOpen(target as never, flags as never, mode as never);
+      if (gateNextStagingOpen && flags === "wx") {
+        gateNextStagingOpen = false;
+        openEntered.resolve();
+        await releaseOpen.promise;
+      }
+      return handle;
+    }) as typeof fs.open);
+
+    const lateBegin = beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: 4,
+      maxBytes: 1024,
+      fileName: "late.bin",
+      mimeType: "application/octet-stream",
+    });
+    await openEntered.promise;
+
+    vi.useFakeTimers();
+    const shutdown = shutdownChatAttachmentUploads();
+    await vi.advanceTimersByTimeAsync(5_000 + 1);
+    await shutdown;
+    vi.useRealTimers();
+
+    // Even if a maintenance generation re-opens admission, this admitted begin
+    // belongs to the retired generation and must not land.
+    startChatAttachmentUploadMaintenance();
+    releaseOpen.resolve();
+    await expect(lateBegin).rejects.toMatchObject({ code: "shutting-down" });
+    expect(await stagingFiles()).toEqual([]);
+    await expect(
+      beginStagedChatAttachment({ scope: PARSE_SCOPE, declaredBytes: 4, maxBytes: 4 }),
+    ).resolves.toBeTruthy();
+  });
+
+  it("never installs or returns a commit that publishes after the final discard", async () => {
+    // Park the commit at its staging-handle close, i.e. after admission and
+    // before publication; the shutdown deadline then expires under it.
+    const closeEntered = deferred();
+    const releaseClose = deferred();
+    const realOpen = fs.open.bind(fs);
+    let gateStagingClose = true;
+    vi.spyOn(fs, "open").mockImplementation((async (
+      target: string,
+      flags: string,
+      mode?: number,
+    ) => {
+      const handle = await realOpen(target as never, flags as never, mode as never);
+      if (gateStagingClose && flags === "wx") {
+        gateStagingClose = false;
+        const realClose = handle.close.bind(handle);
+        handle.close = (async () => {
+          closeEntered.resolve();
+          await releaseClose.promise;
+          return await realClose();
+        }) as typeof handle.close;
+      }
+      return handle;
+    }) as typeof fs.open);
+
+    const tiny = Buffer.from("late commit");
+    const begin = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: tiny.length,
+      maxBytes: 1024,
+      fileName: "late.pdf",
+      mimeType: "application/pdf",
+    });
+    await writeStagedChatAttachmentPart({
+      uploadId: begin.uploadId,
+      offset: 0,
+      stream: (async function* () {
+        yield tiny;
+      })(),
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+
+    const commit = commitStagedChatAttachment({
+      uploadId: begin.uploadId,
+      scope: PARSE_SCOPE,
+      maxBytes: 1024,
+    });
+    await closeEntered.promise;
+    const inboundBefore = await inboundFiles();
+
+    vi.useFakeTimers();
+    const shutdown = shutdownChatAttachmentUploads();
+    await vi.advanceTimersByTimeAsync(5_000 + 1);
+    await shutdown;
+    vi.useRealTimers();
+
+    releaseClose.resolve();
+    await expect(commit).rejects.toMatchObject({ code: "shutting-down" });
+    // Nothing was installed: no consumable ID, no published media, no staging file.
+    expect(() =>
+      consumeStagedChatAttachment(begin.uploadId, PARSE_SCOPE, { maxBytes: 1024 }),
+    ).toThrow(/unknown, expired, or already used/);
     expect(await inboundFiles()).toEqual(inboundBefore);
     expect(await stagingFiles()).toEqual([]);
   });

@@ -20,6 +20,10 @@ async function inboundFiles(): Promise<string[]> {
   return (await fs.readdir(path.join(getMediaDir(), "inbound")).catch(() => [])).toSorted();
 }
 
+async function stagingFiles(): Promise<string[]> {
+  return (await fs.readdir(STAGING_DIR).catch(() => [])).toSorted();
+}
+
 it("fences and cleans direct uploads before the HTTP listener closes", async () => {
   const fixture = await createGatewayMetadataCloseFixture("gateway-attachment-upload-close");
   try {
@@ -63,6 +67,7 @@ it("fences and cleans direct uploads before the HTTP listener closes", async () 
     };
 
     const inboundBefore = await inboundFiles();
+    const stagingBaseline = await stagingFiles();
 
     // One upload is committed but never sent; another is left mid-staging.
     const payload = Buffer.from("%PDF-1.4\nunsent attachment\n");
@@ -86,10 +91,17 @@ it("fences and cleans direct uploads before the HTTP listener closes", async () 
     await expect(fs.stat(stagedPath)).resolves.toBeTruthy();
     expect((await inboundFiles()).length).toBe(inboundBefore.length + 1);
 
+    // A begin racing the shutdown is either refused or fenced; either way it must
+    // not leave an ID, a staging file, or media behind after the close.
+    const racingBegin = post({ action: "begin", sizeBytes: 4, fileName: "race.bin" }).catch(
+      () => undefined,
+    );
     await server.close({ reason: "attachment upload close regression" });
+    await racingBegin;
 
     // Final cleanup ran: the unsent published media and staging file are gone.
     expect(await inboundFiles()).toEqual(inboundBefore);
+    expect(await stagingFiles()).toEqual(stagingBaseline);
     await expect(fs.stat(stagedPath)).rejects.toMatchObject({ code: "ENOENT" });
 
     // The listener is closed, so the route cannot accept a new upload afterwards.
