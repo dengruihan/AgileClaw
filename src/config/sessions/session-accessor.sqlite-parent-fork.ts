@@ -153,6 +153,25 @@ export function estimateParentForkPromptTokens(
   return normalizePositiveTokenCount(Math.ceil(byteEstimate / 4));
 }
 
+/**
+ * Estimate a side-conversation snapshot from its own bytes.
+ *
+ * The projection drops control rows, so a copied assistant `usage` (and its
+ * `contextUsage`) describes the parent's original model window, not this frozen
+ * transcript. Strip it before estimating so the byte fallback decides the cap.
+ */
+export function estimateSideConversationSnapshotTokens(events: readonly TranscriptEvent[]): number {
+  const withoutCopiedUsage = events.map((event) => {
+    if (!isRecord(event) || !isRecord(event.message) || event.message.role !== "assistant") {
+      return event;
+    }
+    const message = { ...event.message };
+    delete message.usage;
+    return { ...event, message };
+  });
+  return estimateParentForkPromptTokens({ branchEntries: withoutCopiedUsage }) ?? 0;
+}
+
 function* selectParentForkTokenEstimateEvents(branch: readonly TranscriptEvent[]): Generator<{
   event: TranscriptEvent;
   context: "current" | "retained" | "reset-retained" | "opaque";

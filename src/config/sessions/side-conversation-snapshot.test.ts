@@ -5,6 +5,8 @@ import { convertToLlm } from "../../../packages/agent-core/src/harness/messages.
 import { projectSessionEntryMessage } from "../../../packages/agent-core/src/harness/session/session.js";
 import type { SessionTreeEntry } from "../../../packages/agent-core/src/harness/types.js";
 import type { AgentMessage } from "../../../packages/agent-core/src/types.js";
+import { normalizeMessagesForLlmBoundary } from "../../agents/embedded-agent-runner/run/attempt-llm-boundary.js";
+import { projectChatDisplayMessages } from "../../gateway/chat-display-projection.js";
 import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
 import { replaceSessionEntry, replaceTranscriptEvents } from "./session-accessor.js";
 import {
@@ -78,6 +80,18 @@ function toolResultMessage(
 
 function toolCallBlock(id: string, extra: Record<string, unknown> = {}) {
   return { type: "toolCall", id, name: "read", arguments: { path: "README.md" }, ...extra };
+}
+
+function bashEntry(id: string, parentId: string | null, command: string, output: string) {
+  return messageEntry(id, parentId, {
+    role: "bashExecution",
+    command,
+    output,
+    exitCode: 0,
+    cancelled: false,
+    truncated: false,
+    timestamp: 1_700_000_000_000,
+  });
 }
 
 function projectAll(events: unknown[]): AgentMessage[] {
@@ -163,6 +177,66 @@ describe("projectSideConversationSnapshot", () => {
       droppedOrphanToolResults: 1,
     });
     expect(entryParentId(projection.events[1])).toBe("u1");
+  });
+
+  it("keeps an async tool round whose result lands after a continuation turn", () => {
+    const projection = project([
+      userMessage("u1", null, "start a long read"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1", { async: true })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [{ type: "text", text: "waiting on the read" }]),
+      toolResultMessage("r1", "a2", "call-1"),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "a2",
+      "r1",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(projection.events.slice(0, 4).map(entryParentId)).toEqual([null, "u1", "a1", "a2"]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 4,
+      droppedIncompleteToolRounds: 0,
+      droppedOrphanToolResults: 0,
+    });
+  });
+
+  it("drops an async tool round that never received its result", () => {
+    const projection = project([
+      userMessage("u1", null, "start a long read"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1", { async: true })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [{ type: "text", text: "waiting on the read" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual(["u1", "a2", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 2,
+      droppedIncompleteToolRounds: 1,
+    });
+    const serialized = JSON.stringify(projection.events);
+    expect(serialized).not.toContain("call-1");
+  });
+
+  it("pairs duplicate tool ids by occurrence", () => {
+    const projection = project([
+      userMessage("u1", null, "two calls share an id"),
+      assistantMessage("a1", "u1", [toolCallBlock("dup")], { stopReason: "toolUse" }),
+      assistantMessage("a2", "a1", [toolCallBlock("dup")], { stopReason: "toolUse" }),
+      toolResultMessage("r1", "a2", "dup"),
+    ]);
+
+    // The first occurrence owns the only result; the second turn stays incomplete.
+    expect(projection.events.map(entryId)).toEqual(["u1", "a1", "r1", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 3,
+      droppedIncompleteToolRounds: 1,
+      droppedOrphanToolResults: 0,
+    });
   });
 
   it("drops aborted and error assistant turns plus their tool results", () => {
@@ -256,7 +330,29 @@ describe("projectSideConversationSnapshot", () => {
     ]);
   });
 
-  it("hides copied rows from display while keeping them in model context", () => {
+  it("hides every copied role from display while keeping it in model context", () => {
+    const projection = project([
+      userMessage("u1", null, "kept"),
+      assistantMessage("a1", "u1", [{ type: "text", text: "checking" }, toolCallBlock("call-1")], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a1", "call-1"),
+      bashEntry("b1", "r1", "git status", "clean"),
+      assistantMessage("a2", "b1", [{ type: "text", text: "summary" }]),
+    ]);
+
+    const modelMessages = projectAll(projection.events);
+    expect(modelMessages).toHaveLength(6);
+    expect(projectChatDisplayMessages(modelMessages)).toEqual([]);
+    for (const message of modelMessages) {
+      const record = message as { display?: unknown; excludeFromContext?: unknown };
+      expect(record.display).toBe(false);
+      expect(record.excludeFromContext).toBeUndefined();
+    }
+    expect(projection.facts.retainedMessages).toBe(5);
+  });
+
+  it("drops a context-excluded message but keeps the rest visible to the model", () => {
     const projection = project([
       userMessage("u1", null, "kept"),
       messageEntry(
@@ -268,19 +364,6 @@ describe("projectSideConversationSnapshot", () => {
       userMessage("u2", "hidden", "visible again"),
     ]);
 
-    for (const entry of projection.events) {
-      const record = entry as {
-        type?: unknown;
-        display?: unknown;
-        excludeFromContext?: unknown;
-        message?: Record<string, unknown>;
-      };
-      if (record.type !== "custom_message") {
-        expect(record.message?.display).toBe(false);
-        expect(record.message).not.toHaveProperty("excludeFromContext");
-      }
-      expect(record.excludeFromContext).toBeUndefined();
-    }
     expect(projection.facts).toMatchObject({
       retainedMessages: 2,
       droppedContextExcludedMessages: 1,
@@ -288,7 +371,7 @@ describe("projectSideConversationSnapshot", () => {
     expect(convertToLlm(projectAll(projection.events))).toHaveLength(3);
   });
 
-  it("counts control rows instead of copying them", () => {
+  it("counts control rows and persisted custom messages separately", () => {
     const projection = project([
       {
         type: "model_change",
@@ -309,11 +392,24 @@ describe("projectSideConversationSnapshot", () => {
         timestamp: "t",
       },
       { type: "label", id: "l1", parentId: "c1", targetId: "u1", label: "note", timestamp: "t" },
+      {
+        type: "custom_message",
+        id: "cm1",
+        parentId: "l1",
+        timestamp: "2026-01-01T00:00:03.000Z",
+        customType: "test.plugin-note",
+        content: [{ type: "text", text: "plugin note" }],
+        display: true,
+        details: { source: "fixture" },
+      },
     ]);
 
     expect(projection.events.map(entryId)).toEqual(["u1", SNAPSHOT_BOUNDARY_ENTRY_ID]);
-    expect(projection.facts.droppedNonMessageEntries).toBe(3);
-    expect(projection.facts.retainedMessages).toBe(1);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 1,
+      droppedNonMessageEntries: 3,
+      droppedCustomMessages: 1,
+    });
   });
 
   it("reproduces identical bytes for the same source", () => {
@@ -403,6 +499,30 @@ describe("projectSideConversationSnapshot", () => {
       throw new Error("expected the boundary row to project into model context");
     }
     expect(convertToLlm([boundaryMessage])).toMatchObject([{ role: "user" }]);
+  });
+
+  it("keeps the boundary in model context after later turns", () => {
+    const projection = project([userMessage("u1", null, "hello")]);
+    const normalized = normalizeMessagesForLlmBoundary([
+      ...projectAll(projection.events),
+      { role: "user", content: "first side question", timestamp: 1_700_000_000_100 },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        api: "anthropic-messages",
+        provider: "anthropic",
+        model: "claude-test",
+        usage: ZERO_USAGE,
+        stopReason: "stop",
+        timestamp: 1_700_000_000_200,
+      },
+      { role: "user", content: "follow-up", timestamp: 1_700_000_000_300 },
+    ]);
+
+    const boundaries = normalized.filter(
+      (message) => (message as { customType?: string }).customType === SNAPSHOT_CUSTOM_TYPE,
+    );
+    expect(boundaries).toHaveLength(1);
   });
 });
 
@@ -513,5 +633,58 @@ describe("side conversation fork integration", () => {
       expect(oversized.message).toContain("never truncated silently");
       expect(oversized).not.toHaveProperty("events");
     }
+  });
+
+  it("refuses an oversized snapshot instead of trusting a compacted turn's usage", async () => {
+    const root = sessionDirs.make();
+    const storePath = path.join(root, "sessions.json");
+    const parentKey = "agent:main:side-large-parent";
+    const parentSessionId = "side-large-parent-session";
+    await replaceTranscriptEvents(
+      { agentId: "main", sessionId: parentSessionId, sessionKey: parentKey, storePath },
+      [
+        { type: "session", version: 3, id: parentSessionId, timestamp: "2026-09-15T00:00:00Z" },
+        userMessage("u-old", null, "x".repeat(500_000)),
+        {
+          type: "compaction",
+          id: "c1",
+          parentId: "u-old",
+          summary: "compacted history",
+          firstKeptEntryId: "u-recent",
+          tokensBefore: 120_000,
+          timestamp: "2026-09-15T00:00:01Z",
+        },
+        userMessage("u-recent", "c1", "recent question"),
+        assistantMessage("a1", "u-recent", [{ type: "text", text: "ok" }], {
+          usage: {
+            ...ZERO_USAGE,
+            contextUsage: { state: "available", promptTokens: 110, totalTokens: 110 },
+          },
+        }),
+      ],
+    );
+    await replaceSessionEntry(
+      { sessionKey: parentKey, storePath },
+      { sessionId: parentSessionId, updatedAt: 1 },
+    );
+
+    const oversized = await prepareSideConversationForkTranscript({
+      agentId: "main",
+      parentEntry: { sessionId: parentSessionId, updatedAt: 1 },
+      parentSessionKey: parentKey,
+      sessionKey: "agent:main:side-large-child",
+      storePath,
+    });
+
+    expect(oversized.status).toBe("snapshot-too-large");
+    if (oversized.status !== "snapshot-too-large") {
+      return;
+    }
+    // The frozen projection keeps the pre-compaction prefix, and that prefix
+    // decides the cap; the parent's 110-token window must not stand in for it.
+    expect(oversized.maxTokens).toBe(100_000);
+    expect(oversized.snapshotTokens).toBeGreaterThan(100_000);
+    expect(oversized.message).toContain("never truncated silently");
+    expect(oversized).not.toHaveProperty("events");
   });
 });

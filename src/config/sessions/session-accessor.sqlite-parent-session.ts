@@ -28,6 +28,7 @@ import {
   buildForkedChildTranscriptEvents,
   DEFAULT_PARENT_FORK_MAX_TOKENS,
   estimateParentForkPromptTokens,
+  estimateSideConversationSnapshotTokens,
   planParentForkDecision,
   resolveParentForkSourceTranscript,
   type ParentForkSourceTranscript,
@@ -168,7 +169,7 @@ export async function prepareSideConversationForkTranscript(
     params.maxTokens > 0
       ? Math.floor(params.maxTokens)
       : DEFAULT_PARENT_FORK_MAX_TOKENS;
-  const snapshotTokens = estimateParentForkPromptTokens({ branchEntries: projection.events }) ?? 0;
+  const snapshotTokens = estimateSideConversationSnapshotTokens(projection.events);
   if (snapshotTokens > maxTokens) {
     return {
       status: "snapshot-too-large",

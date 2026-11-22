@@ -8,14 +8,18 @@
  * a retried creation reproduces the same transcript.
  *
  * Rules (see the M199 implementation map):
- * - A tool round is "complete" only when every assistant tool call has a paired
- *   tool result. Incomplete rounds and their orphan results are dropped whole.
+ * - A tool round is "complete" only when every tool call occurrence has a later,
+ *   distinct result occurrence. Async calls are included: the provider may keep
+ *   generating, but the frozen snapshot needs the settled result. Incomplete
+ *   rounds and their orphan results are dropped whole.
  * - Assistant turns that ended `aborted` or `error` are incomplete; they and
  *   their tool results are dropped.
  * - Reasoning becomes plain text preceded by a fixed marker. Provider replay
- *   signatures are never copied or invented.
- * - Every copied message is display-hidden (`display: false`) but stays in model
- *   context: `excludeFromContext` is never set.
+ *   signatures are never copied or invented; redacted reasoning without visible
+ *   text is dropped rather than reconstructed.
+ * - Every copied message (user, assistant, tool result, shell execution) is
+ *   display-hidden (`display: false`) but stays in model context:
+ *   `excludeFromContext` is never set.
  * - Copied rows form one linear visible chain: parent pointers are rebuilt in
  *   copied order and side-append markers are not carried over.
  * - The boundary row is a model-only custom message; the UI hides it.
@@ -176,25 +180,18 @@ function resolveEntryTimestamp(message: MessageRecord, entry: Record<string, unk
   return new Date(readMessageTimestampMs(message, entry)).toISOString();
 }
 
-function readToolCallIds(message: MessageRecord): { required: string[]; all: string[] } {
+function readToolCallIds(message: MessageRecord): string[] {
   const content = message.content;
-  const required: string[] = [];
-  const all: string[] = [];
+  const ids: string[] = [];
   if (!Array.isArray(content)) {
-    return { required, all };
+    return ids;
   }
   for (const block of content) {
-    if (!isRecord(block) || block.type !== "toolCall" || typeof block.id !== "string") {
-      continue;
-    }
-    all.push(block.id);
-    // An async call is complete without a result: the provider allowed the
-    // turn to continue before its outcome existed.
-    if (block.async !== true) {
-      required.push(block.id);
+    if (isRecord(block) && block.type === "toolCall" && typeof block.id === "string") {
+      ids.push(block.id);
     }
   }
-  return { required, all };
+  return ids;
 }
 
 function readToolResultCallId(message: MessageRecord): string | undefined {
@@ -349,6 +346,7 @@ function projectToolResultMessage(entry: ParsedMessageEntry): Record<string, unk
   return {
     role: "toolResult",
     content: projectToolResultContent(message.content),
+    display: false,
     isError: message.isError === true,
     ...(toolCallId ? { toolCallId } : {}),
     ...(toolName ? { toolName } : {}),
@@ -367,6 +365,7 @@ function projectBashExecutionMessage(entry: ParsedMessageEntry): Record<string, 
     role: "bashExecution",
     command: command ?? "",
     output: output ?? "",
+    display: false,
     ...(typeof exitCode === "number" ? { exitCode } : {}),
     cancelled: message.cancelled === true,
     truncated: message.truncated === true,
@@ -376,44 +375,112 @@ function projectBashExecutionMessage(entry: ParsedMessageEntry): Record<string, 
 }
 
 /**
- * Match one assistant turn's tool calls to its following consecutive result rows.
- * Returns whether every required (non-async) call settled and which results belong
- * to this round.
+ * Match tool calls to results by occurrence across the whole branch.
+ *
+ * A result may land after a continuation assistant turn (an async call let the
+ * provider keep generating), so adjacency cannot decide completeness. Each call
+ * occurrence claims the earliest unclaimed later result with its id; a call with
+ * no such result leaves its assistant turn incomplete.
  */
-function matchToolRound(
-  candidates: readonly ParsedMessageEntry[],
-  assistantIndex: number,
-  requiredCallIds: readonly string[],
-  allCallIds: readonly string[],
-): { complete: boolean; resultIndexes: number[] } {
-  const pendingCalls = new Set(requiredCallIds);
-  const callIds = new Set(allCallIds);
-  const resultIndexes: number[] = [];
-  // Results for one assistant turn are the consecutive result rows that follow
-  // it; a result beyond that run belongs to another round or is an orphan.
-  for (let cursor = assistantIndex + 1; cursor < candidates.length; cursor += 1) {
-    const next = candidates[cursor];
-    if (next?.message.role !== "toolResult") {
-      break;
+function matchToolRounds(candidates: readonly ParsedMessageEntry[]): {
+  retainedAssistants: Set<number>;
+  retainedResults: Set<number>;
+  droppedIncompleteToolRounds: number;
+  droppedOrphanToolResults: number;
+} {
+  const resultsByCallId = new Map<string, number[]>();
+  for (const [index, parsed] of candidates.entries()) {
+    if (parsed.message.role !== "toolResult") {
+      continue;
     }
-    const toolCallId = readToolResultCallId(next.message);
+    const toolCallId = readToolResultCallId(parsed.message);
     if (!toolCallId) {
       continue;
     }
-    if (callIds.has(toolCallId)) {
-      resultIndexes.push(cursor);
+    const indexes = resultsByCallId.get(toolCallId);
+    if (indexes) {
+      indexes.push(index);
+    } else {
+      resultsByCallId.set(toolCallId, [index]);
     }
-    pendingCalls.delete(toolCallId);
   }
-  return { complete: pendingCalls.size === 0, resultIndexes };
+
+  const retainedAssistants = new Set<number>();
+  const retainedResults = new Set<number>();
+  let droppedIncompleteToolRounds = 0;
+
+  for (const [index, parsed] of candidates.entries()) {
+    if (parsed.message.role !== "assistant") {
+      continue;
+    }
+    if (parsed.message.stopReason === "aborted" || parsed.message.stopReason === "error") {
+      continue;
+    }
+    const callIds = readToolCallIds(parsed.message);
+    const matched: number[] = [];
+    let complete = true;
+    for (const callId of callIds) {
+      const resultIndex = claimResultAfter(resultsByCallId, callId, index);
+      if (resultIndex === undefined) {
+        complete = false;
+        continue;
+      }
+      matched.push(resultIndex);
+    }
+    if (!complete) {
+      // The turn keeps its claimed results out of play: the earliest call owns
+      // the earliest result, and a dropped turn's results are orphaned.
+      droppedIncompleteToolRounds += 1;
+      continue;
+    }
+    retainedAssistants.add(index);
+    for (const resultIndex of matched) {
+      retainedResults.add(resultIndex);
+    }
+  }
+
+  let droppedOrphanToolResults = 0;
+  for (const [index, parsed] of candidates.entries()) {
+    if (parsed.message.role === "toolResult" && !retainedResults.has(index)) {
+      droppedOrphanToolResults += 1;
+    }
+  }
+
+  return {
+    retainedAssistants,
+    retainedResults,
+    droppedIncompleteToolRounds,
+    droppedOrphanToolResults,
+  };
+}
+
+/** Claim the first unclaimed result for this call that appears after the call's turn. */
+function claimResultAfter(
+  resultsByCallId: Map<string, number[]>,
+  toolCallId: string,
+  assistantIndex: number,
+): number | undefined {
+  const indexes = resultsByCallId.get(toolCallId);
+  if (!indexes) {
+    return undefined;
+  }
+  for (const [position, resultIndex] of indexes.entries()) {
+    if (resultIndex > assistantIndex) {
+      indexes.splice(position, 1);
+      return resultIndex;
+    }
+  }
+  return undefined;
 }
 
 /**
  * Project a parent active branch into frozen side-conversation child rows.
  *
  * Only `message` entries are candidates. Control rows (compaction, model or
- * reasoning changes, labels, leaf markers) are dropped and counted, because the
- * snapshot is conversation content, not a replay of parent model wiring.
+ * reasoning changes, labels, leaf markers) count as dropped non-message entries,
+ * and both `custom_message` rows and `role: "custom"` messages count as dropped
+ * custom rows: the snapshot is conversation content, not a replay of parent
+ * model wiring or application activity.
  */
 export function projectSideConversationSnapshot(params: {
   branchEntries: readonly TranscriptEvent[];
@@ -425,7 +492,14 @@ export function projectSideConversationSnapshot(params: {
   const candidates: ParsedMessageEntry[] = [];
   let droppedNonMessageEntries = 0;
   let droppedContextExcludedMessages = 0;
+  let droppedCustomMessages = 0;
   for (const entry of params.branchEntries) {
+    // `custom_message` is the canonical persisted shape for application content;
+    // it is not model conversation, but it is still a custom row.
+    if (isRecord(entry) && entry.type === "custom_message") {
+      droppedCustomMessages += 1;
+      continue;
+    }
     const parsed = parseMessageEntry(entry);
     if (!parsed) {
       droppedNonMessageEntries += 1;
@@ -438,12 +512,14 @@ export function projectSideConversationSnapshot(params: {
     candidates.push(parsed);
   }
 
+  const {
+    retainedAssistants,
+    retainedResults,
+    droppedIncompleteToolRounds,
+    droppedOrphanToolResults,
+  } = matchToolRounds(candidates);
   const kept: KeptMessage[] = [];
-  const consumedToolResultIndexes = new Set<number>();
-  let droppedIncompleteToolRounds = 0;
   let droppedIncompleteAssistantMessages = 0;
-  let droppedOrphanToolResults = 0;
-  let droppedCustomMessages = 0;
 
   for (const [index, parsed] of candidates.entries()) {
     const role = parsed.message.role;
@@ -455,16 +531,8 @@ export function projectSideConversationSnapshot(params: {
         droppedIncompleteAssistantMessages += 1;
         continue;
       }
-      const toolCalls = readToolCallIds(parsed.message);
-      if (toolCalls.all.length > 0) {
-        const round = matchToolRound(candidates, index, toolCalls.required, toolCalls.all);
-        if (!round.complete) {
-          droppedIncompleteToolRounds += 1;
-          continue;
-        }
-        for (const resultIndex of round.resultIndexes) {
-          consumedToolResultIndexes.add(resultIndex);
-        }
+      if (!retainedAssistants.has(index)) {
+        continue;
       }
       kept.push({
         id: parsed.id,
@@ -475,9 +543,8 @@ export function projectSideConversationSnapshot(params: {
     }
 
     if (role === "toolResult") {
-      // Results whose assistant round was dropped above never reach a retained call.
-      if (!consumedToolResultIndexes.has(index)) {
-        droppedOrphanToolResults += 1;
+      // Results whose assistant round was dropped never reach a retained call.
+      if (!retainedResults.has(index)) {
         continue;
       }
       kept.push({
