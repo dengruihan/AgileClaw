@@ -179,6 +179,12 @@ export type CreateGatewaySessionParams = {
     intentId: string;
     ordinal: number;
   };
+  /**
+   * Trusted creation-time freeze of the parent's effective selection. Applied
+   * only to a genuinely new side-conversation child; ordinary patch remains the
+   * only later writer.
+   */
+  frozenParentSelection?: import("./session-create-model-selection.js").FrozenParentSessionSelection;
   /** Live spawn-owned selection; public model inputs remain raw. */
   preparedModelSelection?: { ref: ModelRef; assertCurrent: () => void };
   /** Effective host-prepared spawn mode, bound to the live requester until commit. */

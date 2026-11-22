@@ -12,6 +12,7 @@
  */
 import { createHash } from "node:crypto";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { SIDE_CONVERSATION_MAX_PER_PARENT } from "../../../packages/gateway-protocol/src/index.js";
 import type { OpenClawConfig } from "../types.openclaw.js";
 import { loadSessionEntry, updateResolvedSessionEntry } from "./session-accessor.entry.js";
 import type { SideConversationSnapshotFacts } from "./side-conversation-snapshot.js";
@@ -23,10 +24,69 @@ import type {
 } from "./side-conversation-types.js";
 import type { InternalSessionEntry } from "./types.js";
 
-/** Keep one parent's registry bounded so its entry JSON stays small. */
-export const SIDE_CONVERSATION_MAX_PER_PARENT = 32;
+/** Re-export the single protocol-owned bound so config and wire cannot drift. */
+export { SIDE_CONVERSATION_MAX_PER_PARENT };
 
 const SIDE_CONVERSATION_KEY_PREFIX = "side-";
+
+const SIDE_CONVERSATION_STATES = new Set<SideConversationState>([
+  "open",
+  "closed",
+  "merged",
+  "abandoned",
+]);
+
+function isRegistryEntry(value: unknown): value is SideConversationRegistryEntry {
+  return (
+    isRecord(value) &&
+    typeof value.sessionKey === "string" &&
+    value.sessionKey.length > 0 &&
+    typeof value.ordinal === "number" &&
+    Number.isInteger(value.ordinal) &&
+    value.ordinal >= 1 &&
+    typeof value.state === "string" &&
+    SIDE_CONVERSATION_STATES.has(value.state as SideConversationState) &&
+    typeof value.createdAt === "number" &&
+    typeof value.updatedAt === "number"
+  );
+}
+
+/** Own-property lookup: prototype names are never registrations. */
+function ownConversation(
+  registry: SideConversationParentRegistry,
+  intentId: string,
+): SideConversationRegistryEntry | undefined {
+  return Object.hasOwn(registry.conversations, intentId)
+    ? registry.conversations[intentId]
+    : undefined;
+}
+
+function setConversation(
+  registry: SideConversationParentRegistry,
+  intentId: string,
+  entry: SideConversationRegistryEntry,
+): SideConversationParentRegistry {
+  const conversations = { ...registry.conversations };
+  Object.defineProperty(conversations, intentId, {
+    value: entry,
+    enumerable: true,
+    configurable: true,
+    writable: true,
+  });
+  return { ...registry, conversations };
+}
+
+function deleteConversation(
+  registry: SideConversationParentRegistry,
+  intentId: string,
+): SideConversationParentRegistry {
+  if (!Object.hasOwn(registry.conversations, intentId)) {
+    return registry;
+  }
+  const conversations = { ...registry.conversations };
+  delete conversations[intentId];
+  return { ...registry, conversations };
+}
 
 /** Structural check for public-typed entries that still carry the internal marker. */
 export function isSideConversationEntry(entry: unknown): boolean {
@@ -67,11 +127,15 @@ export function readSideConversationRegistry(
   ) {
     return emptySideConversationRegistry();
   }
-  return {
-    version: 1,
-    nextOrdinal: stored.nextOrdinal,
-    conversations: { ...stored.conversations },
-  };
+  // Object.entries reads own enumerable properties only, so prototype pollution
+  // in a stored registry can never become a conversation.
+  const conversations: Record<string, SideConversationRegistryEntry> = {};
+  for (const [intentId, value] of Object.entries(stored.conversations)) {
+    if (isRegistryEntry(value)) {
+      conversations[intentId] = value;
+    }
+  }
+  return { version: 1, nextOrdinal: stored.nextOrdinal, conversations };
 }
 
 /** Count registered conversations; abandoned intents stop counting as side conversations. */
@@ -93,7 +157,8 @@ export function findSideConversationByIntent(
   entry: RegistryOwnerEntry | undefined,
   intentId: string,
 ): SideConversationRegistryEntry | undefined {
-  return entry?.sideConversations?.conversations?.[intentId];
+  const registry = entry?.sideConversations;
+  return registry ? ownConversation(registry, intentId) : undefined;
 }
 
 /**
@@ -165,7 +230,7 @@ export async function reserveSideConversationIntent(params: {
     { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
     (entry) => {
       const registry = readSideConversationRegistry(entry);
-      const existing = registry.conversations[params.intentId];
+      const existing = ownConversation(registry, params.intentId);
       if (existing) {
         outcome = { status: "reserved", ordinal: existing.ordinal, existing };
         return;
@@ -178,20 +243,17 @@ export async function reserveSideConversationIntent(params: {
         return;
       }
       const ordinal = registry.nextOrdinal;
-      entry.sideConversations = {
-        version: 1,
-        nextOrdinal: ordinal + 1,
-        conversations: {
-          ...registry.conversations,
-          [params.intentId]: {
-            sessionKey: params.sessionKey,
-            ordinal,
-            state: "open",
-            createdAt: params.now,
-            updatedAt: params.now,
-          },
+      entry.sideConversations = setConversation(
+        { ...registry, nextOrdinal: ordinal + 1 },
+        params.intentId,
+        {
+          sessionKey: params.sessionKey,
+          ordinal,
+          state: "open",
+          createdAt: params.now,
+          updatedAt: params.now,
         },
-      };
+      );
       outcome = { status: "reserved", ordinal };
     },
   );
@@ -212,24 +274,18 @@ export async function finalizeSideConversationIntent(params: {
     { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
     (entry) => {
       const registry = readSideConversationRegistry(entry);
-      const existing = registry.conversations[params.intentId];
+      const existing = ownConversation(registry, params.intentId);
       if (!existing) {
-        // A missing reservation (for example after a manual parent edit) is
-        // restored only with a fresh ordinal; readers still prefer the child row.
+        // Only a reserved intent is finalized; a caller that already re-reserved
+        // in the replay path will hit that reservation.
         return;
       }
-      entry.sideConversations = {
-        ...registry,
-        conversations: {
-          ...registry.conversations,
-          [params.intentId]: {
-            ...existing,
-            ...(params.sessionId ? { sessionId: params.sessionId } : {}),
-            ...(params.snapshot ? { snapshot: params.snapshot } : {}),
-            updatedAt: params.now,
-          },
-        },
-      };
+      entry.sideConversations = setConversation(registry, params.intentId, {
+        ...existing,
+        ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+        ...(params.snapshot ? { snapshot: params.snapshot } : {}),
+        updatedAt: params.now,
+      });
     },
   );
   return updated.found;
@@ -248,22 +304,16 @@ export async function recordSideConversationState(params: {
     { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
     (entry) => {
       const registry = readSideConversationRegistry(entry);
-      const existing = registry.conversations[params.intentId];
+      const existing = ownConversation(registry, params.intentId);
       if (!existing) {
         return;
       }
-      entry.sideConversations = {
-        ...registry,
-        conversations: {
-          ...registry.conversations,
-          [params.intentId]: {
-            ...existing,
-            state: params.state,
-            updatedAt: params.now,
-            ...(params.state === "closed" ? { closedAt: params.now } : {}),
-          },
-        },
-      };
+      entry.sideConversations = setConversation(registry, params.intentId, {
+        ...existing,
+        state: params.state,
+        updatedAt: params.now,
+        ...(params.state === "closed" ? { closedAt: params.now } : {}),
+      });
     },
   );
   return updated.found;
@@ -280,11 +330,7 @@ export async function removeSideConversationIntent(params: {
     { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
     (entry) => {
       const registry = readSideConversationRegistry(entry);
-      if (!registry.conversations[params.intentId]) {
-        return;
-      }
-      const { [params.intentId]: _removed, ...conversations } = registry.conversations;
-      entry.sideConversations = { ...registry, conversations };
+      entry.sideConversations = deleteConversation(registry, params.intentId);
     },
   );
   return updated.found;

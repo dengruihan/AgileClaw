@@ -195,7 +195,7 @@ export async function deleteGatewaySession({
   ];
   let drain: SessionLifecycleDrain | undefined;
   let worktreePreserved: PreservedSessionWorktree | undefined;
-  let preservedChildWorktree: PreservedSessionWorktree | undefined;
+  let preservedChildWorktrees: PreservedSessionWorktree[] = [];
   const deleteCurrent = async () => {
     try {
       const current = assertCurrent();
@@ -283,7 +283,7 @@ export async function deleteGatewaySession({
           if (!sideChildren.ok) {
             throw new SessionDeletionError(sideChildren.error);
           }
-          preservedChildWorktree = sideChildren.preserved;
+          preservedChildWorktrees = sideChildren.preserved;
           const mutationCleanupError = await cleanupSessionBeforeMutation({
             cfg,
             key,
@@ -413,13 +413,17 @@ export async function deleteGatewaySession({
     }
     return { ok: false, error: error.error };
   }
-  const preservedWorktree = worktreePreserved ?? preservedChildWorktree;
+  const preservedWorktrees = [
+    ...(worktreePreserved ? [worktreePreserved] : []),
+    ...preservedChildWorktrees,
+  ];
   const response: SessionsDeleteResult = {
     ok: true,
     key: target.canonicalKey,
     deleted: deletion.deleted,
     archived: deletion.archivedTranscripts.map((entry) => entry.archivedPath),
-    ...(preservedWorktree ? { worktreePreserved: preservedWorktree } : {}),
+    ...(preservedWorktrees[0] ? { worktreePreserved: preservedWorktrees[0] } : {}),
+    ...(preservedWorktrees.length > 0 ? { preservedWorktrees } : {}),
   };
   onDeleted?.(response);
   if (deletion.deleted) {

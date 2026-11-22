@@ -9,6 +9,7 @@ import type { AdmittedRunOperatorAuthority } from "../agents/admitted-run-contex
 import { normalizeOptionalAgentRuntimeId } from "../agents/agent-runtime-id.js";
 import { resolveAgentDir } from "../agents/agent-scope.js";
 import { resolveContextTokensForModel } from "../agents/context.js";
+import { resolveFastModeState } from "../agents/fast-mode.js";
 import { resolveModelProviderAuthConfig } from "../agents/model-auth-provider-route.js";
 import { selectModelCatalogRuntimeEntry } from "../agents/model-catalog-view.js";
 import { findModelCatalogEntry } from "../agents/model-catalog.js";
@@ -16,6 +17,7 @@ import type { ModelCatalogSnapshot } from "../agents/model-catalog.types.js";
 import { resolveModelContextWindowProfile } from "../agents/model-context-window.js";
 import { splitTrailingAuthProfile } from "../agents/model-ref-profile.js";
 import { resolveDefaultModelForAgent, type ModelRef } from "../agents/model-selection.js";
+import { resolveThinkingDefault } from "../agents/model-thinking-default.js";
 import { resolveSessionModelRef } from "../agents/session-model-ref.js";
 import { resolveEffectiveAgentRuntime } from "../agents/thinking-runtime.js";
 import { inheritSessionSelection } from "../config/sessions/session-entry-selection.js";
@@ -274,4 +276,80 @@ export async function resolveSessionForkMaxTokens(params: {
         childContextWindow.contextTokens,
       )
     : resolvedForkMaxTokens;
+}
+
+export type FrozenParentSessionSelection = {
+  provider: string;
+  model: string;
+  modelOverrideSource: "user" | "auto" | "default";
+  contextWindow?: string;
+  thinkingLevel?: string;
+  reasoningLevel?: string;
+  fastMode?: boolean | "auto" | "ultrafast";
+  verboseLevel?: string;
+  traceLevel?: string;
+  elevatedLevel?: string;
+};
+
+/**
+ * Freeze the parent's *effective* selection at child creation.
+ *
+ * Stored overrides alone are not enough: a parent that relies on the agent or
+ * config default would otherwise let the child follow later default changes.
+ * The resolved provider/model (and resolved thinking/fast defaults) are persisted
+ * on the child as ordinary overrides, so `sessions.patch` can still change them
+ * independently afterwards.
+ */
+export function resolveFrozenParentSessionSelection(params: {
+  cfg: OpenClawConfig;
+  agentId: string;
+  parentEntry: SessionEntry;
+}): FrozenParentSessionSelection {
+  const { provider, model } = resolveSessionModelRef(
+    params.cfg,
+    params.parentEntry,
+    params.agentId,
+  );
+  const storedSource = params.parentEntry.modelOverrideSource;
+  const source: FrozenParentSessionSelection["modelOverrideSource"] =
+    storedSource === "user" || storedSource === "auto" ? storedSource : "default";
+  const thinkingLevel =
+    normalizeOptionalString(params.parentEntry.thinkingLevel) ??
+    resolveThinkingDefault({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      provider,
+      model,
+    });
+  const fastMode =
+    params.parentEntry.fastMode ??
+    resolveFastModeState({
+      cfg: params.cfg,
+      agentId: params.agentId,
+      provider,
+      model,
+      sessionEntry: params.parentEntry,
+    }).mode;
+  return {
+    provider,
+    model,
+    modelOverrideSource: source,
+    ...(normalizeOptionalString(params.parentEntry.contextWindow)
+      ? { contextWindow: normalizeOptionalString(params.parentEntry.contextWindow) }
+      : {}),
+    ...(thinkingLevel ? { thinkingLevel } : {}),
+    ...(normalizeOptionalString(params.parentEntry.reasoningLevel)
+      ? { reasoningLevel: normalizeOptionalString(params.parentEntry.reasoningLevel) }
+      : {}),
+    ...(fastMode !== undefined ? { fastMode } : {}),
+    ...(normalizeOptionalString(params.parentEntry.verboseLevel)
+      ? { verboseLevel: normalizeOptionalString(params.parentEntry.verboseLevel) }
+      : {}),
+    ...(normalizeOptionalString(params.parentEntry.traceLevel)
+      ? { traceLevel: normalizeOptionalString(params.parentEntry.traceLevel) }
+      : {}),
+    ...(normalizeOptionalString(params.parentEntry.elevatedLevel)
+      ? { elevatedLevel: normalizeOptionalString(params.parentEntry.elevatedLevel) }
+      : {}),
+  };
 }

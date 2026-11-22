@@ -278,7 +278,8 @@ export async function createGatewaySession(
       params.preparedModelSelection !== undefined ||
       params.preparedPermissionSelection !== undefined ||
       params.initialEntry !== undefined ||
-      params.incognito === true)
+      params.incognito === true ||
+      (params.frozenParentSelection !== undefined && !params.sideConversation))
   ) {
     // Side conversations fork the matching parent with its own frozen
     // selection; explicit model/spawn/incognito inputs would break that contract.
@@ -1004,6 +1005,34 @@ export async function createGatewaySession(
               createdNewEntry && params.creation?.via === "spawn" && Boolean(spawnToolPolicy),
             requesterSenderIsOwner: params.creation?.requesterSenderIsOwner,
           }),
+          ...(createdNewEntry && params.frozenParentSelection
+            ? {
+                providerOverride: params.frozenParentSelection.provider,
+                modelOverride: params.frozenParentSelection.model,
+                modelOverrideSource: params.frozenParentSelection.modelOverrideSource,
+                ...(params.frozenParentSelection.contextWindow
+                  ? { contextWindow: params.frozenParentSelection.contextWindow }
+                  : {}),
+                ...(params.frozenParentSelection.thinkingLevel
+                  ? { thinkingLevel: params.frozenParentSelection.thinkingLevel }
+                  : {}),
+                ...(params.frozenParentSelection.reasoningLevel
+                  ? { reasoningLevel: params.frozenParentSelection.reasoningLevel }
+                  : {}),
+                ...(params.frozenParentSelection.fastMode !== undefined
+                  ? { fastMode: params.frozenParentSelection.fastMode }
+                  : {}),
+                ...(params.frozenParentSelection.verboseLevel
+                  ? { verboseLevel: params.frozenParentSelection.verboseLevel }
+                  : {}),
+                ...(params.frozenParentSelection.traceLevel
+                  ? { traceLevel: params.frozenParentSelection.traceLevel }
+                  : {}),
+                ...(params.frozenParentSelection.elevatedLevel
+                  ? { elevatedLevel: params.frozenParentSelection.elevatedLevel }
+                  : {}),
+              }
+            : {}),
         };
         let validateAccountModel: (() => ErrorShape | undefined) | undefined;
         if (params.fork !== true) {

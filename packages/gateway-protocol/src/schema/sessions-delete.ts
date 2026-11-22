@@ -48,7 +48,10 @@ export const SessionsDeleteResultSchema = closedObject({
   key: NonEmptyString,
   deleted: Type.Boolean(),
   archived: Type.Array(NonEmptyString),
+  /** First preserved worktree, retained for older clients. */
   worktreePreserved: Type.Optional(PreservedSessionWorktreeSchema),
+  /** Complete enumeration of preserved parent and hidden-child worktrees. */
+  preservedWorktrees: Type.Optional(Type.Array(PreservedSessionWorktreeSchema)),
 });
 
 export type SessionsDeleteParams = Static<typeof SessionsDeleteParamsSchema>;

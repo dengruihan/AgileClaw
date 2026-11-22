@@ -14,9 +14,16 @@ import { NonEmptyString } from "./primitives.js";
 export const SIDE_CONVERSATION_MAX_PER_PARENT = 32;
 
 /** Hard bound on one list response; a parent never exceeds the registry cap. */
-export const SIDE_CONVERSATION_MAX_LISTED = 32;
+export const SIDE_CONVERSATION_MAX_LISTED = SIDE_CONVERSATION_MAX_PER_PARENT;
 
 export const SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH = 128;
+
+/**
+ * Caller-owned idempotency keys are opaque identifiers. Leading alphanumerics
+ * plus `_`/`-` keep them safe as own registry properties and reject prototype
+ * names such as `__proto__`, `constructor`, or `toString`.
+ */
+export const SIDE_CONVERSATION_INTENT_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9_-]*$";
 
 /** Lifecycle state values; merged and abandoned are reserved for later handoff work. */
 export const SideConversationStateSchema = Type.Union([
@@ -79,7 +86,11 @@ const ParentTargetParams = {
 export const SideConversationsCreateParamsSchema = closedObject({
   ...ParentTargetParams,
   /** Caller-owned idempotency key; retries return the same hidden child. */
-  intentId: Type.String({ minLength: 1, maxLength: SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH }),
+  intentId: Type.String({
+    minLength: 1,
+    maxLength: SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH,
+    pattern: SIDE_CONVERSATION_INTENT_ID_PATTERN,
+  }),
   /** Optional child title; omitted derives from the first message. */
   label: Type.Optional(Type.String()),
 });

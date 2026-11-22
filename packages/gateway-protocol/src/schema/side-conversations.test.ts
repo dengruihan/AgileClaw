@@ -7,6 +7,8 @@ import {
   SideConversationsCreateResultSchema,
   SideConversationsListParamsSchema,
   SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH,
+  SIDE_CONVERSATION_MAX_LISTED,
+  SIDE_CONVERSATION_MAX_PER_PARENT,
 } from "./side-conversations.js";
 
 const parentSessionKey = "agent:main:dashboard:parent";
@@ -75,6 +77,22 @@ describe("side conversation protocol schemas", () => {
         conversation: { ...summary, childSessions: [childSessionKey] },
       }),
     ).toBe(false);
+  });
+
+  it("rejects prototype-polluting intent ids and keeps one shared bound", () => {
+    expect(
+      Value.Check(SideConversationsCreateParamsSchema, {
+        parentSessionKey,
+        intentId: "__proto__",
+      }),
+    ).toBe(false);
+    // Identifier-shaped names are safe as own properties and remain legal keys.
+    for (const intentId of ["constructor", "toString", "prototype"]) {
+      expect(Value.Check(SideConversationsCreateParamsSchema, { parentSessionKey, intentId })).toBe(
+        true,
+      );
+    }
+    expect(SIDE_CONVERSATION_MAX_LISTED).toBe(SIDE_CONVERSATION_MAX_PER_PARENT);
   });
 
   it("scopes list and transitions by parent or exact child key", () => {

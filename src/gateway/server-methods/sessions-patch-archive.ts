@@ -3,6 +3,7 @@ import {
   ErrorCodes,
   errorShape,
   type ErrorShape,
+  type PreservedSessionWorktree,
   type SessionCreatedActor,
   type SessionsPatchParams,
 } from "../../../packages/gateway-protocol/src/index.js";
@@ -50,18 +51,39 @@ import {
 } from "./sessions-shared.js";
 import {
   archiveSideConversationChildrenInParentFence,
+  closeSideConversationChildAdmissions,
   readRegisteredSideConversationChildren,
   resolveSideConversationArchiveBlocker,
 } from "./side-conversations-fence.js";
 import type { GatewayRequestContext } from "./types.js";
 
+const preservedWorktreesByCommittedEntry = new WeakMap<object, PreservedSessionWorktree[]>();
+
+/** Worktrees preserved by the archive afterCommit for this exact committed entry. */
+export function readArchivePreservedWorktrees(
+  entry: object,
+): PreservedSessionWorktree[] | undefined {
+  return preservedWorktreesByCommittedEntry.get(entry);
+}
+
 export type SessionPatchArchivePreparation = {
   canonicalKey: string;
   drain: SessionLifecycleDrain;
   entry?: SessionEntry;
+  /** Child ingress closed for the parent action; released by the engine's cleanup. */
+  childAdmissionReleases?: Array<() => void>;
 };
 
 export function releaseSessionPatchArchive(preparation?: SessionPatchArchivePreparation): void {
+  try {
+    for (const release of preparation?.childAdmissionReleases ?? []) {
+      release();
+    }
+  } catch (error) {
+    sessionLog.warn(
+      `sessions.patch: child admission release failed for ${preparation?.canonicalKey}: ${formatErrorMessage(error)}`,
+    );
+  }
   try {
     preparation?.drain.release();
   } catch (error) {
@@ -263,10 +285,28 @@ export async function prepareSessionPatchArchive(params: {
         Boolean(identity),
       ),
     });
+    const parentForChildren = loadInternalSessionEntry({
+      agentId: freshResolved.agentId,
+      sessionKey: freshCanonicalKey,
+      storePath: target.storePath,
+    });
+    const children = parentForChildren
+      ? readRegisteredSideConversationChildren({
+          agentId: freshResolved.agentId,
+          parentEntry: parentForChildren,
+          parentSessionKey: freshCanonicalKey,
+          storePath: target.storePath,
+        })
+      : [];
+    const childAdmissionReleases = closeSideConversationChildAdmissions({
+      children,
+      storePath: target.storePath,
+    });
     return ok({
       canonicalKey: freshCanonicalKey,
       drain,
       ...(fresh.entry ? { entry: fresh.entry } : {}),
+      ...(childAdmissionReleases.length > 0 ? { childAdmissionReleases } : {}),
     });
   } catch (error) {
     if (error instanceof SessionLifecycleWorkspaceRecoveryError) {
@@ -341,6 +381,7 @@ export async function prepareSessionPatchArchiveTransition(params: {
 }): Promise<{
   assertCommitAllowed: () => void;
   afterCommit?: (entry: SessionEntry) => Promise<void>;
+  preservedWorktrees: PreservedSessionWorktree[];
 }> {
   const placementTarget = {
     context: params.context,
@@ -380,6 +421,7 @@ export async function prepareSessionPatchArchiveTransition(params: {
     storePath: params.scope.storePath,
   };
   const sideStorePath = params.scope.storePath;
+  const sidePreservedWorktrees: PreservedSessionWorktree[] = [];
   const sideParentEntry =
     params.archived && sideStorePath
       ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
@@ -451,11 +493,14 @@ export async function prepareSessionPatchArchiveTransition(params: {
             commitGuard,
           });
           if (archived.ok && archived.preserved.length > 0) {
+            sidePreservedWorktrees.push(...archived.preserved);
+            preservedWorktreesByCommittedEntry.set(entry, [...sidePreservedWorktrees]);
+          } else if (!archived.ok) {
             sessionLog.warn(
-              `sessions.patch: ${archived.preserved.length} side conversation worktree(s) preserved for ${params.scope.sessionKey}`,
+              `sessions.patch: side conversation archive deferred for ${params.scope.sessionKey}: ${archived.error.message}`,
             );
           }
         }
       : undefined;
-  return { assertCommitAllowed, afterCommit };
+  return { assertCommitAllowed, afterCommit, preservedWorktrees: sidePreservedWorktrees };
 }

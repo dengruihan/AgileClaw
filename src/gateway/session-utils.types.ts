@@ -140,6 +140,8 @@ export type SessionListModelCatalog = ReadonlyMap<string, PreparedGatewayModelCa
 
 export type SessionsPatchResult = SessionsPatchResultBase<SessionEntry> & {
   entry: SessionEntry;
+  /** Worktrees preserved while applying this patch (parent and hidden children). */
+  preservedWorktrees?: import("../../packages/gateway-protocol/src/index.js").PreservedSessionWorktree[];
   resolved?: {
     modelProvider?: string;
     model?: string;

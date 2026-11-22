@@ -3,8 +3,9 @@
  *
  * The parent delete/archive already owns the session lifecycle mutex, so these
  * helpers use storage primitives directly and never nest another drain or
- * lifecycle mutation. An active hidden child blocks the parent action instead of
- * being killed silently; an unmerged child worktree is preserved, never removed.
+ * lifecycle mutation. Child work admission is closed as part of the same
+ * ownership, and every durable child write rechecks authoritative liveness, so
+ * work accepted after the preflight can never be deleted or archived.
  */
 import {
   ErrorCodes,
@@ -13,6 +14,8 @@ import {
   type PreservedSessionWorktree,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { isEmbeddedAgentRunInProgress } from "../../agents/embedded-agent-runner/runs.js";
+import { createAgentRunDirectAbortError } from "../../agents/run-termination.js";
+import { getRegistryWorktree } from "../../agents/worktrees/registry.js";
 import { deleteSessionEntryLifecycle } from "../../config/sessions.js";
 import { patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import {
@@ -25,7 +28,10 @@ import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { isCompetingSessionWorkAdmissionActive } from "../../sessions/session-lifecycle-admission.js";
+import {
+  closeSessionWorkAdmissions,
+  isCompetingSessionWorkAdmissionActive,
+} from "../../sessions/session-lifecycle-admission.js";
 import { handleSessionStateSessionDeleted } from "../../sessions/session-state-events.js";
 import {
   removeSessionWorktree,
@@ -41,6 +47,17 @@ type RegisteredChild = {
   registration: SideConversationRegistryEntry;
   entry: InternalSessionEntry;
 };
+
+/** A child became active after the parent action passed its preflight. */
+class SideConversationChildActiveError extends Error {
+  constructor(readonly sessionKey: string) {
+    super(`Side conversation ${sessionKey} became active`);
+  }
+}
+
+function childKeys(params: { entry: InternalSessionEntry; sessionKey: string }): string[] {
+  return [params.sessionKey, ...(params.entry.sessionId ? [params.entry.sessionId] : [])];
+}
 
 /** Read the registered children of one parent; no scan of unrelated rows. */
 export function readRegisteredSideConversationChildren(params: {
@@ -97,21 +114,76 @@ export function sideConversationActiveWork(params: {
   );
 }
 
+/**
+ * Close child ingress for the parent action's lifetime and expose the guard the
+ * child's durable write must use. Closing admissions is in-memory ownership, not
+ * the lifecycle mutex, so it does not nest the parent's store lock.
+ */
+export function closeSideConversationChildAdmissions(params: {
+  children: readonly RegisteredChild[];
+  storePath: string;
+}): Array<() => void> {
+  return params.children.map((child) =>
+    closeSessionWorkAdmissions({
+      scope: params.storePath,
+      identities: childKeys({
+        entry: child.entry,
+        sessionKey: child.registration.sessionKey,
+      }),
+      reason: createAgentRunDirectAbortError(),
+    }),
+  );
+}
+
+function childWriteGuard(params: {
+  child: RegisteredChild;
+  commitGuard: () => void;
+  context: GatewayRequestContext;
+  agentId: string;
+  defaultAgentId?: string;
+  storePath: string;
+}): () => void {
+  const sessionKey = params.child.registration.sessionKey;
+  return () => {
+    params.commitGuard();
+    if (
+      sideConversationActiveWork({
+        agentId: params.agentId,
+        context: params.context,
+        ...(params.defaultAgentId ? { defaultAgentId: params.defaultAgentId } : {}),
+        entry: params.child.entry,
+        sessionKey,
+        storePath: params.storePath,
+      })
+    ) {
+      throw new SideConversationChildActiveError(sessionKey);
+    }
+  };
+}
+
+function childActiveError(sessionKey: string, action: "deleting" | "archiving"): ErrorShape {
+  return errorShape(
+    ErrorCodes.UNAVAILABLE,
+    `Side conversation ${sessionKey} became active; close it before ${action} the parent.`,
+    { retryable: true },
+  );
+}
+
 export type SideConversationChildFenceResult =
-  | { ok: true; deletedKeys: string[]; preserved?: PreservedSessionWorktree }
+  | { ok: true; deletedKeys: string[]; preserved: PreservedSessionWorktree[] }
   | { ok: false; error: ErrorShape };
 
 /**
  * Delete registered children inside the parent's delete fence.
  *
- * Uses the storage lifecycle primitive directly; the parent already owns the
- * session lifecycle mutex, so a nested drain/mutation is deliberately avoided.
- * Any child with authoritative work fails the parent delete with a retryable
- * error instead of being killed silently.
+ * Child admission is closed before the first durable write and every write
+ * rechecks authoritative liveness, so work accepted after the preflight aborts
+ * the parent delete with the child intact. No nested drain/mutation is used.
  */
 export async function deleteSideConversationChildrenInParentFence(params: {
   agentId: string;
   context: GatewayRequestContext;
+  defaultAgentId?: string;
   parentEntry: InternalSessionEntry;
   parentSessionKey: string;
   storePath: string;
@@ -124,6 +196,7 @@ export async function deleteSideConversationChildrenInParentFence(params: {
       sideConversationActiveWork({
         agentId: params.agentId,
         context: params.context,
+        ...(params.defaultAgentId ? { defaultAgentId: params.defaultAgentId } : {}),
         entry: child.entry,
         sessionKey: child.registration.sessionKey,
         storePath: params.storePath,
@@ -131,58 +204,67 @@ export async function deleteSideConversationChildrenInParentFence(params: {
     ) {
       return {
         ok: false,
-        error: errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Side conversation ${child.registration.sessionKey} is still active; close it before deleting the parent.`,
-          { retryable: true },
-        ),
+        error: childActiveError(child.registration.sessionKey, "deleting"),
       };
     }
   }
+  const releases = closeSideConversationChildAdmissions({ children, storePath: params.storePath });
   const deletedKeys: string[] = [];
-  let preserved: PreservedSessionWorktree | undefined;
-  for (const child of children) {
-    const sessionKey = child.registration.sessionKey;
-    params.commitGuard();
-    const result = await deleteSessionEntryLifecycle({
-      agentId: params.agentId,
-      archiveTranscript: params.deleteTranscript,
-      commitGuard: params.commitGuard,
-      deleteDeliveryArtifacts: true,
-      expectedEntry: child.entry,
-      expectedSessionId: child.entry.sessionId,
-      expectedUpdatedAt: child.entry.updatedAt,
-      storePath: params.storePath,
-      target: { canonicalKey: sessionKey, storeKeys: [sessionKey] },
-    });
-    if (!result.deleted) {
-      return {
-        ok: false,
-        error: errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `Side conversation ${sessionKey} changed before deletion. Retry.`,
-        ),
-      };
-    }
-    handleSessionStateSessionDeleted(sessionKey, params.agentId);
-    const childPreserved = await removeSessionWorktree({
-      id: child.entry.worktree?.id,
-      sessionKey,
-      reason: "session-delete",
-      commitGuard: params.commitGuard,
-    });
-    if (childPreserved) {
-      if (preserved) {
-        log.warn(
-          `another preserved side conversation worktree was kept: ${childPreserved.branch} (${childPreserved.path})`,
-        );
-      } else {
-        preserved = childPreserved;
+  const preserved: PreservedSessionWorktree[] = [];
+  try {
+    for (const [index, child] of children.entries()) {
+      const sessionKey = child.registration.sessionKey;
+      const guard = childWriteGuard({ ...params, child });
+      try {
+        // The admission was closed before this write; an already accepted run
+        // still fails the authoritative guard below.
+        guard();
+        const result = await deleteSessionEntryLifecycle({
+          agentId: params.agentId,
+          archiveTranscript: params.deleteTranscript,
+          commitGuard: guard,
+          deleteDeliveryArtifacts: true,
+          expectedEntry: child.entry,
+          expectedSessionId: child.entry.sessionId,
+          expectedUpdatedAt: child.entry.updatedAt,
+          storePath: params.storePath,
+          target: { canonicalKey: sessionKey, storeKeys: [sessionKey] },
+        });
+        if (!result.deleted) {
+          return {
+            ok: false,
+            error: errorShape(
+              ErrorCodes.INVALID_REQUEST,
+              `Side conversation ${sessionKey} changed before deletion. Retry.`,
+            ),
+          };
+        }
+        handleSessionStateSessionDeleted(sessionKey, params.agentId);
+        const childPreserved = await removeSessionWorktree({
+          id: child.entry.worktree?.id,
+          sessionKey,
+          reason: "session-delete",
+          commitGuard: guard,
+        });
+        if (childPreserved) {
+          preserved.push(childPreserved);
+        }
+        deletedKeys.push(sessionKey);
+      } catch (error) {
+        if (error instanceof SideConversationChildActiveError) {
+          return { ok: false, error: childActiveError(error.sessionKey, "deleting") };
+        }
+        throw error;
+      } finally {
+        releases[index]?.();
       }
     }
-    deletedKeys.push(sessionKey);
+  } finally {
+    for (const release of releases) {
+      release();
+    }
   }
-  return { ok: true, deletedKeys, ...(preserved ? { preserved } : {}) };
+  return { ok: true, deletedKeys, preserved };
 }
 
 export type SideConversationArchiveFenceResult =
@@ -193,6 +275,7 @@ export type SideConversationArchiveFenceResult =
 export function resolveSideConversationArchiveBlocker(params: {
   agentId: string;
   context: GatewayRequestContext;
+  defaultAgentId?: string;
   parentEntry: InternalSessionEntry;
   parentSessionKey: string;
   storePath: string;
@@ -202,30 +285,46 @@ export function resolveSideConversationArchiveBlocker(params: {
       sideConversationActiveWork({
         agentId: params.agentId,
         context: params.context,
+        ...(params.defaultAgentId ? { defaultAgentId: params.defaultAgentId } : {}),
         entry: child.entry,
         sessionKey: child.registration.sessionKey,
         storePath: params.storePath,
       })
     ) {
-      return errorShape(
-        ErrorCodes.UNAVAILABLE,
-        `Side conversation ${child.registration.sessionKey} is still active; close it before archiving the parent.`,
-        { retryable: true },
-      );
+      return childActiveError(child.registration.sessionKey, "archiving");
     }
   }
   return undefined;
 }
 
+/** Read the preserved worktree record after archive cleanup refused to remove it. */
+function readPreservedChildWorktree(
+  entry: InternalSessionEntry,
+  reason: SessionWorktreeLifecycleError["reason"],
+): PreservedSessionWorktree | undefined {
+  const id = entry.worktree?.id;
+  if (!id) {
+    return undefined;
+  }
+  const record = getRegistryWorktree(process.env, id);
+  return {
+    id,
+    branch: record?.branch ?? entry.worktree?.branch ?? "",
+    path: record?.path ?? "",
+    reason: reason as PreservedSessionWorktree["reason"],
+  };
+}
+
 /**
  * Archive registered children after the parent archive commits, still inside the
- * parent's mutation lane. An unmerged child worktree is preserved and reported
- * instead of silently discarded.
+ * parent's mutation lane. An unmerged child worktree is preserved and returned
+ * to the caller instead of only being logged.
  */
 export async function archiveSideConversationChildrenInParentFence(params: {
   cfg: OpenClawConfig;
   agentId: string;
   context: GatewayRequestContext;
+  defaultAgentId?: string;
   parentEntry: InternalSessionEntry;
   parentSessionKey: string;
   storePath: string;
@@ -236,7 +335,6 @@ export async function archiveSideConversationChildrenInParentFence(params: {
   const now = Date.now();
   for (const child of readRegisteredSideConversationChildren(params)) {
     const sessionKey = child.registration.sessionKey;
-    params.commitGuard();
     const entry = readSideConversationChildEntry({
       agentId: params.agentId,
       storePath: params.storePath,
@@ -245,33 +343,31 @@ export async function archiveSideConversationChildrenInParentFence(params: {
     if (!entry?.sessionId || entry.archivedAt !== undefined) {
       continue;
     }
-    if (
-      sideConversationActiveWork({
-        agentId: params.agentId,
-        context: params.context,
-        entry,
-        sessionKey,
-        storePath: params.storePath,
-      })
-    ) {
-      // The pre-commit guard checked this too, but work can arrive before the
-      // after-commit callback. Never archive over live work.
-      log.warn(`side conversation ${sessionKey} stayed active; archive skipped`);
-      continue;
+    const current: RegisteredChild = { registration: child.registration, entry };
+    const guard = childWriteGuard({ ...params, child: current });
+    try {
+      guard();
+    } catch (error) {
+      if (error instanceof SideConversationChildActiveError) {
+        // Child admission was closed before the parent commit; an already
+        // accepted run must still leave the child untouched.
+        return { ok: false, error: childActiveError(error.sessionKey, "archiving") };
+      }
+      throw error;
     }
     const committed = await patchSessionEntryCore(
       { agentId: params.agentId, sessionKey, storePath: params.storePath },
-      (current: InternalSessionEntry) => ({
-        ...current,
+      (currentEntry: InternalSessionEntry) => ({
+        ...currentEntry,
         archivedAt: now,
         archiveReason: "manual" as const,
-        ...(current.sideConversation
+        ...(currentEntry.sideConversation
           ? {
               sideConversation: {
-                ...current.sideConversation,
+                ...currentEntry.sideConversation,
                 state: "closed" as const,
                 updatedAt: now,
-                closedAt: current.sideConversation.closedAt ?? now,
+                closedAt: currentEntry.sideConversation.closedAt ?? now,
               },
             }
           : {}),
@@ -286,11 +382,15 @@ export async function archiveSideConversationChildrenInParentFence(params: {
         archived: true,
         entry: committed,
         scope: { agentId: params.agentId, sessionKey, storePath: params.storePath },
-        commitGuard: params.commitGuard,
+        commitGuard: guard,
       });
     } catch (error) {
       if (error instanceof SessionWorktreeLifecycleError) {
-        // Keep the archived row and the preserved branch; nothing is deleted.
+        // Keep the archived row and the preserved branch; report the location.
+        const record = readPreservedChildWorktree(committed, error.reason);
+        if (record) {
+          preserved.push(record);
+        }
         log.warn(`side conversation worktree preserved for ${sessionKey}: ${error.message}`);
       } else {
         throw error;

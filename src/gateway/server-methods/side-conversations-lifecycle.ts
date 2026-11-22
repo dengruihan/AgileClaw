@@ -15,11 +15,9 @@
 import {
   ErrorCodes,
   errorShape,
-  type ErrorShape,
   type SideConversationState,
   type SideConversationSummary,
 } from "../../../packages/gateway-protocol/src/index.js";
-import { resolveSessionModelRef } from "../../agents/session-model-ref.js";
 import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import {
   buildSideConversationSessionKey,
@@ -27,29 +25,34 @@ import {
   listSideConversationRegistrations,
   readSideConversationChildEntry,
   recordSideConversationState,
-  removeSideConversationIntent,
   reserveSideConversationIntent,
 } from "../../config/sessions/side-conversation-registry.js";
-import type {
-  SideConversationMarker,
-  SideConversationRegistryEntry,
-} from "../../config/sessions/side-conversation-types.js";
+import type { SideConversationSnapshotFacts } from "../../config/sessions/side-conversation-snapshot.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
 import { isIncognitoSessionKey } from "../../routing/session-key.js";
+import { resolveFrozenParentSessionSelection } from "../session-create-model-selection.js";
 import { createGatewaySession } from "../session-create-service.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
 import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
 import { isSessionVisibilityAllowed } from "../session-sharing-policy.js";
 import { resolveGatewaySessionStoreTargetInWorker } from "../session-utils-store-worker.js";
 import { prepareSessionLifecycleDrain } from "./sessions-lifecycle-drain.js";
+import {
+  clearIntentReservation,
+  findRegistrationBySessionKey,
+  matchesSideConversationChild,
+  projectSideConversationSummary,
+  readSideConversationSnapshotFactsFromChild,
+  reconcileCommittedSideConversation,
+  resolveSideConversationState,
+  type SideConversationResult,
+} from "./side-conversations-replay.js";
 import type { GatewayClient, GatewayRequestContext } from "./types.js";
 
 const log = createSubsystemLogger("gateway/side-conversations");
-
-export type SideConversationResult<T> = { ok: true; value: T } | { ok: false; error: ErrorShape };
 
 type ParentTarget = {
   canonicalKey: string;
@@ -114,74 +117,6 @@ export async function resolveSideConversationParent(params: {
   };
 }
 
-function resolveSideConversationState(
-  marker: SideConversationMarker | undefined,
-  registration: SideConversationRegistryEntry,
-): SideConversationState {
-  return marker?.state ?? registration.state;
-}
-
-/** Project one row into the bounded wire summary; never exposes private registry facts. */
-function projectSideConversationSummary(params: {
-  cfg: OpenClawConfig;
-  agentId: string;
-  parentSessionKey: string;
-  sessionKey: string;
-  intentId: string;
-  entry: InternalSessionEntry | undefined;
-  registration: SideConversationRegistryEntry;
-}): SideConversationSummary {
-  const marker = params.entry?.sideConversation;
-  const selected = params.entry
-    ? resolveSessionModelRef(params.cfg, params.entry, params.agentId)
-    : undefined;
-  const snapshot = params.registration.snapshot;
-  const closedAt = marker?.closedAt ?? params.registration.closedAt;
-  const title = params.entry?.label ?? params.entry?.displayName;
-  return {
-    sessionKey: params.sessionKey,
-    ...(params.entry?.sessionId ? { sessionId: params.entry.sessionId } : {}),
-    parentSessionKey: params.parentSessionKey,
-    ...(marker?.parentSessionId ? { parentSessionId: marker.parentSessionId } : {}),
-    intentId: marker?.intentId ?? params.intentId,
-    ordinal: marker?.ordinal ?? params.registration.ordinal,
-    state: resolveSideConversationState(marker, params.registration),
-    createdAt: marker?.createdAt ?? params.registration.createdAt,
-    updatedAt: marker?.updatedAt ?? params.registration.updatedAt,
-    ...(closedAt !== undefined ? { closedAt } : {}),
-    ...(title ? { title } : {}),
-    ...(selected?.model ? { modelProvider: selected.provider, model: selected.model } : {}),
-    ...(snapshot
-      ? {
-          snapshot: {
-            sourceSessionKey: snapshot.sourceSessionKey,
-            sourceSessionId: snapshot.sourceSessionId,
-            ...(snapshot.sourceLeafEntryId !== undefined
-              ? { sourceLeafEntryId: snapshot.sourceLeafEntryId }
-              : {}),
-            projectionVersion: snapshot.projectionVersion,
-            retainedMessages: snapshot.retainedMessages,
-            droppedIncompleteToolRounds: snapshot.droppedIncompleteToolRounds,
-            droppedIncompleteAssistantMessages: snapshot.droppedIncompleteAssistantMessages,
-            droppedOrphanToolResults: snapshot.droppedOrphanToolResults,
-            droppedContextExcludedMessages: snapshot.droppedContextExcludedMessages,
-            droppedNonMessageEntries: snapshot.droppedNonMessageEntries,
-            droppedCustomMessages: snapshot.droppedCustomMessages,
-          },
-        }
-      : {}),
-  };
-}
-
-function findRegistrationBySessionKey(
-  parentEntry: InternalSessionEntry,
-  sessionKey: string,
-): [string, SideConversationRegistryEntry] | undefined {
-  return listSideConversationRegistrations(parentEntry).find(
-    ([, registration]) => registration.sessionKey === sessionKey,
-  );
-}
-
 export async function createPersistentSideConversation(params: {
   cfg: OpenClawConfig;
   context: GatewayRequestContext;
@@ -207,64 +142,56 @@ export async function createPersistentSideConversation(params: {
     parentSessionKey: target.canonicalKey,
     intentId: params.intentId,
   });
+  const conflictError = (sessionKey: string) =>
+    errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      `Session key ${sessionKey} is already used by another session; choose a new side-conversation intent.`,
+    );
+
+  const reconcile = async (
+    child: InternalSessionEntry,
+    sessionKey: string,
+    snapshot?: SideConversationSnapshotFacts,
+  ) =>
+    await reconcileCommittedSideConversation({
+      cfg: params.cfg,
+      agentId: target.agentId,
+      child,
+      intentId: params.intentId,
+      ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
+      parentSessionKey: target.canonicalKey,
+      sessionKey,
+      storePath: target.storePath,
+      ...(snapshot ? { snapshot } : {}),
+    });
+
   const existingRegistration = findRegistrationBySessionKey(target.entry, deterministicKey)?.[1];
   const existingChild = readSideConversationChildEntry({
     agentId: target.agentId,
     storePath: target.storePath,
     sessionKey: existingRegistration?.sessionKey ?? deterministicKey,
   });
-  const existingMarker = existingChild?.sideConversation;
-  const rawIntentMatches =
-    existingMarker?.intentId === params.intentId &&
-    existingMarker.parentSessionKey === target.canonicalKey;
-  if (rawIntentMatches && existingChild && existingMarker) {
-    // Retry after a restart (or a lost registry write): the deterministic child
-    // key is the durable commit point, so reuse it and heal the registration.
-    await reserveSideConversationIntent({
+  const matchesExisting = matchesSideConversationChild({
+    entry: existingChild,
+    intentId: params.intentId,
+    ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
+    parentSessionKey: target.canonicalKey,
+  });
+  if (matchesExisting && existingChild) {
+    return await reconcile(existingChild, existingRegistration?.sessionKey ?? deterministicKey);
+  }
+  if (existingChild) {
+    // A non-matching row (ordinary session or another intent's child) preclaimed
+    // the deterministic key. Never register or list it as a side conversation.
+    await clearIntentReservation({
       agentId: target.agentId,
       cfg: params.cfg,
       intentId: params.intentId,
-      now: Date.now(),
-      ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
       parentSessionKey: target.canonicalKey,
-      sessionKey: deterministicKey,
     });
-    await finalizeSideConversationIntent({
-      agentId: target.agentId,
-      cfg: params.cfg,
-      intentId: params.intentId,
-      now: Date.now(),
-      parentSessionKey: target.canonicalKey,
-      ...(existingChild.sessionId ? { sessionId: existingChild.sessionId } : {}),
-    });
-    const registration = findRegistrationBySessionKey(
-      loadSessionEntry({
-        agentId: target.agentId,
-        sessionKey: target.canonicalKey,
-        storePath: target.storePath,
-      }) ?? target.entry,
-      deterministicKey,
-    )?.[1] ?? {
-      sessionKey: deterministicKey,
-      ordinal: existingMarker.ordinal,
-      state: existingMarker.state,
-      createdAt: existingMarker.createdAt,
-      updatedAt: existingMarker.updatedAt,
-    };
     return {
-      ok: true,
-      value: {
-        created: false,
-        conversation: projectSideConversationSummary({
-          cfg: params.cfg,
-          agentId: target.agentId,
-          parentSessionKey: target.canonicalKey,
-          sessionKey: deterministicKey,
-          intentId: params.intentId,
-          entry: existingChild,
-          registration,
-        }),
-      },
+      ok: false,
+      error: conflictError(existingRegistration?.sessionKey ?? deterministicKey),
     };
   }
 
@@ -300,25 +227,37 @@ export async function createPersistentSideConversation(params: {
       storePath: target.storePath,
       sessionKey: childKey,
     });
-    if (child?.sideConversation?.intentId === params.intentId) {
-      return {
-        ok: true,
-        value: {
-          created: false,
-          conversation: projectSideConversationSummary({
-            cfg: params.cfg,
-            agentId: target.agentId,
-            parentSessionKey: target.canonicalKey,
-            sessionKey: childKey,
-            intentId: params.intentId,
-            entry: child,
-            registration: reservation.existing,
-          }),
-        },
-      };
+    if (
+      matchesSideConversationChild({
+        entry: child,
+        intentId: params.intentId,
+        ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
+        parentSessionKey: target.canonicalKey,
+      }) &&
+      child
+    ) {
+      return await reconcile(child, childKey);
     }
+    if (child) {
+      await clearIntentReservation({
+        agentId: target.agentId,
+        cfg: params.cfg,
+        intentId: params.intentId,
+        parentSessionKey: target.canonicalKey,
+      });
+      return { ok: false, error: conflictError(childKey) };
+    }
+    // A reservation without a child row is a crash window; creating under the
+    // same key and ordinal is the recovery path.
   }
 
+  // Freeze the parent's effective selection before creating the child so a later
+  // config default change cannot move it.
+  const frozenParentSelection = resolveFrozenParentSessionSelection({
+    cfg: params.cfg,
+    agentId: target.agentId,
+    parentEntry: target.entry,
+  });
   // Copy sharing only when the current config still allows it; otherwise the
   // child takes the ordinary creation default instead of failing creation.
   const parentVisibility = target.entry.visibility;
@@ -340,6 +279,7 @@ export async function createPersistentSideConversation(params: {
       requesterSessionKey: target.canonicalKey,
       assertCurrent: params.assertCurrent,
     },
+    frozenParentSelection,
     ...(creation ? { creation } : {}),
     commandSource: "side-conversation",
     ...(params.client?.connect
@@ -360,26 +300,48 @@ export async function createPersistentSideConversation(params: {
     },
   });
   if (!created.ok) {
-    // A failed create must not leave a phantom reservation; the next retry
-    // reserves the same ordinal and key again.
+    // A concurrent creator may have committed the matching child after our
+    // reservation. Reconcile it; otherwise clear the reservation so a preclaimed
+    // or failed key never poisons the intent.
+    const committed = readSideConversationChildEntry({
+      agentId: target.agentId,
+      storePath: target.storePath,
+      sessionKey: childKey,
+    });
     if (
-      !readSideConversationChildEntry({
-        agentId: target.agentId,
-        storePath: target.storePath,
-        sessionKey: childKey,
-      })
-    ) {
-      await removeSideConversationIntent({
-        agentId: target.agentId,
-        cfg: params.cfg,
+      matchesSideConversationChild({
+        entry: committed,
         intentId: params.intentId,
+        ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
         parentSessionKey: target.canonicalKey,
-      }).catch((error: unknown) => {
-        log.warn(`side conversation reservation cleanup failed: ${formatErrorMessage(error)}`);
-      });
+      }) &&
+      committed
+    ) {
+      return await reconcile(committed, childKey);
     }
-    return { ok: false, error: created.error };
+    await clearIntentReservation({
+      agentId: target.agentId,
+      cfg: params.cfg,
+      intentId: params.intentId,
+      parentSessionKey: target.canonicalKey,
+    });
+    return committed
+      ? { ok: false, error: conflictError(childKey) }
+      : { ok: false, error: created.error };
   }
+  const snapshot =
+    created.sideConversationSnapshot ??
+    readSideConversationSnapshotFactsFromChild({
+      agentId: target.agentId,
+      entry:
+        readSideConversationChildEntry({
+          agentId: target.agentId,
+          storePath: target.storePath,
+          sessionKey: childKey,
+        }) ?? (created.entry as InternalSessionEntry),
+      sessionKey: childKey,
+      storePath: target.storePath,
+    });
   const finalized = await finalizeSideConversationIntent({
     agentId: target.agentId,
     cfg: params.cfg,
@@ -387,7 +349,7 @@ export async function createPersistentSideConversation(params: {
     now: Date.now(),
     parentSessionKey: target.canonicalKey,
     ...(created.entry.sessionId ? { sessionId: created.entry.sessionId } : {}),
-    ...(created.sideConversationSnapshot ? { snapshot: created.sideConversationSnapshot } : {}),
+    ...(snapshot ? { snapshot } : {}),
   });
   if (!finalized) {
     log.warn(`side conversation registration finalized after the parent row moved: ${childKey}`);
@@ -413,9 +375,7 @@ export async function createPersistentSideConversation(params: {
           state: committed.sideConversation.state,
           createdAt: committed.sideConversation.createdAt,
           updatedAt: committed.sideConversation.updatedAt,
-          ...(created.sideConversationSnapshot
-            ? { snapshot: created.sideConversationSnapshot }
-            : {}),
+          ...(snapshot ? { snapshot } : {}),
         }
       : undefined);
   if (!registration) {
@@ -471,12 +431,19 @@ export async function listPersistentSideConversations(params: {
       sessionKey: registration.sessionKey,
     });
     if (
-      child?.sideConversation &&
-      child.sideConversation.parentSessionKey !== target.canonicalKey
+      !matchesSideConversationChild({
+        entry: child,
+        intentId,
+        ...(target.entry.sessionId ? { parentSessionId: target.entry.sessionId } : {}),
+        parentSessionKey: target.canonicalKey,
+      }) ||
+      !child
     ) {
+      // A reservation whose row was replaced by an ordinary session (or another
+      // generation's child) is never presented as a side conversation.
       continue;
     }
-    const state = resolveSideConversationState(child?.sideConversation, registration);
+    const state = resolveSideConversationState(child.sideConversation, registration);
     if (params.state && state !== params.state) {
       continue;
     }
