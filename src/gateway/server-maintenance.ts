@@ -46,6 +46,11 @@ import {
   removeChatAbortControllerEntry,
   type RestartRecoveryCandidate,
 } from "./chat-abort.js";
+import {
+  runChatAttachmentUploadMaintenance,
+  shutdownChatAttachmentUploads,
+  startChatAttachmentUploadMaintenance,
+} from "./chat-attachment-upload-store.js";
 import type { QueuedChatTurnMap } from "./chat-queued-turns.js";
 import { pruneStaleControlPlaneBuckets } from "./control-plane-rate-limit.js";
 import type { HealthSummary } from "./health/types.js";
@@ -526,6 +531,8 @@ export function startGatewayMaintenanceTimers(params: {
       return;
     }
     mediaCleanupStarted = true;
+    // A new maintenance generation re-opens admission its predecessor fenced at stop.
+    startChatAttachmentUploadMaintenance();
     // A stuck prior generation defers only media cleanup, never Gateway readiness.
     void waitForMediaCleanupDrainsToSettle().then(() => {
       if (mediaScheduler.signal.aborted) {
@@ -553,22 +560,18 @@ export function startGatewayMaintenanceTimers(params: {
       });
       // Direct attachment uploads keep their own staging directory; the first run
       // also clears staging files a previous process left behind.
-      scheduleMedia("chat-attachment-uploads", async () => {
-        const { runChatAttachmentUploadMaintenance } =
-          await import("./chat-attachment-upload-store.js");
-        await runChatAttachmentUploadMaintenance().catch((err: unknown) => {
+      scheduleMedia("chat-attachment-uploads", () =>
+        runChatAttachmentUploadMaintenance().catch((err: unknown) => {
           params.logHealth.error(`attachment upload cleanup failed: ${formatError(err)}`);
-        });
-      });
+        }),
+      );
     });
   };
   let stopMediaCleanupPromise: Promise<MediaCleanupStopResult> | undefined;
   const stopMediaCleanup = () => {
     stopMediaCleanupPromise ??= (async () => {
       registerMediaCleanupDrain(mediaScheduler.stop());
-      registerMediaCleanupDrain(
-        (await import("./chat-attachment-upload-store.js")).shutdownChatAttachmentUploads(),
-      );
+      registerMediaCleanupDrain(shutdownChatAttachmentUploads());
       return await waitForMediaCleanupDrains({
         timeoutMs: MEDIA_CLEANUP_STOP_TIMEOUT_MS,
         onTimeout: () => {

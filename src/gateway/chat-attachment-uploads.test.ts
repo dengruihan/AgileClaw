@@ -15,6 +15,8 @@ import {
   consumeStagedChatAttachment,
   discardChatAttachmentUploads,
   resetChatAttachmentUploadsForTests,
+  runStagedChatAttachmentMutation,
+  shutdownChatAttachmentUploads,
   writeStagedChatAttachmentPart,
 } from "./chat-attachment-upload-store.js";
 import { handleChatAttachmentUploadHttpRequest } from "./chat-attachment-uploads.js";
@@ -423,4 +425,111 @@ describe("direct chat attachment uploads", () => {
       await fs.rm(ref.path, { force: true });
     }
   });
+
+  it("counts staged reservations against the unsent-byte ceiling", async () => {
+    const beginGiB = () =>
+      beginStagedChatAttachment({
+        scope: PARSE_SCOPE,
+        declaredBytes: GIB,
+        maxBytes: GIB,
+      });
+    // Four reservations fill the 4 GiB ceiling; the fifth must be refused even
+    // though only four staging files exist and nothing was written yet.
+    for (let index = 0; index < 4; index += 1) {
+      await expect(beginGiB()).resolves.toMatchObject({ partBytes: expect.any(Number) });
+    }
+    await expect(beginGiB()).rejects.toMatchObject({ code: "capacity" });
+
+    // Releasing the reservations admits the same begin again.
+    await discardChatAttachmentUploads();
+    await expect(beginGiB()).resolves.toBeTruthy();
+    await discardChatAttachmentUploads();
+  });
+
+  it("keeps the exact unsent boundary across the staged-to-committed transition", async () => {
+    for (let index = 0; index < 3; index += 1) {
+      await beginStagedChatAttachment({
+        scope: PARSE_SCOPE,
+        declaredBytes: GIB,
+        maxBytes: GIB,
+      });
+    }
+    await stageUpload(Buffer.alloc(100, 1), "application/pdf", "tiny.pdf");
+    // The committed 100 bytes still count: only the remainder is admissible.
+    const remaining = 4 * GIB - 3 * GIB - 100;
+    await expect(
+      beginStagedChatAttachment({
+        scope: PARSE_SCOPE,
+        declaredBytes: remaining,
+        maxBytes: remaining,
+      }),
+    ).resolves.toBeTruthy();
+    await expect(
+      beginStagedChatAttachment({
+        scope: PARSE_SCOPE,
+        declaredBytes: remaining + 1,
+        maxBytes: remaining + 1,
+      }),
+    ).rejects.toMatchObject({ code: "capacity" });
+  });
+
+  it("fences new admission and drains in-flight mutations before the final discard", async () => {
+    const inboundBefore = await inboundFiles();
+    // One staged-only upload and one committed-but-unsent upload must both go.
+    const staged = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: 4,
+      maxBytes: 1024,
+      fileName: "staged.bin",
+      mimeType: "application/octet-stream",
+    });
+    await stageUpload(Buffer.from("pending"), "application/pdf", "pending.pdf");
+    expect(await inboundFiles()).toHaveLength(inboundBefore.length + 1);
+    expect(await stagingFiles()).toHaveLength(1);
+
+    let releaseMutation!: () => void;
+    const mutationGate = new Promise<void>((resolve) => {
+      releaseMutation = resolve;
+    });
+    let mutationSettled = false;
+    const mutation = runStagedChatAttachmentMutation("probe", async () => {
+      await mutationGate;
+      mutationSettled = true;
+    });
+    const shutdown = shutdownChatAttachmentUploads();
+    await Promise.resolve();
+
+    // Admission is fenced immediately, while the in-flight mutation is joined.
+    await expect(
+      beginStagedChatAttachment({ scope: PARSE_SCOPE, declaredBytes: 4, maxBytes: 4 }),
+    ).rejects.toMatchObject({ code: "shutting-down" });
+    await expect(
+      writeStagedChatAttachmentPart({
+        uploadId: staged.uploadId,
+        offset: 0,
+        stream: (async function* () {
+          yield Buffer.alloc(1);
+        })(),
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).rejects.toMatchObject({ code: "shutting-down" });
+    await expect(
+      commitStagedChatAttachment({ uploadId: staged.uploadId, scope: PARSE_SCOPE, maxBytes: 1024 }),
+    ).rejects.toMatchObject({ code: "shutting-down" });
+    expect(mutationSettled).toBe(false);
+
+    releaseMutation();
+    await mutation;
+    await shutdown;
+    expect(mutationSettled).toBe(true);
+    // Final discard removed the published media and every staging file.
+    expect(await inboundFiles()).toEqual(inboundBefore);
+    expect(await stagingFiles()).toEqual([]);
+  });
 });
+
+async function inboundFiles(): Promise<string[]> {
+  const { getMediaDir } = await import("../media/store.js");
+  return (await fs.readdir(path.join(getMediaDir(), "inbound")).catch(() => [])).toSorted();
+}

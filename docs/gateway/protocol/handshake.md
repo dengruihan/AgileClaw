@@ -125,8 +125,10 @@ Validating before send:
    authenticated owner plus the `sessionKey`/`agentId` it was admitted for; the
    same scope must be repeated on every part and on commit. Repeating a commit
    for the same ID replays its result, while consuming it for a send stays
-   single-use. At most 12 unsent uploads and 4 GiB of unsent published bytes are
-   retained per Gateway; beyond that begin returns an explicit capacity error.
+   single-use. At most 12 unsent uploads and 4 GiB of unsent bytes are retained
+   per Gateway, counting in-progress staging reservations as well as published
+   media; beyond that begin returns an explicit capacity error. Gateway shutdown
+   fences this route and discards staging plus unsent media.
 3. A sandboxed session streams direct uploads up to `maxBytes` into the
    sandbox workspace. Inline base64 attachments keep the shared 50 MiB
    task-input allowance, and a remote/SSH sandbox — which stages whole buffers

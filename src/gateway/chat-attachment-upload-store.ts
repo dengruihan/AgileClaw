@@ -15,6 +15,7 @@ import path from "node:path";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { saveMediaStream, type SavedMedia } from "../media/store.js";
 import { KeyedAsyncQueue } from "../plugin-sdk/keyed-async-queue.js";
+import { settlesWithin } from "../shared/settle-within.js";
 
 /** Per-part body cap; the client sends parts so no single request runs for minutes. */
 export const CHAT_ATTACHMENT_UPLOAD_PART_BYTES = 16 * 1024 * 1024;
@@ -26,8 +27,10 @@ const COMMITTED_TTL_MS = 6 * 60 * 60 * 1000;
 const MAX_STAGED_UPLOADS = 8;
 /** Caps committed-but-unsent uploads, which keep their published media. */
 const MAX_COMMITTED_UPLOADS = 12;
-/** Caps the published bytes waiting for a send; keeps retention a named bound. */
-const MAX_COMMITTED_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
+/** Caps unsent bytes (staged reservations plus published media) for this owner. */
+const MAX_UNSENT_BYTES = 4 * 1024 * 1024 * 1024;
+/** Bounds how long shutdown waits for in-flight upload mutations to settle. */
+const MUTATION_DRAIN_TIMEOUT_MS = 5_000;
 
 export const CHAT_ATTACHMENT_UPLOAD_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -41,7 +44,8 @@ export class ChatAttachmentUploadError extends Error {
       | "too-large"
       | "part-too-large"
       | "scope-mismatch"
-      | "capacity",
+      | "capacity"
+      | "shutting-down",
     message: string,
     readonly receivedBytes?: number,
   ) {
@@ -79,6 +83,9 @@ type CommittedUpload = ChatAttachmentUploadScope & {
 const staged = new Map<string, StagedUpload>();
 const committed = new Map<string, CommittedUpload>();
 const uploadQueue = new KeyedAsyncQueue();
+const activeMutations = new Set<Promise<unknown>>();
+/** Shutdown fence: set before the final discard so no new upload can be admitted. */
+let closing = false;
 let stagingRootPromise: Promise<string> | undefined;
 let stagingRootOverride: (() => Promise<string>) | undefined;
 
@@ -142,6 +149,28 @@ function committedBytes(): number {
   return total;
 }
 
+/**
+ * Bytes this owner has reserved but not yet sent: published media plus the
+ * declared size of every in-progress staging file. Counted together so
+ * concurrent begins cannot exceed the unsent-byte ceiling.
+ */
+function reservedBytes(): number {
+  let total = committedBytes();
+  for (const entry of staged.values()) {
+    total += entry.declaredBytes;
+  }
+  return total;
+}
+
+function assertUploadsOpen(): void {
+  if (closing) {
+    throw new ChatAttachmentUploadError(
+      "shutting-down",
+      "attachment uploads are closing; retry after the Gateway restarts",
+    );
+  }
+}
+
 async function sweepExpired(now = Date.now()): Promise<void> {
   for (const [id, entry] of staged) {
     if (now - entry.createdAtMs > STAGING_TTL_MS) {
@@ -190,6 +219,11 @@ export function assertChatAttachmentUploadId(uploadId: string | undefined): stri
   return id;
 }
 
+/** Re-opens admission when a new maintenance generation starts. */
+export function startChatAttachmentUploadMaintenance(): void {
+  closing = false;
+}
+
 /**
  * Periodic maintenance: expires abandoned staging and unsent media, and clears
  * staging files a previous process left behind. The Gateway maintenance owner
@@ -208,6 +242,7 @@ export async function beginStagedChatAttachment(params: {
   mimeType?: string;
   partBytes?: number;
 }): Promise<{ uploadId: string; partBytes: number }> {
+  assertUploadsOpen();
   await sweepExpired();
   if (staged.size >= MAX_STAGED_UPLOADS) {
     throw new ChatAttachmentUploadError(
@@ -226,7 +261,7 @@ export async function beginStagedChatAttachment(params: {
   }
   if (
     committed.size + staged.size >= MAX_COMMITTED_UPLOADS ||
-    committedBytes() + params.declaredBytes > MAX_COMMITTED_TOTAL_BYTES
+    reservedBytes() + params.declaredBytes > MAX_UNSENT_BYTES
   ) {
     throw new ChatAttachmentUploadError(
       "capacity",
@@ -258,6 +293,7 @@ export async function writeStagedChatAttachmentPart(params: {
   scope: ChatAttachmentUploadScope;
   maxBytes: number;
 }): Promise<{ uploadId: string; receivedBytes: number }> {
+  assertUploadsOpen();
   await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
   const entry = staged.get(id);
@@ -327,6 +363,7 @@ export async function commitStagedChatAttachment(params: {
   maxBytes: number;
   assertCommitAllowed?: () => void;
 }): Promise<{ uploadId: string; sizeBytes: number; mimeType: string; fileName?: string }> {
+  assertUploadsOpen();
   await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
   const replay = committed.get(id);
@@ -376,6 +413,15 @@ export async function commitStagedChatAttachment(params: {
       "offset-mismatch",
       `attachment upload size does not match its declaration (${media.size}/${entry.declaredBytes} bytes)`,
       entry.receivedBytes,
+    );
+  }
+  if (closing) {
+    // Shutdown may have discarded the maps while this commit was publishing.
+    await fs.rm(media.path, { force: true }).catch(() => undefined);
+    await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
+    throw new ChatAttachmentUploadError(
+      "shutting-down",
+      "attachment uploads are closing; retry after the Gateway restarts",
     );
   }
   staged.delete(id);
@@ -448,10 +494,15 @@ export async function discardChatAttachmentUploads(): Promise<void> {
 }
 
 /**
- * Shutdown cleanup: stops accepting new references and removes staging plus
- * unsent committed media. The Gateway maintenance owner awaits this.
+ * Shutdown cleanup: fences new admission, joins in-flight mutations so none can
+ * publish after the discard, then removes staging plus unsent committed media.
+ * The Gateway maintenance owner awaits this before the HTTP listener closes.
  */
 export async function shutdownChatAttachmentUploads(): Promise<void> {
+  closing = true;
+  // Bounded join: a stalled transport must not hold shutdown open. Any commit
+  // that lands after this discard re-checks the fence and deletes its media.
+  await settlesWithin(Promise.allSettled(activeMutations), MUTATION_DRAIN_TIMEOUT_MS);
   await discardChatAttachmentUploads();
   stagingRootPromise = undefined;
 }
@@ -463,12 +514,22 @@ export function resetChatAttachmentUploadsForTests(options?: {
   committed.clear();
   stagingRootOverride = options?.stagingRoot;
   stagingRootPromise = undefined;
+  closing = false;
+  activeMutations.clear();
 }
 
-/** Serializes part and commit mutations per upload. */
+/** Serializes part and commit mutations per upload, and tracks them for shutdown. */
 export function runStagedChatAttachmentMutation<T>(
-  uploadId: string,
+  key: string,
   task: () => Promise<T>,
 ): Promise<T> {
-  return uploadQueue.enqueue(uploadId, task);
+  const run = uploadQueue.enqueue(key, task);
+  activeMutations.add(run);
+  void run
+    .then(
+      () => undefined,
+      () => undefined,
+    )
+    .finally(() => activeMutations.delete(run));
+  return run;
 }

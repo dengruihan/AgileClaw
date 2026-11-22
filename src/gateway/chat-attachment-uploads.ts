@@ -29,6 +29,7 @@ const ERROR_STATUS: Record<ChatAttachmentUploadError["code"], number> = {
   "part-too-large": 413,
   "scope-mismatch": 403,
   capacity: 503,
+  "shutting-down": 503,
 };
 
 function readQuery(url: URL, key: string): string | undefined {
