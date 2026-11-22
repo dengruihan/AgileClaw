@@ -28,6 +28,7 @@ import {
   MAX_SESSION_PARTICIPANTS,
 } from "../config/sessions/session-entry-provenance.js";
 import { isPinnableSessionEntry } from "../config/sessions/session-pin-policy.js";
+import { resolveSideConversationCount } from "../config/sessions/side-conversation-registry.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   buildProjectedAgentRunIndex,
@@ -575,6 +576,9 @@ export function materializeSessionRow(input: ReturnType<typeof readSessionRowInp
     parentSessionKey: entry?.parentSessionKey,
     parentSessionId: entry?.parentSessionId,
     childSessions: undefined,
+    // Side-conversation children stay hidden; the parent exposes only the count.
+    sideConversation: entry?.sideConversation,
+    sideConversationCount: entry ? resolveSideConversationCount(entry) : undefined,
     responseUsage: entry?.responseUsage,
     effectiveResponseUsage: resolveEffectiveResponseUsage(
       entry?.responseUsage,

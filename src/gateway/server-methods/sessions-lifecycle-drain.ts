@@ -79,8 +79,19 @@ export class SessionLifecycleWorkspaceRecoveryError extends Error {
   }
 }
 
+type SessionWorkFactsParams = {
+  context: GatewayRequestContext;
+  storePath: string;
+  sessionKeys: string[];
+  sessionId?: string;
+  agentId: string;
+  sessionKey: string;
+  defaultAgentId?: string;
+  lifecycleIdentities: string[];
+};
+
 function hasAuthoritativeSessionWork(
-  params: SessionLifecycleParams,
+  params: SessionWorkFactsParams,
   workerDrain: WorkerInferenceSessionDrain | undefined,
   terminalDrain: AgentTerminalSessionDrain | undefined,
   queueTarget: SessionLifecycleQueueTarget,
@@ -102,9 +113,45 @@ function hasAuthoritativeSessionWork(
       sessionId &&
       params.context.workerSessionPlacementService?.getMany([sessionId]).get(sessionId)?.turnClaim,
     ) ||
+    Boolean(
+      sessionId &&
+      getWorkerInferenceSessionControl(params.context.workerEnvironmentService)?.hasSession(
+        sessionId,
+      ),
+    ) ||
+    Boolean(
+      sessionId &&
+      params.context.terminalSessions?.hasAgentSessionWork({
+        kind: "agent",
+        agentSessionKey: params.sessionKey,
+        agentSessionId: sessionId,
+        agentId: params.agentId,
+      }),
+    ) ||
     workerDrain?.hasWork() === true ||
     terminalDrain?.hasWork() === true
   );
+}
+
+export type SessionLifecycleActivityParams = SessionWorkFactsParams & {
+  workerDrain?: WorkerInferenceSessionDrain;
+  terminalDrain?: AgentTerminalSessionDrain;
+};
+
+/**
+ * Read-only authoritative liveness facts for one session incarnation.
+ *
+ * Shared by the drain owner and parent-fence child guards so preflight and every
+ * durable write see worker placement claims, worker inference, reply operations,
+ * queued lifecycle work, and abort owners without acquiring the store mutex.
+ */
+export function resolveSessionLifecycleActivity(params: SessionLifecycleActivityParams): boolean {
+  return hasAuthoritativeSessionWork(params, params.workerDrain, params.terminalDrain, {
+    keys: params.sessionKeys,
+    agentId: params.agentId,
+    sessionKey: params.sessionKey,
+    sessionId: params.sessionId,
+  });
 }
 
 /** Drain outside mutation locks; retain the closure until the final mutation owns ingress. */

@@ -44,6 +44,7 @@ import { isSyntheticGatewayCaller } from "./gateway-personal-caller.js";
 import { emitSessionsChanged } from "./session-change-event.js";
 import { readGatewayRequestMutationAuthority } from "./session-mutation-guards.js";
 import type { SessionPatchTargetIdentity } from "./session-unread-ack.js";
+import { projectArchivePartialResult } from "./sessions-patch-archive.js";
 import {
   beginSessionPatchRequestDeviceScope,
   commitSessionPatchDeviceScope,
@@ -238,17 +239,20 @@ function createSessionPatchHandler(
       assertCurrent();
       respond(
         true,
-        projectSessionPatchResult({
-          ...prepared,
-          cfg: executed.cfg,
-          preparedAcpMeta: acpMeta ?? null,
-          entry: {
-            ...patchedEntry,
-            fastMode: prepareSessionFastModePresentation(client)(patchedEntry.fastMode),
-          },
-          modelCatalog: catalog?.entries,
-          modelCatalogRouteVariants: catalog?.routeVariants,
-        }),
+        {
+          ...projectSessionPatchResult({
+            ...prepared,
+            cfg: executed.cfg,
+            preparedAcpMeta: acpMeta ?? null,
+            entry: {
+              ...patchedEntry,
+              fastMode: prepareSessionFastModePresentation(client)(patchedEntry.fastMode),
+            },
+            modelCatalog: catalog?.entries,
+            modelCatalogRouteVariants: catalog?.routeVariants,
+          }),
+          ...projectArchivePartialResult(outcome.entry),
+        },
         undefined,
       );
     } finally {

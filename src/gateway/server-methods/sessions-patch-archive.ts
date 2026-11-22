@@ -3,14 +3,18 @@ import {
   ErrorCodes,
   errorShape,
   type ErrorShape,
+  type PreservedSessionWorktree,
   type SessionCreatedActor,
   type SessionsPatchParams,
+  type SideConversationRemainder,
 } from "../../../packages/gateway-protocol/src/index.js";
 import type { ModelCatalogSnapshot } from "../../agents/model-catalog.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { SessionAccessScope } from "../../config/sessions/session-accessor.js";
+import { loadSessionEntry as loadInternalSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { resolveMissingAgentHarnessSessionError } from "../../sessions/agent-harness-session-key.js";
 import {
   SessionWorktreeLifecycleError,
@@ -46,15 +50,64 @@ import {
   resolveSessionWorkerPlacementPatchError,
   sessionLog,
 } from "./sessions-shared.js";
+import {
+  archiveSideConversationChildrenInParentFence,
+  closeSideConversationChildAdmissions,
+  readRegisteredSideConversationChildren,
+  resolveSideConversationArchiveBlocker,
+} from "./side-conversations-fence.js";
 import type { GatewayRequestContext } from "./types.js";
+
+type ArchivePartialRecord = {
+  archivedKeys: string[];
+  remaining: SideConversationRemainder[];
+  preservedWorktrees: PreservedSessionWorktree[];
+};
+
+const archivePartialByCommittedEntry = new WeakMap<object, ArchivePartialRecord>();
+
+/**
+ * Explicit partial-archive projection for the exact committed parent entry.
+ *
+ * The parent row is committed before children are processed, so the response
+ * reports what actually happened instead of presenting a post-commit failure or
+ * a log-only success.
+ */
+export function projectArchivePartialResult(entry: object) {
+  const record = archivePartialByCommittedEntry.get(entry);
+  if (!record) {
+    return {};
+  }
+  return {
+    parentArchived: true as const,
+    applied: true as const,
+    archivedKeys: record.archivedKeys,
+    remainingSideConversations: record.remaining,
+    partial: record.remaining.length > 0,
+    ...(record.preservedWorktrees.length > 0
+      ? { preservedWorktrees: record.preservedWorktrees }
+      : {}),
+  };
+}
 
 export type SessionPatchArchivePreparation = {
   canonicalKey: string;
   drain: SessionLifecycleDrain;
   entry?: SessionEntry;
+  /** Child ingress closed for the parent action; released by the engine's cleanup. */
+  childAdmissionReleases?: Array<() => void>;
 };
 
 export function releaseSessionPatchArchive(preparation?: SessionPatchArchivePreparation): void {
+  try {
+    for (const release of preparation?.childAdmissionReleases ?? []) {
+      release();
+    }
+  } catch (error) {
+    sessionLog.warn(
+      `sessions.patch: child admission release failed for ${preparation?.canonicalKey}: ${formatErrorMessage(error)}`,
+    );
+  }
   try {
     preparation?.drain.release();
   } catch (error) {
@@ -256,11 +309,49 @@ export async function prepareSessionPatchArchive(params: {
         Boolean(identity),
       ),
     });
-    return ok({
-      canonicalKey: freshCanonicalKey,
-      drain,
-      ...(fresh.entry ? { entry: fresh.entry } : {}),
-    });
+    let childAdmissionReleases: Array<() => void> = [];
+    try {
+      const parentForChildren = loadInternalSessionEntry({
+        agentId: freshResolved.agentId,
+        sessionKey: freshCanonicalKey,
+        storePath: target.storePath,
+      });
+      const children = parentForChildren
+        ? readRegisteredSideConversationChildren({
+            agentId: freshResolved.agentId,
+            parentEntry: parentForChildren,
+            parentSessionKey: freshCanonicalKey,
+            storePath: target.storePath,
+          })
+        : [];
+      // closeSideConversationChildAdmissions rolls back its own partial closures;
+      // this owner still releases the parent drain on any later failure.
+      childAdmissionReleases = closeSideConversationChildAdmissions({
+        children,
+        storePath: target.storePath,
+      });
+      return ok({
+        canonicalKey: freshCanonicalKey,
+        drain,
+        ...(fresh.entry ? { entry: fresh.entry } : {}),
+        ...(childAdmissionReleases.length > 0 ? { childAdmissionReleases } : {}),
+      });
+    } catch (error) {
+      for (const release of childAdmissionReleases) {
+        release();
+      }
+      drain.release();
+      sessionLog.warn(
+        `sessions.patch: archive preparation cleanup failed for ${freshCanonicalKey}: ${formatErrorMessage(error)}`,
+      );
+      return err(
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Session ${target.key} could not prepare its side conversations for archive. Retry.`,
+          { retryable: true },
+        ),
+      );
+    }
   } catch (error) {
     if (error instanceof SessionLifecycleWorkspaceRecoveryError) {
       return err(error.error);
@@ -366,24 +457,90 @@ export async function prepareSessionPatchArchiveTransition(params: {
       },
     });
   // Carry the exact restored binding through the later metadata commit.
-  const assertCommitAllowed = params.archived ? commitGuard : await synchronize(params.entry);
-  return {
-    assertCommitAllowed,
-    afterCommit:
-      params.archived && params.entry.worktree && !placement.cleanupPending
-        ? async (entry) => {
-            try {
-              // The durable archive row hands failed cleanup to GC. Keep the lifecycle
-              // fence and compare the exact committed projection, never a fresh successor.
-              assertWorktreeMutationAllowed =
-                prepareSessionWorkerPlacementMutationCheck(placementTarget);
-              await synchronize(entry);
-            } catch (error) {
-              sessionLog.warn(
-                `sessions.patch: archived worktree cleanup deferred for ${params.scope.sessionKey}: ${formatErrorMessage(error)}`,
-              );
-            }
-          }
-        : undefined,
+  const sideParentScope = {
+    agentId:
+      params.scope.agentId ?? resolveAgentIdFromSessionKey(params.scope.sessionKey) ?? "main",
+    sessionKey: params.scope.sessionKey,
+    storePath: params.scope.storePath,
   };
+  const sideStorePath = params.scope.storePath;
+  const sideParentEntry =
+    params.archived && sideStorePath
+      ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
+      : undefined;
+  const sideChildren = sideParentEntry
+    ? readRegisteredSideConversationChildren({
+        agentId: sideParentScope.agentId,
+        parentEntry: sideParentEntry,
+        parentSessionKey: params.scope.sessionKey,
+        storePath: sideStorePath!,
+      })
+    : [];
+  const assertNoActiveSideChildren = () => {
+    const blocker = resolveSideConversationArchiveBlocker({
+      agentId: sideParentScope.agentId,
+      context: params.context,
+      parentEntry: sideParentEntry!,
+      parentSessionKey: params.scope.sessionKey,
+      storePath: sideStorePath!,
+    });
+    if (blocker) {
+      // Archive refuses while a hidden child still owns work; closing it first
+      // is the only path that keeps the child's transcript untouched.
+      throw new SessionWorktreeLifecycleError(blocker.message, "busy");
+    }
+  };
+  const assertCommitAllowed = params.archived
+    ? () => {
+        assertNoActiveSideChildren();
+        commitGuard();
+      }
+    : await synchronize(params.entry);
+  const worktreeAfterCommit =
+    params.archived && params.entry.worktree && !placement.cleanupPending
+      ? async (entry: SessionEntry) => {
+          try {
+            // The durable archive row hands failed cleanup to GC. Keep the lifecycle
+            // fence and compare the exact committed projection, never a fresh successor.
+            assertWorktreeMutationAllowed =
+              prepareSessionWorkerPlacementMutationCheck(placementTarget);
+            await synchronize(entry);
+          } catch (error) {
+            sessionLog.warn(
+              `sessions.patch: archived worktree cleanup deferred for ${params.scope.sessionKey}: ${formatErrorMessage(error)}`,
+            );
+          }
+        }
+      : undefined;
+  const afterCommit =
+    params.archived && (worktreeAfterCommit || sideChildren.length > 0)
+      ? async (entry: SessionEntry) => {
+          await worktreeAfterCommit?.(entry);
+          if (sideChildren.length === 0) {
+            return;
+          }
+          const parent = sideStorePath
+            ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
+            : undefined;
+          if (!parent || !sideStorePath) {
+            return;
+          }
+          const archived = await archiveSideConversationChildrenInParentFence({
+            cfg: params.context.getRuntimeConfig(),
+            agentId: sideParentScope.agentId,
+            context: params.context,
+            parentEntry: parent,
+            parentSessionKey: params.scope.sessionKey,
+            storePath: sideStorePath,
+            commitGuard,
+          });
+          // Never throw after the parent commit: report the real partial state.
+          archivePartialByCommittedEntry.set(entry, {
+            archivedKeys: archived.archivedKeys,
+            remaining: archived.remaining,
+            preservedWorktrees: archived.preserved,
+          });
+        }
+      : undefined;
+  return { assertCommitAllowed, afterCommit };
 }

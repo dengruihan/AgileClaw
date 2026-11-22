@@ -11,6 +11,12 @@ import type {
   WebPushUnsubscribeParams,
   WebPushVapidPublicKeyParams,
 } from "./schema-modules.js";
+import {
+  SideConversationsCloseParamsSchema,
+  SideConversationsCreateParamsSchema,
+  SideConversationsListParamsSchema,
+  SideConversationsReopenParamsSchema,
+} from "./schema/side-conversations.js";
 import { WorkerComputerParamsSchema } from "./schema/worker-computer.js";
 import { checkWorkerProtocolJson } from "./schema/worker-protocol-primitives.js";
 export { validateApprovalPresentation } from "./approval-result-validators.js";
@@ -364,6 +370,10 @@ export const validateSessionsPatchManyParams = compile(S.SessionsPatchManyParams
 export const validateSessionsPluginPatchParams = compile(S.SessionsPluginPatchParamsSchema);
 export const validateSessionsResetParams = compile(S.SessionsResetParamsSchema);
 export const validateSessionsDeleteParams = compile(S.SessionsDeleteParamsSchema);
+export const validateSideConversationsCreateParams = compile(SideConversationsCreateParamsSchema);
+export const validateSideConversationsListParams = compile(SideConversationsListParamsSchema);
+export const validateSideConversationsCloseParams = compile(SideConversationsCloseParamsSchema);
+export const validateSideConversationsReopenParams = compile(SideConversationsReopenParamsSchema);
 export const validateSessionsAssignOwnerParams = compile(S.SessionsAssignOwnerParamsSchema);
 export const validateSessionsSetInvolvementParams = compile(S.SessionsSetInvolvementParamsSchema);
 export const validateSessionsGroupsListParams = compile(S.SessionsGroupsListParamsSchema);

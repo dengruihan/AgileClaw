@@ -8,6 +8,7 @@ import {
   shouldKeepSubagentRunChildLink,
 } from "../agents/subagents/registry/subagent-run-liveness.js";
 import { isTerminalSessionStatus, type SessionEntry } from "../config/sessions.js";
+import { isSideConversationEntry } from "../config/sessions/side-conversation-registry.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { parseAgentSessionKey } from "../sessions/session-key-utils.js";
 import {
@@ -173,6 +174,11 @@ export function resolveSessionChildOwners(params: {
   hasActiveRun?: boolean;
 }): readonly string[] {
   const { key, entry, now, subagentRuns } = params;
+  if (isSideConversationEntry(entry)) {
+    // Side conversations are hidden children: they never contribute child-owner
+    // links or `spawnedBy` facets to parent/sidebar projections.
+    return emptyChildOwners;
+  }
   const latest = subagentRuns.getDisplaySubagentRun(key);
   const keep =
     params.hasActiveRun ||
@@ -234,6 +240,10 @@ export function readStoreChildSessionLinks(params: {
   for (const key of Object.keys(params.store)) {
     const entry = params.store[key];
     if (!entry || key === params.key || !params.key) {
+      continue;
+    }
+    if (isSideConversationEntry(entry)) {
+      // Hidden children never appear in a parent's childSessions.
       continue;
     }
     const runs = params.subagentRunsByChildSessionKey.get(key.trim()) ?? [];

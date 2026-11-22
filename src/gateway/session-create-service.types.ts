@@ -90,6 +90,8 @@ export type GatewaySessionCommitResult =
 export type CreateGatewaySessionResult =
   | (Extract<GatewaySessionCommitResult, { ok: true }> & {
       postCommit: { status: "completed" } | { status: "failed"; error: unknown };
+      /** Frozen M200 snapshot facts for a side-conversation creation. */
+      sideConversationSnapshot?: import("../config/sessions/side-conversation-snapshot.js").SideConversationSnapshotFacts;
     })
   | Extract<GatewaySessionCommitResult, { ok: false }>;
 
@@ -166,6 +168,23 @@ export type CreateGatewaySessionParams = {
   forkFrom?: "last-completed";
   /** Live requester capability for an agent's current-transcript fork; never a wire parameter. */
   activeParentFork?: { requesterSessionKey: string; assertCurrent: () => void };
+  /**
+   * Trusted in-process side-conversation creation: the fork copies the frozen
+   * M200 snapshot instead of the live parent transcript. Never a wire parameter;
+   * the side-conversations handler owns intent allocation and parent registration.
+   */
+  sideConversation?: {
+    parentSessionKey: string;
+    parentSessionId?: string;
+    intentId: string;
+    ordinal: number;
+  };
+  /**
+   * Trusted creation-time freeze of the parent's effective selection. Applied
+   * only to a genuinely new side-conversation child; ordinary patch remains the
+   * only later writer.
+   */
+  frozenParentSelection?: import("./session-create-model-selection.js").FrozenParentSessionSelection;
   /** Live spawn-owned selection; public model inputs remain raw. */
   preparedModelSelection?: { ref: ModelRef; assertCurrent: () => void };
   /** Effective host-prepared spawn mode, bound to the live requester until commit. */

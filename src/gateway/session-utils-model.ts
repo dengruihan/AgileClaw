@@ -259,6 +259,29 @@ export function resolveGatewaySessionThinkingProjectionInternal(
   };
 }
 
+/** Effective thinking selection using the same runtime catalog/route facts as the row projection. */
+export function resolveEffectiveSessionThinkingLevel(params: {
+  cfg: OpenClawConfig;
+  provider: string;
+  model: string;
+  agentId: string;
+  sessionKey: string;
+  entry?: SessionEntry;
+  preparedAcpMeta?: SessionEntry["acp"] | null;
+  modelCatalog?: ModelCatalogEntry[];
+  modelCatalogRouteVariants?: readonly ModelCatalogEntry[];
+}): string | undefined {
+  const projection = resolveGatewaySessionThinkingProjectionInternal({
+    ...params,
+    ...(params.preparedAcpMeta !== undefined ? { preparedAcpMeta: params.preparedAcpMeta } : {}),
+    ...(params.modelCatalog ? { modelCatalog: params.modelCatalog } : {}),
+    ...(params.modelCatalogRouteVariants
+      ? { modelCatalogRouteVariants: params.modelCatalogRouteVariants }
+      : {}),
+  });
+  return projection.effectiveThinkingLevel;
+}
+
 export function getSessionDefaults(
   cfg: OpenClawConfig,
   modelCatalog?: ModelCatalogEntry[],

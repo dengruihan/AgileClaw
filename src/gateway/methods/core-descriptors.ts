@@ -237,6 +237,12 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   // (archive-then-delete); the handler enforces the archived requirement and
   // admin keeps unrestricted delete. Shared policy plus the handler own both checks.
   ["sessions.delete", "sessions-delete", "dynamic", "<=2026.7"],
+  // Hidden persistent side conversations: a dashboard-keyed child forks the M200
+  // snapshot, owns its own transcript/worktree, and is patchable like any session.
+  ["sideConversations.create", "side-conversations", "operator.write", "2026.11"],
+  ["sideConversations.list", "side-conversations", "operator.read", "2026.11"],
+  ["sideConversations.close", "side-conversations", "operator.write", "2026.11"],
+  ["sideConversations.reopen", "side-conversations", "operator.write", "2026.11"],
   ["sessions.compact", "sessions-compact", "operator.admin", "<=2026.7"],
   ["sessions.groups.list", "sessions-groups", "operator.read", "<=2026.7"],
   ["sessions.groups.defaults", "sessions-groups", "operator.write", "2026.8"],

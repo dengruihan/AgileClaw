@@ -2,6 +2,7 @@ import type { Static } from "typebox";
 import { Type } from "typebox";
 import { closedObject } from "./closed-object.js";
 import { NonEmptyString } from "./primitives.js";
+import { SideConversationRemainderSchema } from "./side-conversations.js";
 
 /** Deletes a session record and optionally its transcript. */
 export const SessionsDeleteParamsSchema = closedObject({
@@ -48,7 +49,18 @@ export const SessionsDeleteResultSchema = closedObject({
   key: NonEmptyString,
   deleted: Type.Boolean(),
   archived: Type.Array(NonEmptyString),
+  /** First preserved worktree, retained for older clients. */
   worktreePreserved: Type.Optional(PreservedSessionWorktreeSchema),
+  /** Complete enumeration of preserved parent and hidden-child worktrees. */
+  preservedWorktrees: Type.Optional(Type.Array(PreservedSessionWorktreeSchema)),
+  /** True when the parent was kept because some hidden children were not deleted. */
+  partial: Type.Optional(Type.Boolean()),
+  /** Hidden children already deleted by this partial attempt. */
+  deletedKeys: Type.Optional(Type.Array(NonEmptyString)),
+  /** Hidden children not processed, with the blocking reason; parent stays intact. */
+  remainingSideConversations: Type.Optional(Type.Array(SideConversationRemainderSchema)),
+  /** Cleanup left after a child row was already deleted (retryable). */
+  cleanupPending: Type.Optional(Type.Array(SideConversationRemainderSchema)),
 });
 
 export type SessionsDeleteParams = Static<typeof SessionsDeleteParamsSchema>;

@@ -653,6 +653,17 @@ export type InternalSessionEntryCore = SessionEntryCore & {
   /** Private per-generation ownership for the pre-runtime checkout baseline capture. */
   sessionDiffBaselineCapture?: import("./session-diff-baseline-capture.js").SessionDiffBaselineCapture;
   mainRestartRecovery?: MainRestartRecoveryState;
+  /**
+   * Hidden side-conversation marker on the child row. Persisted once at creation;
+   * the child remains independently addressable and patchable. Private: clients
+   * see it only through the projected SessionRow.
+   */
+  sideConversation?: import("./side-conversation-types.js").SideConversationMarker;
+  /**
+   * Private membership registry for hidden side conversations owned by this
+   * parent. Only `sideConversationCount` is projected publicly.
+   */
+  sideConversations?: import("./side-conversation-types.js").SideConversationParentRegistry;
 };
 
 export interface InternalSessionEntry extends InternalSessionEntryCore {}

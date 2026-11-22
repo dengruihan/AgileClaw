@@ -57,6 +57,7 @@ export * from "./schema/sessions-suggestions.js";
 export * from "./schema/sessions-reactions.js";
 export * from "./schema/sessions-activity-summary.js";
 export * from "./schema/sessions-delete.js";
+export * from "./schema/side-conversations.js";
 export * from "./schema/sessions-goal.js";
 export {
   SESSIONS_FILES_ASSETS_MAX_REFS,

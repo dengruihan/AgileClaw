@@ -44,7 +44,7 @@ const SIDE_CONVERSATION_SNAPSHOT_PROJECTION_VERSION = 1;
  * retired from historical replay once a turn settles, which would erase an
  * immutable snapshot boundary after the side conversation's first answer.
  */
-const SIDE_CONVERSATION_SNAPSHOT_CUSTOM_TYPE = "openclaw.side-conversation-snapshot";
+export const SIDE_CONVERSATION_SNAPSHOT_CUSTOM_TYPE = "openclaw.side-conversation-snapshot";
 
 /** Stable id for the trailing boundary row inside a fresh child transcript. */
 const SIDE_CONVERSATION_SNAPSHOT_BOUNDARY_ENTRY_ID = "side-conversation-snapshot-boundary";

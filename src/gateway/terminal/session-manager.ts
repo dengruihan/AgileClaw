@@ -517,7 +517,8 @@ export class TerminalSessionManager {
     this.connections.addPendingOpen(connId, pending);
   }
 
-  private hasAgentSessionWork(owner: AgentTerminalOwner): boolean {
+  /** Read-only terminal-work fact for lifecycle preflight; does not fence or close PTYs. */
+  hasAgentSessionWork(owner: AgentTerminalOwner): boolean {
     return (
       [...this.pendingOpens.values()].some((pendingOwner) =>
         agentTerminalOwnerMatches(pendingOwner, owner),

@@ -6,6 +6,7 @@ import {
   type PreservedSessionWorktree,
   type SessionsDeleteParams,
   type SessionsDeleteResult,
+  type SideConversationRemainder,
   validateSessionsDeleteParams,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { tryResolveAgentOperationAgentId } from "../../agents/agent-scope-config.js";
@@ -14,8 +15,12 @@ import {
   SESSION_LIFECYCLE_CHANGED_ERROR_REASON,
   type SessionEntry,
 } from "../../config/sessions.js";
-import { rollbackPluginOwnedSessionEntryLifecycle } from "../../config/sessions/session-accessor.js";
+import {
+  loadSessionEntry as loadInternalSessionEntry,
+  rollbackPluginOwnedSessionEntryLifecycle,
+} from "../../config/sessions/session-accessor.js";
 import { resolvePersistedSessionStoreOwnerForKey } from "../../config/sessions/session-store-owner.js";
+import { removeSideConversationIntent } from "../../config/sessions/side-conversation-registry.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import {
   isIncognitoSessionKey,
@@ -52,7 +57,9 @@ import {
   loadAccessorSessionEntryForGatewayTarget,
   isAgentMainSessionKey,
   requireSessionKey,
+  sessionLog,
 } from "./sessions-shared.js";
+import { deleteSideConversationChildrenInParentFence } from "./side-conversations-fence.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
@@ -61,6 +68,16 @@ class SessionDeletionError extends Error {
     super(error.message);
   }
 }
+
+/** The parent is kept because an earlier child delete succeeded and a later one failed. */
+type PartialSideDelete = {
+  partialSide: {
+    deletedKeys: string[];
+    remaining: SideConversationRemainder[];
+    cleanupPending: SideConversationRemainder[];
+    preserved: PreservedSessionWorktree[];
+  };
+};
 
 /** Shared lifecycle owner for operator deletion and automatic Incognito expiry. */
 export async function deleteGatewaySession({
@@ -115,6 +132,11 @@ export async function deleteGatewaySession({
   const initialDeleteEntry = loadSessionEntry(key, {
     agentId: requestedAgentId,
   }).entry;
+  const deletedMarkerAtStart = loadInternalSessionEntry({
+    agentId: requestedAgentId,
+    sessionKey: target.canonicalKey,
+    storePath,
+  })?.sideConversation;
   const expectedSessionId = p.expectedSessionId?.trim();
   const expectedLifecycleRevision = p.expectedLifecycleRevision?.trim();
   const sessionChangedError = () =>
@@ -184,6 +206,9 @@ export async function deleteGatewaySession({
   ];
   let drain: SessionLifecycleDrain | undefined;
   let worktreePreserved: PreservedSessionWorktree | undefined;
+  let preservedChildWorktrees: PreservedSessionWorktree[] = [];
+  let childCleanupPending: SideConversationRemainder[] = [];
+  let deletedChildKeys: string[] = [];
   const deleteCurrent = async () => {
     try {
       const current = assertCurrent();
@@ -228,126 +253,211 @@ export async function deleteGatewaySession({
         );
       }
       // Reclaim may wait for an earlier placement operation that needs this mutex.
-      return await runExclusiveSessionLifecycleMutation("delete", {
-        scope: storePath,
-        identities: deleteLifecycleIdentities,
-        prepare: async () => drain?.handoffToMutation(),
-        finalize: async () => drain?.release(),
-        run: async () => {
-          const { entry, legacyKey, canonicalKey } = assertCurrent();
-          const retirement = prepareSessionWorkerPlacementRetirement({
-            context,
-            sessionId: entry?.sessionId,
-          });
-          const commitGuard = () => {
-            assertCurrent();
-            retirement.assertCurrent();
-            if (drain?.hasAuthoritativeWork()) {
+      try {
+        return await runExclusiveSessionLifecycleMutation("delete", {
+          scope: storePath,
+          identities: deleteLifecycleIdentities,
+          prepare: async () => drain?.handoffToMutation(),
+          finalize: async () => drain?.release(),
+          run: async () => {
+            const { entry, legacyKey, canonicalKey } = assertCurrent();
+            const retirement = prepareSessionWorkerPlacementRetirement({
+              context,
+              sessionId: entry?.sessionId,
+            });
+            const commitGuard = () => {
+              assertCurrent();
+              retirement.assertCurrent();
+              if (drain?.hasAuthoritativeWork()) {
+                throw new SessionDeletionError(
+                  errorShape(ErrorCodes.UNAVAILABLE, `Session ${key} is still active; try again.`, {
+                    retryable: true,
+                  }),
+                );
+              }
+            };
+            commitGuard();
+            // Registered hidden children are processed serially inside this same
+            // fence with storage primitives; the parent already owns the mutex.
+            const parentSideRegistryEntry =
+              loadInternalSessionEntry({
+                agentId: target.agentId,
+                sessionKey: target.canonicalKey,
+                storePath,
+              }) ?? entry!;
+            const sideChildren = await deleteSideConversationChildrenInParentFence({
+              agentId: target.agentId,
+              cfg,
+              context,
+              parentEntry: parentSideRegistryEntry,
+              parentSessionKey: target.canonicalKey,
+              storePath,
+              deleteTranscript,
+              commitGuard,
+            });
+            if (!sideChildren.ok) {
               throw new SessionDeletionError(
-                errorShape(ErrorCodes.UNAVAILABLE, `Session ${key} is still active; try again.`, {
-                  retryable: true,
-                }),
+                sideChildren.error ??
+                  errorShape(
+                    ErrorCodes.UNAVAILABLE,
+                    `Session ${key} could not prepare side conversations.`,
+                  ),
               );
             }
-          };
-          commitGuard();
-          const mutationCleanupError = await cleanupSessionBeforeMutation({
-            cfg,
-            key,
-            target,
-            entry,
-            legacyKey,
-            canonicalKey,
-            reason: "session-delete",
-            assertCurrent: commitGuard,
-          });
-          if (mutationCleanupError) {
-            throw new SessionDeletionError(mutationCleanupError);
-          }
-          const postCleanupTarget = loadAccessorSessionEntryForGatewayTarget({
-            key,
-            cfg,
-            agentId: requestedAgentId,
-          });
-          const postCleanupEntry = postCleanupTarget.entry;
-          const deletedWorktreeId = normalizeOptionalString(postCleanupEntry?.worktree?.id);
-          commitGuard();
-          const pluginOwnerId = normalizeOptionalString(postCleanupEntry?.pluginOwnerId);
-          const incognito =
-            postCleanupEntry?.incognito === true || isIncognitoSessionKey(target.canonicalKey);
-          const deletionParams = {
-            agentId: target.agentId,
-            archiveTranscript: incognito ? false : deleteTranscript,
-            commitGuard,
-            deleteDeliveryArtifacts: true,
-            deleteTranscriptWithoutArchive: incognito,
-            expectedEntry: postCleanupEntry,
-            expectedLifecycleRevision,
-            expectedSessionId: initialDeleteEntry?.sessionId ?? null,
-            expectedUpdatedAt: postCleanupEntry?.updatedAt,
-            storePath,
-            target: { canonicalKey: target.canonicalKey, storeKeys: target.storeKeys },
-          };
-          // Catalog and other plugin-owned sessions keep model selection locked,
-          // so deletion must use the exact-row owner-validated lifecycle seam.
-          const result =
-            postCleanupEntry && pluginOwnerId && isModelSelectionLocked(postCleanupEntry)
-              ? await rollbackPluginOwnedSessionEntryLifecycle({
-                  ...deletionParams,
-                  expectedEntry: postCleanupEntry,
-                  expectedPluginOwnerId: pluginOwnerId,
-                  target: {
-                    canonicalKey: postCleanupTarget.target.canonicalKey,
-                    storeKeys: postCleanupTarget.target.storeKeys,
-                  },
-                })
-              : await deleteSessionEntryLifecycle(deletionParams);
-          if (result.expectedEntryMismatch) {
-            throw new SessionDeletionError(sessionChangedError());
-          }
-          if (result.deleted) {
-            // Retain cloud affinity on every precommit failure. The absent-session
-            // reconciler covers a crash or artifact-publication failure after commit.
-            retirement.retire();
-            emitGatewaySessionEndPluginHook({
+            if (sideChildren.remaining.length > 0) {
+              // Earlier children are already durably deleted; the parent and every
+              // unprocessed child stay intact and are reported explicitly.
+              return {
+                partialSide: {
+                  deletedKeys: sideChildren.deletedKeys,
+                  remaining: sideChildren.remaining,
+                  cleanupPending: sideChildren.cleanupPending,
+                  preserved: sideChildren.preserved,
+                },
+              } satisfies PartialSideDelete;
+            }
+            preservedChildWorktrees = sideChildren.preserved;
+            childCleanupPending = sideChildren.cleanupPending;
+            deletedChildKeys = sideChildren.deletedKeys;
+            const mutationCleanupError = await cleanupSessionBeforeMutation({
               cfg,
-              sessionKey: target.canonicalKey ?? key,
-              sessionId: result.deletedSessionId,
-              storePath,
+              key,
+              target,
+              entry,
+              legacyKey,
+              canonicalKey,
+              reason: "session-delete",
+              assertCurrent: commitGuard,
+            });
+            if (mutationCleanupError) {
+              throw new SessionDeletionError(mutationCleanupError);
+            }
+            const postCleanupTarget = loadAccessorSessionEntryForGatewayTarget({
+              key,
+              cfg,
+              agentId: requestedAgentId,
+            });
+            const postCleanupEntry = postCleanupTarget.entry;
+            const deletedWorktreeId = normalizeOptionalString(postCleanupEntry?.worktree?.id);
+            commitGuard();
+            const pluginOwnerId = normalizeOptionalString(postCleanupEntry?.pluginOwnerId);
+            const incognito =
+              postCleanupEntry?.incognito === true || isIncognitoSessionKey(target.canonicalKey);
+            const deletionParams = {
               agentId: target.agentId,
-              reason: "deleted",
-              archivedTranscripts: result.archivedTranscripts,
-            });
-            await emitSessionUnboundLifecycleEvent({
-              targetSessionKey: target.canonicalKey ?? key,
-              reason: "session-delete",
-              emitHooks: p.emitLifecycleHooks !== false,
-            });
-            // Hooks and unbinding retain their historical post-delete order. The
-            // generation-scoped purge and checkout cleanup still finish before
-            // this fence opens, so a same-key successor cannot be mistaken for it.
-            const deletedSessionKey = target.canonicalKey ?? key;
-            handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
-            // A deleted root releases its device lease at the node too: occupancy
-            // has no TTL, so dropping only the mirror would keep the device
-            // reserved for other sessions. A deleted child has no mirror of its
-            // own, so the tree lease stays with its root.
-            await releaseDeviceScopeLease({
-              registry: context.nodeRegistry,
-              rootSessionKey: deletedSessionKey,
-            });
-            // The session is gone, so withdraw its scope fact instead of leaving
-            // stale prompt prose behind.
-            publishSessionDeviceScopePrompt({ sessionKey: deletedSessionKey });
-            worktreePreserved = await removeSessionWorktree({
-              id: deletedWorktreeId,
-              sessionKey: deletedSessionKey,
-              reason: "session-delete",
-            });
-          }
-          return result;
-        },
-      });
+              archiveTranscript: incognito ? false : deleteTranscript,
+              commitGuard,
+              deleteDeliveryArtifacts: true,
+              deleteTranscriptWithoutArchive: incognito,
+              expectedEntry: postCleanupEntry,
+              expectedLifecycleRevision,
+              expectedSessionId: initialDeleteEntry?.sessionId ?? null,
+              expectedUpdatedAt: postCleanupEntry?.updatedAt,
+              storePath,
+              target: { canonicalKey: target.canonicalKey, storeKeys: target.storeKeys },
+            };
+            // Catalog and other plugin-owned sessions keep model selection locked,
+            // so deletion must use the exact-row owner-validated lifecycle seam.
+            const result =
+              postCleanupEntry && pluginOwnerId && isModelSelectionLocked(postCleanupEntry)
+                ? await rollbackPluginOwnedSessionEntryLifecycle({
+                    ...deletionParams,
+                    expectedEntry: postCleanupEntry,
+                    expectedPluginOwnerId: pluginOwnerId,
+                    target: {
+                      canonicalKey: postCleanupTarget.target.canonicalKey,
+                      storeKeys: postCleanupTarget.target.storeKeys,
+                    },
+                  })
+                : await deleteSessionEntryLifecycle(deletionParams);
+            if (result.expectedEntryMismatch) {
+              throw new SessionDeletionError(sessionChangedError());
+            }
+            if (result.deleted) {
+              // Retain cloud affinity on every precommit failure. The absent-session
+              // reconciler covers a crash or artifact-publication failure after commit.
+              retirement.retire();
+              emitGatewaySessionEndPluginHook({
+                cfg,
+                sessionKey: target.canonicalKey ?? key,
+                sessionId: result.deletedSessionId,
+                storePath,
+                agentId: target.agentId,
+                reason: "deleted",
+                archivedTranscripts: result.archivedTranscripts,
+              });
+              await emitSessionUnboundLifecycleEvent({
+                targetSessionKey: target.canonicalKey ?? key,
+                reason: "session-delete",
+                emitHooks: p.emitLifecycleHooks !== false,
+              });
+              // Hooks and unbinding retain their historical post-delete order. The
+              // generation-scoped purge and checkout cleanup still finish before
+              // this fence opens, so a same-key successor cannot be mistaken for it.
+              const deletedSessionKey = target.canonicalKey ?? key;
+              handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
+              const deletedSideConversation =
+                loadInternalSessionEntry({
+                  agentId: requestedAgentId,
+                  sessionKey: deletedSessionKey,
+                  storePath,
+                })?.sideConversation ?? deletedMarkerAtStart;
+              if (deletedSideConversation) {
+                // A directly deleted hidden child also leaves its parent registry.
+                await removeSideConversationIntent({
+                  agentId: requestedAgentId,
+                  cfg,
+                  intentId: deletedSideConversation.intentId,
+                  parentSessionKey: deletedSideConversation.parentSessionKey,
+                }).catch((error: unknown) => {
+                  sessionLog.warn(
+                    `side conversation registry cleanup failed for ${deletedSessionKey}: ${formatErrorMessage(error)}`,
+                  );
+                });
+              }
+              // A deleted root releases its device lease at the node too: occupancy
+              // has no TTL, so dropping only the mirror would keep the device
+              // reserved for other sessions. A deleted child has no mirror of its
+              // own, so the tree lease stays with its root.
+              await releaseDeviceScopeLease({
+                registry: context.nodeRegistry,
+                rootSessionKey: deletedSessionKey,
+              });
+              // The session is gone, so withdraw its scope fact instead of leaving
+              // stale prompt prose behind.
+              publishSessionDeviceScopePrompt({ sessionKey: deletedSessionKey });
+              worktreePreserved = await removeSessionWorktree({
+                id: deletedWorktreeId,
+                sessionKey: deletedSessionKey,
+                reason: "session-delete",
+              });
+            }
+            return result;
+          },
+        });
+      } catch (error) {
+        // Side children may already be durably deleted even when the parent
+        // cleanup/commit fails afterwards. Report those facts instead of a
+        // generic failure, but only while the parent row still exists.
+        const parentStillExists = deletedChildKeys.length
+          ? loadInternalSessionEntry({
+              agentId: target.agentId,
+              sessionKey: target.canonicalKey,
+              storePath,
+            })
+          : undefined;
+        if (parentStillExists) {
+          return {
+            partialSide: {
+              deletedKeys: deletedChildKeys,
+              remaining: [],
+              cleanupPending: childCleanupPending,
+              preserved: preservedChildWorktrees,
+            },
+          } satisfies PartialSideDelete;
+        }
+        throw error;
+      }
     } finally {
       drain?.release();
     }
@@ -361,12 +471,47 @@ export async function deleteGatewaySession({
     }
     return { ok: false, error: error.error };
   }
+  if ("partialSide" in deletion) {
+    const partial = deletion.partialSide;
+    const response: SessionsDeleteResult = {
+      ok: true,
+      key: target.canonicalKey,
+      deleted: false,
+      archived: [],
+      partial: true,
+      ...(partial.deletedKeys.length > 0 ? { deletedKeys: partial.deletedKeys } : {}),
+      remainingSideConversations: partial.remaining,
+      ...(partial.cleanupPending.length > 0 ? { cleanupPending: partial.cleanupPending } : {}),
+      ...(partial.preserved.length > 0
+        ? {
+            worktreePreserved: partial.preserved[0],
+            preservedWorktrees: partial.preserved,
+          }
+        : {}),
+    };
+    onDeleted?.(response);
+    for (const deletedKey of partial.deletedKeys) {
+      emitSessionsChanged(context, {
+        sessionKey: deletedKey,
+        agentId: target.agentId,
+        reason: "delete",
+      });
+    }
+    return { ok: true, result: response };
+  }
+  const preservedWorktrees = [
+    ...(worktreePreserved ? [worktreePreserved] : []),
+    ...preservedChildWorktrees,
+  ];
   const response: SessionsDeleteResult = {
     ok: true,
     key: target.canonicalKey,
     deleted: deletion.deleted,
     archived: deletion.archivedTranscripts.map((entry) => entry.archivedPath),
-    ...(worktreePreserved ? { worktreePreserved } : {}),
+    ...(preservedWorktrees[0] ? { worktreePreserved: preservedWorktrees[0] } : {}),
+    ...(preservedWorktrees.length > 0 ? { preservedWorktrees } : {}),
+    ...(deletedChildKeys.length > 0 ? { deletedKeys: deletedChildKeys } : {}),
+    ...(childCleanupPending.length > 0 ? { cleanupPending: childCleanupPending } : {}),
   };
   onDeleted?.(response);
   if (deletion.deleted) {

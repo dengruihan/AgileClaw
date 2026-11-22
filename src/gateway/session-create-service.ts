@@ -35,10 +35,13 @@ import {
 } from "../config/sessions/session-accessor.js";
 import { runWithSessionEntryCreationPublication } from "../config/sessions/session-accessor.sqlite-entry-cache.js";
 import type { SessionEntryCreationOperation } from "../config/sessions/session-accessor.sqlite-entry-cache.types.js";
+import { prepareSideConversationForkTranscript } from "../config/sessions/session-accessor.sqlite-parent-session.js";
 import { createSessionDiffBaselineCaptureClaim } from "../config/sessions/session-diff-baseline-capture.js";
 import { buildSessionParentLink } from "../config/sessions/session-entry-lineage.js";
 import { projectPublicSessionEntry } from "../config/sessions/session-entry-projection.js";
 import { buildSessionCreationStamp } from "../config/sessions/session-entry-provenance.js";
+import { buildSideConversationMarker } from "../config/sessions/side-conversation-registry.js";
+import type { SideConversationSnapshotFacts } from "../config/sessions/side-conversation-snapshot.js";
 import {
   createInternalHookEvent,
   hasInternalHookListeners,
@@ -263,6 +266,27 @@ export async function createGatewaySession(
   if (childIntentError) {
     return { ok: false, error: childIntentError };
   }
+  if (
+    params.sideConversation &&
+    (params.fork !== true ||
+      params.sideConversation.parentSessionKey.trim() !== parentSessionKey?.trim() ||
+      params.model !== undefined ||
+      params.catalogTarget !== undefined ||
+      params.agentRuntime !== undefined ||
+      params.spawnDepth !== undefined ||
+      params.spawnToolPolicy !== undefined ||
+      params.preparedModelSelection !== undefined ||
+      params.preparedPermissionSelection !== undefined ||
+      params.initialEntry !== undefined ||
+      params.incognito === true ||
+      (params.frozenParentSelection !== undefined && !params.sideConversation))
+  ) {
+    // Side conversations fork the matching parent with its own frozen
+    // selection; explicit model/spawn/incognito inputs would break that contract.
+    return invalidSessionRequest(
+      "side conversation creation must fork the matching parent session with its inherited selection",
+    );
+  }
   let canonicalParentSessionKey: string | undefined;
   let parentSessionEntry: SessionEntry | undefined;
   let parentSelectedAgentId: string | undefined;
@@ -479,6 +503,7 @@ export async function createGatewaySession(
 
   let createdContext: CreatedGatewaySession | undefined;
   let createdNewEntry = false;
+  let sideConversationSnapshot: SideConversationSnapshotFacts | undefined;
   let preparedLifecycle: PreparedGatewaySessionLifecycle | undefined;
   let lifecyclePreparationCommitted = false;
   const holdParentLifecycle =
@@ -731,6 +756,13 @@ export async function createGatewaySession(
         if (params.catalogTarget && existingEntry !== undefined) {
           return invalidSessionRequest("catalog session target requires a new session");
         }
+        if (params.sideConversation && existingEntry !== undefined) {
+          // The side-conversations handler reuses a committed intent before
+          // reaching this owner; reaching it here means a concurrent create won.
+          return invalidSessionRequest(
+            `side conversation intent ${params.sideConversation.intentId} already exists; reuse it`,
+          );
+        }
         if ((pendingProjectGitUrl || pendingWorktree) && existingEntry !== undefined) {
           return invalidSessionRequest("workspace preparation requires a new session");
         }
@@ -973,6 +1005,34 @@ export async function createGatewaySession(
               createdNewEntry && params.creation?.via === "spawn" && Boolean(spawnToolPolicy),
             requesterSenderIsOwner: params.creation?.requesterSenderIsOwner,
           }),
+          ...(createdNewEntry && params.frozenParentSelection
+            ? {
+                providerOverride: params.frozenParentSelection.provider,
+                modelOverride: params.frozenParentSelection.model,
+                modelOverrideSource: params.frozenParentSelection.modelOverrideSource,
+                ...(params.frozenParentSelection.contextWindow
+                  ? { contextWindow: params.frozenParentSelection.contextWindow }
+                  : {}),
+                ...(params.frozenParentSelection.thinkingLevel
+                  ? { thinkingLevel: params.frozenParentSelection.thinkingLevel }
+                  : {}),
+                ...(params.frozenParentSelection.reasoningLevel
+                  ? { reasoningLevel: params.frozenParentSelection.reasoningLevel }
+                  : {}),
+                ...(params.frozenParentSelection.fastMode !== undefined
+                  ? { fastMode: params.frozenParentSelection.fastMode }
+                  : {}),
+                ...(params.frozenParentSelection.verboseLevel
+                  ? { verboseLevel: params.frozenParentSelection.verboseLevel }
+                  : {}),
+                ...(params.frozenParentSelection.traceLevel
+                  ? { traceLevel: params.frozenParentSelection.traceLevel }
+                  : {}),
+                ...(params.frozenParentSelection.elevatedLevel
+                  ? { elevatedLevel: params.frozenParentSelection.elevatedLevel }
+                  : {}),
+              }
+            : {}),
         };
         let validateAccountModel: (() => ErrorShape | undefined) | undefined;
         if (params.fork !== true) {
@@ -1045,8 +1105,8 @@ export async function createGatewaySession(
         });
         // The storage owner selects one source for both size admission and copying,
         // so an active tail cannot make a smaller stable prefix fail the cap.
-        const forkFromParent = async (assertSourceCurrent?: () => void) =>
-          await prepareSessionForkFromParent({
+        const forkFromParent = async (assertSourceCurrent?: () => void) => {
+          const forkParams = {
             parentEntry: currentParentSessionEntry,
             agentId: parentSessionTarget.agentId,
             ...(commitGuard || assertSourceCurrent
@@ -1063,8 +1123,16 @@ export async function createGatewaySession(
             ...(forkMaxTokens ? { maxTokens: forkMaxTokens } : {}),
             // Keep the fork transcript owned by the child store across agent boundaries.
             targetStorePath: target.storePath,
-            ...(params.forkFrom ? { forkFrom: params.forkFrom } : {}),
-          });
+          };
+          // A side conversation copies the frozen M200 snapshot; an ordinary
+          // fork copies the live parent branch.
+          return params.sideConversation
+            ? await prepareSideConversationForkTranscript(forkParams)
+            : await prepareSessionForkFromParent({
+                ...forkParams,
+                ...(params.forkFrom ? { forkFrom: params.forkFrom } : {}),
+              });
+        };
         const forkWithCreation = (assertSourceCurrent?: () => void) =>
           creationOperation
             ? runWithSessionEntryCreationPublication(creationOperation, () =>
@@ -1074,6 +1142,9 @@ export async function createGatewaySession(
         const forkResult = preparedLifecycle?.withCommit
           ? await preparedLifecycle.withCommit(forkWithCreation)
           : await forkWithCreation();
+        if (forkResult.status === "snapshot-too-large") {
+          return invalidSessionRequest(forkResult.message);
+        }
         if (forkResult.status === "too-large") {
           return invalidSessionRequest(
             `parent session is too large to fork (${forkResult.decision.parentTokens}/${forkResult.decision.maxTokens} tokens)`,
@@ -1085,18 +1156,37 @@ export async function createGatewaySession(
             error: errorShape(ErrorCodes.UNAVAILABLE, "failed to fork parent session transcript"),
           };
         }
+        const sideConversationParentSessionId =
+          params.sideConversation?.parentSessionId ?? currentParentSessionEntry.sessionId;
+        const sideConversationMarker = params.sideConversation
+          ? buildSideConversationMarker({
+              parentSessionKey: forkParentSessionKey,
+              ...(sideConversationParentSessionId
+                ? { parentSessionId: sideConversationParentSessionId }
+                : {}),
+              intentId: params.sideConversation.intentId,
+              ordinal: params.sideConversation.ordinal,
+              now: Date.now(),
+            })
+          : undefined;
+        if ("snapshot" in forkResult) {
+          sideConversationSnapshot = forkResult.snapshot;
+        }
         return {
           ...patched,
           transcriptEvents: forkResult.events,
-          entry: buildForkedGatewaySessionEntry(
-            entry,
-            forkResult.transcript,
-            {
-              sessionKey: forkParentSessionKey,
-              entry: currentParentSessionEntry,
-            },
-            existingEntry,
-          ),
+          entry: {
+            ...buildForkedGatewaySessionEntry(
+              entry,
+              forkResult.transcript,
+              {
+                sessionKey: forkParentSessionKey,
+                entry: currentParentSessionEntry,
+              },
+              existingEntry,
+            ),
+            ...(sideConversationMarker ? { sideConversation: sideConversationMarker } : {}),
+          },
         };
       },
       {
@@ -1219,6 +1309,7 @@ export async function createGatewaySession(
         modelProvider: selectedModel.provider,
         model: selectedModel.model,
       },
+      ...(sideConversationSnapshot ? { sideConversationSnapshot } : {}),
       resetExisting: false,
     };
   };
