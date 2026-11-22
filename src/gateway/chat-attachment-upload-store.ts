@@ -237,17 +237,27 @@ export function assertChatAttachmentUploadId(uploadId: string | undefined): stri
 /**
  * Activation for a maintenance generation. It never retires admissions of an
  * already-open store; it only reopens a fenced store, and only after any prior
- * generation's shutdown and final discard settled.
+ * generation's shutdown and final discard settled. The owner's signal is the
+ * activation's cancellation: a stop that arrives while this waits prevents the
+ * reopen, so a stopped owner can never leave the store open after its drain.
  */
-export async function startChatAttachmentUploadMaintenance(): Promise<void> {
+export async function startChatAttachmentUploadMaintenance(options?: {
+  signal?: AbortSignal;
+}): Promise<boolean> {
   for (let pending = shutdownInFlight; pending; pending = shutdownInFlight) {
     await pending.catch(() => undefined);
   }
+  // Revalidate immediately before the synchronous transition: no await may
+  // follow, so a stop cannot interleave between the check and the reopen.
+  if (options?.signal?.aborted) {
+    return false;
+  }
   if (!closing) {
-    return;
+    return false;
   }
   closing = false;
   admissionGeneration += 1;
+  return true;
 }
 
 /**

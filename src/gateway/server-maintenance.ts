@@ -538,7 +538,9 @@ export function startGatewayMaintenanceTimers(params: {
       }
       // Re-open upload admission only after the prior generation's shutdown and
       // final discard settled, so an old owner cannot clear the new generation.
-      await startChatAttachmentUploadMaintenance();
+      // The owner signal cancels this activation if this generation is stopped
+      // while it waits; a stopped owner must never reopen the fence it drained.
+      await startChatAttachmentUploadMaintenance({ signal: mediaScheduler.signal });
       if (mediaScheduler.signal.aborted) {
         return;
       }
