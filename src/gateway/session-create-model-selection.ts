@@ -13,11 +13,11 @@ import { resolveFastModeState } from "../agents/fast-mode.js";
 import { resolveModelProviderAuthConfig } from "../agents/model-auth-provider-route.js";
 import { selectModelCatalogRuntimeEntry } from "../agents/model-catalog-view.js";
 import { findModelCatalogEntry } from "../agents/model-catalog.js";
+import type { ModelCatalogEntry } from "../agents/model-catalog.js";
 import type { ModelCatalogSnapshot } from "../agents/model-catalog.types.js";
 import { resolveModelContextWindowProfile } from "../agents/model-context-window.js";
 import { splitTrailingAuthProfile } from "../agents/model-ref-profile.js";
 import { resolveDefaultModelForAgent, type ModelRef } from "../agents/model-selection.js";
-import { resolveThinkingDefault } from "../agents/model-thinking-default.js";
 import { resolveSessionModelRef } from "../agents/session-model-ref.js";
 import { resolveEffectiveAgentRuntime } from "../agents/thinking-runtime.js";
 import { inheritSessionSelection } from "../config/sessions/session-entry-selection.js";
@@ -35,6 +35,7 @@ import type {
   CreateGatewaySessionParams,
   GatewaySessionTitleModelSelection,
 } from "./session-create-service.types.js";
+import { resolveEffectiveSessionThinkingLevel } from "./session-utils-model.js";
 
 export function resolveSessionCreateModelInputError(
   params: Pick<
@@ -304,6 +305,9 @@ export function resolveFrozenParentSessionSelection(params: {
   cfg: OpenClawConfig;
   agentId: string;
   parentEntry: SessionEntry;
+  parentSessionKey: string;
+  modelCatalog?: ModelCatalogEntry[];
+  modelCatalogRouteVariants?: readonly ModelCatalogEntry[];
 }): FrozenParentSessionSelection {
   const { provider, model } = resolveSessionModelRef(
     params.cfg,
@@ -313,14 +317,19 @@ export function resolveFrozenParentSessionSelection(params: {
   const storedSource = params.parentEntry.modelOverrideSource;
   const source: FrozenParentSessionSelection["modelOverrideSource"] =
     storedSource === "user" || storedSource === "auto" ? storedSource : "default";
-  const thinkingLevel =
-    normalizeOptionalString(params.parentEntry.thinkingLevel) ??
-    resolveThinkingDefault({
-      cfg: params.cfg,
-      agentId: params.agentId,
-      provider,
-      model,
-    });
+  const thinkingLevel = resolveEffectiveSessionThinkingLevel({
+    cfg: params.cfg,
+    agentId: params.agentId,
+    provider,
+    model,
+    sessionKey: params.parentSessionKey,
+    entry: params.parentEntry,
+    preparedAcpMeta: params.parentEntry.acp ?? null,
+    ...(params.modelCatalog ? { modelCatalog: params.modelCatalog } : {}),
+    ...(params.modelCatalogRouteVariants
+      ? { modelCatalogRouteVariants: params.modelCatalogRouteVariants }
+      : {}),
+  });
   const fastMode =
     params.parentEntry.fastMode ??
     resolveFastModeState({

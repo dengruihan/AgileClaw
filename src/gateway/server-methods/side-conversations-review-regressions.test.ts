@@ -2,12 +2,20 @@ import { afterEach, expect, test, vi } from "vitest";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
 import { resolveSessionModelRef } from "../../agents/session-model-ref.js";
 import { getRuntimeConfig } from "../../config/config.js";
-import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
+import {
+  loadSessionEntry,
+  loadTranscriptEventsSync,
+  patchSessionEntryCore,
+  replaceSessionEntrySync,
+} from "../../config/sessions/session-accessor.js";
+import { replaceTranscriptEvents } from "../../config/sessions/session-accessor.sqlite-transcript-write.js";
 import { buildSideConversationSessionKey } from "../../config/sessions/side-conversation-registry.js";
-import type { InternalSessionEntry } from "../../config/sessions/types.js";
+import type { InternalSessionEntry, SessionEntry } from "../../config/sessions/types.js";
 import { beginSessionWorkAdmission } from "../../sessions/session-lifecycle-admission.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
+import { resolveFrozenParentSessionSelection } from "../session-create-model-selection.js";
+import { resolveEffectiveSessionThinkingLevel } from "../session-utils-model.js";
 import {
   directSessionReq,
   seedSessionTranscript,
@@ -65,16 +73,45 @@ function readEntry(storePath: string, sessionKey: string): InternalSessionEntry 
   return loadSessionEntry({ agentId: "main", sessionKey, storePath });
 }
 
-async function createParent(storePath: string, model?: string) {
+async function createParent(
+  storePath: string,
+  model?: string,
+  options: {
+    thinkingLevel?: string | null;
+    cfg?: unknown;
+    catalog?: ModelCatalogEntry[];
+  } = {},
+) {
   const created = await directSessionReq(
     "sessions.create",
     {
       key: parentKey,
       agentId: "main",
       ...(model ? { model } : {}),
-      thinkingLevel: "high",
+      ...((options.thinkingLevel ?? "high")
+        ? { thinkingLevel: options.thinkingLevel ?? "high" }
+        : {}),
     },
-    { client, context: modelCatalogContext() },
+    {
+      client,
+      context: {
+        ...modelCatalogContext(),
+        ...(options.cfg ? { getRuntimeConfig: () => options.cfg } : {}),
+        ...(options.catalog
+          ? {
+              loadGatewayModelCatalogSnapshot: async () => ({
+                entries: options.catalog,
+                routeVariants: options.catalog,
+                agentId: "main",
+                agentDir: "/tmp/openclaw-review-agent",
+                workspaceDir: "/tmp/openclaw-review-workspace",
+                config: options.cfg ?? getRuntimeConfig(),
+                catalogComplete: true,
+              }),
+            }
+          : {}),
+      },
+    },
   );
   expect(created.ok, JSON.stringify(created.error)).toBe(true);
   const parent = readEntry(storePath, parentKey)!;
@@ -393,4 +430,301 @@ test("parent archive RPC refuses an active child and leaves it unarchived", asyn
   } finally {
     lease.release();
   }
+});
+
+test("canonical worker and terminal work block parent delete and keep the child", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("worker-claim-intent");
+  const child = readEntry(storePath, created.sessionKey)!;
+  const parent = readEntry(storePath, parentKey)!;
+
+  const claimContext = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    workerSessionPlacementService: {
+      getMany: (sessionIds: string[]) =>
+        new Map(
+          sessionIds.map((sessionId) => [
+            sessionId,
+            { turnClaim: { sessionId, runId: "worker-run" } },
+          ]),
+        ),
+    } as never,
+  });
+  const blockedByClaim = await deleteSideConversationChildrenInParentFence({
+    agentId: "main",
+    context: claimContext,
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    deleteTranscript: true,
+    commitGuard: () => {},
+  });
+  expect(blockedByClaim).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(readEntry(storePath, created.sessionKey)).toBeTruthy();
+
+  const terminalContext = createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    terminalSessions: { hasAgentSessionWork: () => true } as never,
+  });
+  const blockedByTerminal = await deleteSideConversationChildrenInParentFence({
+    agentId: "main",
+    context: terminalContext,
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    deleteTranscript: true,
+    commitGuard: () => {},
+  });
+  expect(blockedByTerminal).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(readEntry(storePath, created.sessionKey)?.sessionId).toBe(child.sessionId);
+});
+
+test("frozen thinking matches the parent projection for a reasoning runtime model", () => {
+  const base = getRuntimeConfig();
+  const mainEntry = (base.agents?.entries as Record<string, object> | undefined)?.main;
+  const cfg = {
+    ...base,
+    agents: {
+      ...base.agents,
+      defaults: {
+        ...base.agents?.defaults,
+        model: "demo/reasoning-model",
+        thinkingDefault: undefined,
+      },
+      entries: {
+        ...base.agents?.entries,
+        main: { ...mainEntry, thinkingDefault: undefined, model: undefined },
+      },
+    },
+  };
+  const parentEntry = {
+    sessionId: "thinking-parent-incarnation",
+    updatedAt: 1,
+  } as SessionEntry;
+  const catalog: ModelCatalogEntry[] = [
+    { provider: "demo", id: "reasoning-model", name: "Reasoning", reasoning: true },
+  ];
+  // Without the runtime catalog the reasoning model looks like a non-reasoning
+  // model and resolves "off"; the parent's Gateway projection resolves "medium".
+  const withoutRuntimeCatalog = resolveEffectiveSessionThinkingLevel({
+    cfg,
+    provider: "demo",
+    model: "reasoning-model",
+    agentId: "main",
+    sessionKey: parentKey,
+    entry: parentEntry,
+    preparedAcpMeta: null,
+  });
+  expect(withoutRuntimeCatalog).toBe("off");
+  const parentEffective = resolveEffectiveSessionThinkingLevel({
+    cfg,
+    provider: "demo",
+    model: "reasoning-model",
+    agentId: "main",
+    sessionKey: parentKey,
+    entry: parentEntry,
+    preparedAcpMeta: null,
+    modelCatalog: catalog,
+    modelCatalogRouteVariants: catalog,
+  });
+  expect(parentEffective).toBe("medium");
+
+  const frozen = resolveFrozenParentSessionSelection({
+    cfg,
+    agentId: "main",
+    parentEntry,
+    parentSessionKey: parentKey,
+    modelCatalog: catalog,
+    modelCatalogRouteVariants: catalog,
+  });
+  expect(frozen).toMatchObject({
+    provider: "demo",
+    model: "reasoning-model",
+    thinkingLevel: parentEffective,
+  });
+});
+
+test("archive preparation releases the parent drain when child interruption throws", async () => {
+  const { storePath } = await createSessionStoreDir();
+  const parent = await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("interrupt-throw-intent");
+  const child = readEntry(storePath, created.sessionKey)!;
+  let releasePending: (() => void) | undefined;
+  const pending = beginSessionWorkAdmission({
+    scope: storePath,
+    identities: [created.sessionKey, child.sessionId],
+    assertAllowed: () =>
+      new Promise<void>((resolve) => {
+        releasePending = resolve;
+      }),
+    onInterrupt: () => {
+      throw new Error("interrupt boom");
+    },
+  }).catch((error: unknown) => error);
+
+  const archived = await directSessionReq(
+    "sessions.patch",
+    { key: parentKey, archived: true, expectedSessionId: parent.sessionId },
+    { client },
+  );
+  expect(archived.ok).toBe(false);
+
+  // The failed preparation must not leave the parent fenced or leak interruptions
+  // into unrelated sessions.
+  const parentLease = await beginSessionWorkAdmission({
+    scope: storePath,
+    identities: [parentKey, parent.sessionId],
+    assertAllowed: () => {},
+  });
+  parentLease.release();
+  const unrelatedLease = await beginSessionWorkAdmission({
+    scope: storePath,
+    identities: ["agent:main:unrelated"],
+    assertAllowed: () => {},
+  });
+  unrelatedLease.release();
+  releasePending?.();
+  expect(await pending).toBeInstanceOf(Error);
+  expect(readEntry(storePath, created.sessionKey)?.archivedAt).toBeUndefined();
+});
+
+test("replay rejects a marker without the expected parent incarnation", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("incarnation-mismatch-intent");
+  const child = readEntry(storePath, created.sessionKey)!;
+  await patchSessionEntryCore(
+    { agentId: "main", sessionKey: created.sessionKey, storePath },
+    (current) => ({
+      ...current,
+      sideConversation: current.sideConversation
+        ? { ...current.sideConversation, parentSessionId: undefined }
+        : undefined,
+    }),
+    { replaceEntry: true, skipMaintenance: true },
+  );
+  expect(child.sideConversation?.parentSessionId).toBeTruthy();
+
+  const replay = await directSessionReq(
+    "sideConversations.create",
+    { parentSessionKey: parentKey, intentId: "incarnation-mismatch-intent" },
+    { client, context: modelCatalogContext() },
+  );
+  expect(replay).toMatchObject({ ok: false, error: { code: "INVALID_REQUEST" } });
+  const parent = readEntry(storePath, parentKey)!;
+  expect(parent.sideConversations?.conversations["incarnation-mismatch-intent"]).toBeUndefined();
+});
+
+test("replay ignores boundary snapshot facts that name another parent", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("forged-snapshot-intent");
+  const child = readEntry(storePath, created.sessionKey)!;
+  const events = loadTranscriptEventsSync({
+    agentId: "main",
+    sessionKey: created.sessionKey,
+    sessionId: child.sessionId,
+    storePath,
+  });
+  const forgeBoundary = (event: unknown): unknown => {
+    const record = event as Record<string, unknown>;
+    if (record.customType !== "openclaw.side-conversation-snapshot") {
+      return event;
+    }
+    const details = record.details as { source?: string; snapshot?: Record<string, unknown> };
+    return {
+      ...record,
+      details: {
+        ...details,
+        snapshot: {
+          ...details.snapshot,
+          sourceSessionKey: "agent:main:dashboard:some-other-parent",
+          sourceSessionId: "some-other-parent-incarnation",
+        },
+      },
+    };
+  };
+  const forged = events.map(forgeBoundary);
+  await replaceTranscriptEvents(
+    {
+      agentId: "main",
+      sessionKey: created.sessionKey,
+      sessionId: child.sessionId,
+      storePath,
+    },
+    forged,
+  );
+  const parent = readEntry(storePath, parentKey)!;
+  const registration = parent.sideConversations!.conversations["forged-snapshot-intent"]!;
+  await patchSessionEntryCore(
+    { agentId: "main", sessionKey: parentKey, storePath },
+    (current) => ({
+      ...current,
+      sideConversations: {
+        version: 1 as const,
+        nextOrdinal: current.sideConversations!.nextOrdinal,
+        conversations: {
+          "forged-snapshot-intent": { ...registration, sessionId: undefined, snapshot: undefined },
+        },
+      },
+    }),
+    { replaceEntry: true, skipMaintenance: true },
+  );
+
+  const replay = await directSessionReq<{
+    created: boolean;
+    conversation: { sessionKey: string; snapshot?: unknown };
+  }>(
+    "sideConversations.create",
+    { parentSessionKey: parentKey, intentId: "forged-snapshot-intent" },
+    { client, context: modelCatalogContext() },
+  );
+  expect(replay.ok, JSON.stringify(replay.error)).toBe(true);
+  expect(replay.payload?.created).toBe(false);
+  expect(replay.payload?.conversation.snapshot).toBeUndefined();
+  expect(
+    readEntry(storePath, parentKey)?.sideConversations?.conversations["forged-snapshot-intent"]
+      ?.snapshot,
+  ).toBeUndefined();
+});
+
+test("archive never emits a non-preservation lifecycle reason as preserved", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath, "anthropic/claude-opus-4-6");
+  const created = await createSide("invalid-preserved-intent");
+  await patchSessionEntryCore(
+    { agentId: "main", sessionKey: created.sessionKey, storePath },
+    (current) => ({
+      ...current,
+      worktree: { id: "wt-invalid-preserved", branch: "branch-invalid", repoRoot: "/repo" },
+    }),
+    { replaceEntry: true, skipMaintenance: true },
+  );
+  const child = readEntry(storePath, created.sessionKey)!;
+  const parent = readEntry(storePath, parentKey)!;
+  let calls = 0;
+  const archived = await archiveSideConversationChildrenInParentFence({
+    cfg: getRuntimeConfig(),
+    agentId: "main",
+    context: fenceContext(),
+    parentEntry: parent,
+    parentSessionKey: parentKey,
+    storePath,
+    commitGuard: () => {
+      calls += 1;
+      if (calls === 2) {
+        const current = readEntry(storePath, created.sessionKey)!;
+        replaceSessionEntrySync(
+          { agentId: "main", sessionKey: created.sessionKey, storePath },
+          { ...current, lifecycleRevision: "rev-bumped" },
+        );
+      }
+    },
+  });
+  expect(archived).toMatchObject({ ok: false, error: { code: "UNAVAILABLE" } });
+  expect(readEntry(storePath, created.sessionKey)?.archivedAt).toBeUndefined();
+  expect(child.worktree?.id).toBe("wt-invalid-preserved");
 });

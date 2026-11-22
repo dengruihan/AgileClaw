@@ -252,11 +252,22 @@ export async function createPersistentSideConversation(params: {
   }
 
   // Freeze the parent's effective selection before creating the child so a later
-  // config default change cannot move it.
+  // config default change cannot move it. The thinking default is resolved through
+  // the same runtime catalog/route owner as the parent's Gateway row.
+  const modelCatalogSnapshot = await params.context
+    .loadGatewayModelCatalogSnapshot({ agentId: target.agentId })
+    .catch(() => undefined);
   const frozenParentSelection = resolveFrozenParentSessionSelection({
     cfg: params.cfg,
     agentId: target.agentId,
     parentEntry: target.entry,
+    parentSessionKey: target.canonicalKey,
+    ...(modelCatalogSnapshot
+      ? {
+          modelCatalog: modelCatalogSnapshot.entries,
+          modelCatalogRouteVariants: modelCatalogSnapshot.routeVariants,
+        }
+      : {}),
   });
   // Copy sharing only when the current config still allows it; otherwise the
   // child takes the ordinary creation default instead of failing creation.
@@ -331,17 +342,21 @@ export async function createPersistentSideConversation(params: {
   }
   const snapshot =
     created.sideConversationSnapshot ??
-    readSideConversationSnapshotFactsFromChild({
-      agentId: target.agentId,
-      entry:
-        readSideConversationChildEntry({
+    (target.entry.sessionId
+      ? readSideConversationSnapshotFactsFromChild({
           agentId: target.agentId,
-          storePath: target.storePath,
+          entry:
+            readSideConversationChildEntry({
+              agentId: target.agentId,
+              storePath: target.storePath,
+              sessionKey: childKey,
+            }) ?? (created.entry as InternalSessionEntry),
+          parentSessionId: target.entry.sessionId,
+          parentSessionKey: target.canonicalKey,
           sessionKey: childKey,
-        }) ?? (created.entry as InternalSessionEntry),
-      sessionKey: childKey,
-      storePath: target.storePath,
-    });
+          storePath: target.storePath,
+        })
+      : undefined);
   const finalized = await finalizeSideConversationIntent({
     agentId: target.agentId,
     cfg: params.cfg,

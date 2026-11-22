@@ -10,10 +10,10 @@
 import {
   ErrorCodes,
   errorShape,
+  WORKTREE_PRESERVATION_REASONS,
   type ErrorShape,
   type PreservedSessionWorktree,
 } from "../../../packages/gateway-protocol/src/index.js";
-import { isEmbeddedAgentRunInProgress } from "../../agents/embedded-agent-runner/runs.js";
 import { createAgentRunDirectAbortError } from "../../agents/run-termination.js";
 import { getRegistryWorktree } from "../../agents/worktrees/registry.js";
 import { deleteSessionEntryLifecycle } from "../../config/sessions.js";
@@ -28,20 +28,34 @@ import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
-import {
-  closeSessionWorkAdmissions,
-  isCompetingSessionWorkAdmissionActive,
-} from "../../sessions/session-lifecycle-admission.js";
+import { closeSessionWorkAdmissions } from "../../sessions/session-lifecycle-admission.js";
 import { handleSessionStateSessionDeleted } from "../../sessions/session-state-events.js";
 import {
   removeSessionWorktree,
   SessionWorktreeLifecycleError,
   synchronizeSessionWorktreeArchive,
 } from "../../sessions/session-worktree-lifecycle.js";
-import { hasGatewaySessionAbortOwner } from "./chat-abort-authorization.js";
+import { resolveSessionLifecycleActivity } from "./sessions-lifecycle-drain.js";
 import type { GatewayRequestContext } from "./types.js";
 
 const log = createSubsystemLogger("gateway/side-conversations");
+
+function isPreservationReason(value: string): value is PreservedSessionWorktree["reason"] {
+  return (WORKTREE_PRESERVATION_REASONS as readonly string[]).includes(value);
+}
+
+/** Public result values must be real preservation outcomes with discoverable locations. */
+function isValidPreservedWorktree(
+  value: PreservedSessionWorktree | undefined,
+): value is PreservedSessionWorktree {
+  return (
+    value !== undefined &&
+    isPreservationReason(value.reason) &&
+    value.id.length > 0 &&
+    value.branch.length > 0 &&
+    value.path.length > 0
+  );
+}
 
 type RegisteredChild = {
   registration: SideConversationRegistryEntry;
@@ -97,21 +111,19 @@ export function sideConversationActiveWork(params: {
   storePath: string;
 }): boolean {
   const sessionId = params.entry.sessionId;
-  return (
-    params.entry.status === "running" ||
-    (Boolean(sessionId) && isEmbeddedAgentRunInProgress(sessionId)) ||
-    isCompetingSessionWorkAdmissionActive(params.storePath, [
-      params.sessionKey,
-      ...(sessionId ? [sessionId] : []),
-    ]) ||
-    hasGatewaySessionAbortOwner({
-      context: params.context,
-      sessionKeys: [params.sessionKey],
-      ...(sessionId ? { sessionId } : {}),
-      agentId: params.agentId,
-      ...(params.defaultAgentId ? { defaultAgentId: params.defaultAgentId } : {}),
-    })
-  );
+  if (params.entry.status === "running") {
+    return true;
+  }
+  return resolveSessionLifecycleActivity({
+    context: params.context,
+    storePath: params.storePath,
+    sessionKeys: [params.sessionKey],
+    ...(sessionId ? { sessionId } : {}),
+    agentId: params.agentId,
+    ...(params.defaultAgentId ? { defaultAgentId: params.defaultAgentId } : {}),
+    sessionKey: params.sessionKey,
+    lifecycleIdentities: [params.sessionKey, ...(sessionId ? [sessionId] : [])],
+  });
 }
 
 /**
@@ -123,16 +135,28 @@ export function closeSideConversationChildAdmissions(params: {
   children: readonly RegisteredChild[];
   storePath: string;
 }): Array<() => void> {
-  return params.children.map((child) =>
-    closeSessionWorkAdmissions({
-      scope: params.storePath,
-      identities: childKeys({
-        entry: child.entry,
-        sessionKey: child.registration.sessionKey,
-      }),
-      reason: createAgentRunDirectAbortError(),
-    }),
-  );
+  const releases: Array<() => void> = [];
+  try {
+    for (const child of params.children) {
+      releases.push(
+        closeSessionWorkAdmissions({
+          scope: params.storePath,
+          identities: childKeys({
+            entry: child.entry,
+            sessionKey: child.registration.sessionKey,
+          }),
+          reason: createAgentRunDirectAbortError(),
+        }),
+      );
+    }
+    return releases;
+  } catch (error) {
+    // A later closure failure must not leave earlier child ingress fenced.
+    for (const release of releases) {
+      release();
+    }
+    throw error;
+  }
 }
 
 function childWriteGuard(params: {
@@ -246,8 +270,10 @@ export async function deleteSideConversationChildrenInParentFence(params: {
           reason: "session-delete",
           commitGuard: guard,
         });
-        if (childPreserved) {
+        if (isValidPreservedWorktree(childPreserved)) {
           preserved.push(childPreserved);
+        } else if (childPreserved) {
+          log.warn(`side conversation worktree preserved without a valid location: ${sessionKey}`);
         }
         deletedKeys.push(sessionKey);
       } catch (error) {
@@ -297,22 +323,28 @@ export function resolveSideConversationArchiveBlocker(params: {
   return undefined;
 }
 
-/** Read the preserved worktree record after archive cleanup refused to remove it. */
+/**
+ * Read the preserved worktree record after archive cleanup refused to remove it.
+ *
+ * `session-changed` and `restore-failed` are lifecycle failures, not preservation
+ * outcomes, and never become public worktreePreserved values.
+ */
 function readPreservedChildWorktree(
   entry: InternalSessionEntry,
   reason: SessionWorktreeLifecycleError["reason"],
 ): PreservedSessionWorktree | undefined {
   const id = entry.worktree?.id;
-  if (!id) {
+  if (!id || !isPreservationReason(reason)) {
     return undefined;
   }
   const record = getRegistryWorktree(process.env, id);
-  return {
+  const preserved: PreservedSessionWorktree = {
     id,
     branch: record?.branch ?? entry.worktree?.branch ?? "",
     path: record?.path ?? "",
-    reason: reason as PreservedSessionWorktree["reason"],
+    reason,
   };
+  return isValidPreservedWorktree(preserved) ? preserved : undefined;
 }
 
 /**
@@ -355,6 +387,35 @@ export async function archiveSideConversationChildrenInParentFence(params: {
       }
       throw error;
     }
+    // Worktree synchronization runs before the metadata commit, matching the
+    // parent archive owner. A real preservation outcome keeps the branch and
+    // still archives the row; any other lifecycle failure leaves the child row
+    // unarchived and is reported distinctly.
+    try {
+      await synchronizeSessionWorktreeArchive({
+        archived: true,
+        entry,
+        scope: { agentId: params.agentId, sessionKey, storePath: params.storePath },
+        commitGuard: guard,
+      });
+    } catch (error) {
+      if (!(error instanceof SessionWorktreeLifecycleError)) {
+        throw error;
+      }
+      const record = readPreservedChildWorktree(entry, error.reason);
+      if (record) {
+        preserved.push(record);
+        log.warn(`side conversation worktree preserved for ${sessionKey}: ${error.message}`);
+      } else {
+        return {
+          ok: false,
+          error: errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Side conversation ${sessionKey} worktree archive failed (${error.reason}); its row was left unarchived.`,
+          ),
+        };
+      }
+    }
     const committed = await patchSessionEntryCore(
       { agentId: params.agentId, sessionKey, storePath: params.storePath },
       (currentEntry: InternalSessionEntry) => ({
@@ -375,26 +436,13 @@ export async function archiveSideConversationChildrenInParentFence(params: {
       { replaceEntry: true, skipMaintenance: true },
     );
     if (!committed) {
-      continue;
-    }
-    try {
-      await synchronizeSessionWorktreeArchive({
-        archived: true,
-        entry: committed,
-        scope: { agentId: params.agentId, sessionKey, storePath: params.storePath },
-        commitGuard: guard,
-      });
-    } catch (error) {
-      if (error instanceof SessionWorktreeLifecycleError) {
-        // Keep the archived row and the preserved branch; report the location.
-        const record = readPreservedChildWorktree(committed, error.reason);
-        if (record) {
-          preserved.push(record);
-        }
-        log.warn(`side conversation worktree preserved for ${sessionKey}: ${error.message}`);
-      } else {
-        throw error;
-      }
+      return {
+        ok: false,
+        error: errorShape(
+          ErrorCodes.INVALID_REQUEST,
+          `Side conversation ${sessionKey} changed before archive. Retry.`,
+        ),
+      };
     }
     try {
       await recordSideConversationState({

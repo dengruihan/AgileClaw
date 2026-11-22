@@ -122,19 +122,17 @@ export function matchesSideConversationChild(params: {
   if (marker.parentSessionKey !== params.parentSessionKey) {
     return false;
   }
-  // A same-key parent reset is a different incarnation; never reuse a child that
-  // belongs to the previous parent generation.
-  return (
-    !params.parentSessionId ||
-    !marker.parentSessionId ||
-    marker.parentSessionId === params.parentSessionId
-  );
+  // Exact incarnation binding: a missing expected or marker incarnation is not
+  // a match, so a same-key parent reset can never replay the old child.
+  return params.parentSessionId === marker.parentSessionId;
 }
 
 /** Recover frozen snapshot facts from the child's own M200 boundary row. */
 export function readSideConversationSnapshotFactsFromChild(params: {
   agentId: string;
   entry: InternalSessionEntry;
+  parentSessionId: string;
+  parentSessionKey: string;
   sessionKey: string;
   storePath: string;
 }): SideConversationSnapshotFacts | undefined {
@@ -161,8 +159,15 @@ export function readSideConversationSnapshotFactsFromChild(params: {
     }
     const details = isRecord(event.details) ? event.details : undefined;
     const snapshot = isRecord(details?.snapshot) ? details.snapshot : undefined;
+    const marker = params.entry.sideConversation;
     if (
       !snapshot ||
+      details?.source !== "openclaw-side-conversation-snapshot" ||
+      !marker ||
+      marker.parentSessionKey !== params.parentSessionKey ||
+      marker.parentSessionId !== params.parentSessionId ||
+      snapshot.sourceSessionKey !== params.parentSessionKey ||
+      snapshot.sourceSessionId !== params.parentSessionId ||
       typeof snapshot.sourceSessionKey !== "string" ||
       typeof snapshot.sourceSessionId !== "string" ||
       typeof snapshot.projectionVersion !== "number" ||
@@ -241,12 +246,16 @@ export async function reconcileCommittedSideConversation(params: {
 }): Promise<SideConversationResult<{ created: boolean; conversation: SideConversationSummary }>> {
   const snapshot =
     params.snapshot ??
-    readSideConversationSnapshotFactsFromChild({
-      agentId: params.agentId,
-      entry: params.child,
-      sessionKey: params.sessionKey,
-      storePath: params.storePath,
-    });
+    (params.parentSessionId
+      ? readSideConversationSnapshotFactsFromChild({
+          agentId: params.agentId,
+          entry: params.child,
+          parentSessionId: params.parentSessionId,
+          parentSessionKey: params.parentSessionKey,
+          sessionKey: params.sessionKey,
+          storePath: params.storePath,
+        })
+      : undefined);
   const registration = await reserveSideConversationIntent({
     agentId: params.agentId,
     cfg: params.cfg,

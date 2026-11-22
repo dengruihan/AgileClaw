@@ -285,29 +285,49 @@ export async function prepareSessionPatchArchive(params: {
         Boolean(identity),
       ),
     });
-    const parentForChildren = loadInternalSessionEntry({
-      agentId: freshResolved.agentId,
-      sessionKey: freshCanonicalKey,
-      storePath: target.storePath,
-    });
-    const children = parentForChildren
-      ? readRegisteredSideConversationChildren({
-          agentId: freshResolved.agentId,
-          parentEntry: parentForChildren,
-          parentSessionKey: freshCanonicalKey,
-          storePath: target.storePath,
-        })
-      : [];
-    const childAdmissionReleases = closeSideConversationChildAdmissions({
-      children,
-      storePath: target.storePath,
-    });
-    return ok({
-      canonicalKey: freshCanonicalKey,
-      drain,
-      ...(fresh.entry ? { entry: fresh.entry } : {}),
-      ...(childAdmissionReleases.length > 0 ? { childAdmissionReleases } : {}),
-    });
+    let childAdmissionReleases: Array<() => void> = [];
+    try {
+      const parentForChildren = loadInternalSessionEntry({
+        agentId: freshResolved.agentId,
+        sessionKey: freshCanonicalKey,
+        storePath: target.storePath,
+      });
+      const children = parentForChildren
+        ? readRegisteredSideConversationChildren({
+            agentId: freshResolved.agentId,
+            parentEntry: parentForChildren,
+            parentSessionKey: freshCanonicalKey,
+            storePath: target.storePath,
+          })
+        : [];
+      // closeSideConversationChildAdmissions rolls back its own partial closures;
+      // this owner still releases the parent drain on any later failure.
+      childAdmissionReleases = closeSideConversationChildAdmissions({
+        children,
+        storePath: target.storePath,
+      });
+      return ok({
+        canonicalKey: freshCanonicalKey,
+        drain,
+        ...(fresh.entry ? { entry: fresh.entry } : {}),
+        ...(childAdmissionReleases.length > 0 ? { childAdmissionReleases } : {}),
+      });
+    } catch (error) {
+      for (const release of childAdmissionReleases) {
+        release();
+      }
+      drain.release();
+      sessionLog.warn(
+        `sessions.patch: archive preparation cleanup failed for ${freshCanonicalKey}: ${formatErrorMessage(error)}`,
+      );
+      return err(
+        errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Session ${target.key} could not prepare its side conversations for archive. Retry.`,
+          { retryable: true },
+        ),
+      );
+    }
   } catch (error) {
     if (error instanceof SessionLifecycleWorkspaceRecoveryError) {
       return err(error.error);

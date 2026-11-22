@@ -4,6 +4,8 @@ export type SessionsPatchResult = {
   path: string;
   key: string;
   entry: Record<string, unknown>;
+  /** Worktrees preserved while applying the patch (parent and hidden children). */
+  preservedWorktrees?: import("./schema/sessions-delete.js").PreservedSessionWorktree[];
   resolved?: {
     modelProvider?: string;
     model?: string;
