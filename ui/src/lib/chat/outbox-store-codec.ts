@@ -104,6 +104,10 @@ function normalizeChatAttachment(value: unknown): ChatAttachment | null {
   if (dataUrl) {
     restored.dataUrl = dataUrl;
   }
+  const uploadId = normalizeOptionalString(entry.uploadId);
+  if (uploadId) {
+    restored.uploadId = uploadId;
+  }
   return restored;
 }
 

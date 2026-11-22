@@ -5,6 +5,7 @@ import type { ChatAttachment, HumanMention } from "../../lib/chat/chat-types.ts"
 import type { SessionToolOverrides } from "../../lib/sessions/patch.ts";
 import type { ChatAttachmentLimits } from "../chat/components/chat-attachment-admission.ts";
 import type { ChatAttachmentReadLifecycle } from "../chat/components/chat-attachment-reads.ts";
+import type { ChatAttachmentUploadTarget } from "../chat/components/chat-attachment-upload.ts";
 import type { HumanMentionDirectory } from "../chat/components/chat-composer-mention-menu.ts";
 import type { CapabilityMenuProps } from "../chat/components/chat-composer-types.ts";
 import type { SidebarContent } from "../chat/components/chat-sidebar-content-types.ts";
@@ -14,6 +15,7 @@ import type { NewSessionVisibility } from "./create-params.ts";
 export type NewSessionComposerOptions = {
   uploadConfig?: ApplicationConfigCapability;
   attachmentLimits?: ChatAttachmentLimits;
+  attachmentUpload?: ChatAttachmentUploadTarget;
   attachmentReads?: ChatAttachmentReadLifecycle;
   attachments: ChatAttachment[];
   canSubmit: boolean;

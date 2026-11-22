@@ -193,7 +193,7 @@ describe("durable recovery", () => {
     if (retained.status !== "found") {
       throw new Error("Missing retained draft");
     }
-    expect(await retained.draft.attachments[0]!.blob.text()).toBe("keep bytes");
+    expect(await retained.draft.attachments[0]!.blob!.text()).toBe("keep bytes");
     expect(retained.draft.revision).toBe(entry.revision);
   });
 });

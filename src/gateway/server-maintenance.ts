@@ -46,6 +46,11 @@ import {
   removeChatAbortControllerEntry,
   type RestartRecoveryCandidate,
 } from "./chat-abort.js";
+import {
+  runChatAttachmentUploadMaintenance,
+  shutdownChatAttachmentUploads,
+  startChatAttachmentUploadMaintenance,
+} from "./chat-attachment-upload-store.js";
 import type { QueuedChatTurnMap } from "./chat-queued-turns.js";
 import { pruneStaleControlPlaneBuckets } from "./control-plane-rate-limit.js";
 import type { HealthSummary } from "./health/types.js";
@@ -527,7 +532,15 @@ export function startGatewayMaintenanceTimers(params: {
     }
     mediaCleanupStarted = true;
     // A stuck prior generation defers only media cleanup, never Gateway readiness.
-    void waitForMediaCleanupDrainsToSettle().then(() => {
+    void waitForMediaCleanupDrainsToSettle().then(async () => {
+      if (mediaScheduler.signal.aborted) {
+        return;
+      }
+      // Re-open upload admission only after the prior generation's shutdown and
+      // final discard settled, so an old owner cannot clear the new generation.
+      // The owner signal cancels this activation if this generation is stopped
+      // while it waits; a stopped owner must never reopen the fence it drained.
+      await startChatAttachmentUploadMaintenance({ signal: mediaScheduler.signal });
       if (mediaScheduler.signal.aborted) {
         return;
       }
@@ -551,12 +564,20 @@ export function startGatewayMaintenanceTimers(params: {
           params.logHealth.error(`media cleanup failed: ${formatError(err)}`);
         });
       });
+      // Direct attachment uploads keep their own staging directory; the first run
+      // also clears staging files a previous process left behind.
+      scheduleMedia("chat-attachment-uploads", () =>
+        runChatAttachmentUploadMaintenance().catch((err: unknown) => {
+          params.logHealth.error(`attachment upload cleanup failed: ${formatError(err)}`);
+        }),
+      );
     });
   };
   let stopMediaCleanupPromise: Promise<MediaCleanupStopResult> | undefined;
   const stopMediaCleanup = () => {
     stopMediaCleanupPromise ??= (async () => {
       registerMediaCleanupDrain(mediaScheduler.stop());
+      registerMediaCleanupDrain(shutdownChatAttachmentUploads());
       return await waitForMediaCleanupDrains({
         timeoutMs: MEDIA_CLEANUP_STOP_TIMEOUT_MS,
         onTimeout: () => {

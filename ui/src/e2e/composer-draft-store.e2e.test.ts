@@ -322,7 +322,7 @@ suite.define(() => {
                   text: identified.draft.text,
                   revision: identified.draft.revision,
                   writeId: identified.draft.writeId,
-                  bytes: await identified.draft.attachments[0]!.blob.text(),
+                  bytes: await identified.draft.attachments[0]!.blob!.text(),
                 }
               : null,
           failed: failed.status,
@@ -334,7 +334,9 @@ suite.define(() => {
           restored: restored.status,
           sourceAfter: sourceAfter.status,
           recovered:
-            recovered.status === "found" ? await recovered.draft.attachments[0]!.blob.text() : null,
+            recovered.status === "found"
+              ? await recovered.draft.attachments[0]!.blob!.text()
+              : null,
           reopened: reopened.status === "ready" ? reopened.entries.map((row) => row.text) : null,
         };
       }, handle);

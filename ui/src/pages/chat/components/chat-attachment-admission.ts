@@ -75,18 +75,45 @@ export function admitAttachmentFiles(
       empty.push(file);
     } else if (
       limits &&
-      ((file.size > reservation && !(options.resizeImages && canResizeChatAttachment(file))) ||
-        total + reservation > limits.maxBatchBytes)
+      file.size > reservation &&
+      !(options.resizeImages && canResizeChatAttachment(file))
     ) {
+      oversized.push(file);
+    } else if (
+      limits &&
+      !attachmentNeedsDirectUpload(file.size, file.type, limits) &&
+      total + reservation > limits.maxBatchBytes
+    ) {
+      // Direct uploads bypass the frame budget: their bytes never ride a frame.
       oversized.push(file);
     } else {
       admitted.push(file);
-      total += reservation;
+      if (!limits || !attachmentNeedsDirectUpload(file.size, file.type, limits)) {
+        total += reservation;
+      }
     }
   }
   skippedFilesToast("chat.attachments.readFailed", empty);
   skippedFilesToast("chat.attachments.tooLarge", oversized);
   return admitted;
+}
+
+/**
+ * True when a file cannot share one `chat.send` frame, so its bytes are staged
+ * on the Gateway instead of base64-encoded in the browser. Images keep the
+ * inline path: they are capped by `maxImageBytes`, far below any frame budget.
+ */
+export function attachmentNeedsDirectUpload(
+  sizeBytes: number,
+  mimeType: string,
+  limits: ChatAttachmentLimits | undefined,
+): boolean {
+  return Boolean(
+    limits &&
+    !mimeType.startsWith("image/") &&
+    sizeBytes > limits.maxBatchBytes &&
+    sizeBytes <= limits.maxBytes,
+  );
 }
 
 export function attachmentReservationBytes(
@@ -99,6 +126,10 @@ export function attachmentReservationBytes(
 }
 
 function attachmentBytes(attachment: ChatAttachment): number {
+  // Direct uploads never enter the request frame.
+  if (attachment.uploadId) {
+    return 0;
+  }
   const size = attachment.sizeBytes;
   if (typeof size === "number" && Number.isFinite(size) && size >= 0) {
     return size;

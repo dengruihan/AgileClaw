@@ -24,6 +24,8 @@ export type ChatAttachment = {
   fileName?: string;
   origin?: MediaFact["origin"];
   content?: unknown;
+  /** Reference to a committed direct upload; resolved by the chat.send owner. */
+  uploadId?: string;
   sizeBytes?: number;
   durationMs?: number;
   width?: number;
@@ -48,6 +50,8 @@ export type OffloadedRef = {
   origin?: MediaFact["origin"];
   sizeBytes: number;
   sourceIndex: number;
+  /** Bytes arrived through the direct upload route, not inline base64. */
+  directUpload?: true;
   durationMs?: number;
   width?: number;
   height?: number;
@@ -84,11 +88,19 @@ type AttachmentLog = {
   warn: (message: string) => void;
 };
 
-type NormalizedAttachment = {
-  label: string;
-  mime: string;
-  base64: string;
-};
+type NormalizedAttachment =
+  | {
+      label: string;
+      mime: string;
+      base64: string;
+      uploadId?: never;
+    }
+  | {
+      label: string;
+      mime: string;
+      uploadId: string;
+      base64?: never;
+    };
 
 export const INLINE_IMAGE_DURABLE_OMISSION_MARKER =
   "[image attachment omitted: durable managed media claim unavailable]";
@@ -235,6 +247,7 @@ type UnsupportedAttachmentReason =
   | "empty-payload"
   | "text-only-image"
   | "unsupported-non-image"
+  | "direct-upload"
   | "non-image-too-large-for-sandbox";
 
 export class UnsupportedAttachmentError extends Error {
@@ -277,6 +290,11 @@ function normalizeAttachment(att: ChatAttachment, idx: number): NormalizedAttach
   const content = att.content;
   const label = att.fileName || att.type || `attachment-${idx + 1}`;
 
+  // Direct uploads already live in the inbound media store; their reference is
+  // resolved by the caller that owns the upload registry and request authority.
+  if (typeof content !== "string" && att.uploadId?.trim()) {
+    return { label, mime, uploadId: att.uploadId.trim() };
+  }
   if (typeof content !== "string") {
     throw new Error(`attachment ${label}: content must be base64 string`);
   }
@@ -302,6 +320,12 @@ export async function parseMessageWithAttachments(
     imageStorage?: "inline";
     signal?: AbortSignal;
     assertCurrent?: () => void;
+    /**
+     * Resolves a committed direct upload for this request. The owner that binds
+     * the upload to its authenticated owner, session, and agent supplies it, and
+     * consumes the reference; a missing resolver rejects direct uploads.
+     */
+    resolveStagedUpload?: (uploadId: string) => SavedMedia & { fileName?: string };
   },
 ): Promise<ParsedMessageWithImages> {
   const maxBytes = opts?.maxBytes ?? DEFAULT_CHAT_ATTACHMENT_MAX_BYTES;
@@ -344,16 +368,38 @@ export async function parseMessageWithAttachments(
         continue;
       }
 
-      const { base64: b64, label, mime } = normalizeAttachment(att, idx);
+      const normalized = normalizeAttachment(att, idx);
+      const { label, mime } = normalized;
 
-      if (b64.length === 0) {
+      const stagedUpload = normalized.uploadId
+        ? opts?.resolveStagedUpload?.(normalized.uploadId)
+        : undefined;
+      if (normalized.uploadId && !stagedUpload) {
+        throw new UnsupportedAttachmentError(
+          "direct-upload",
+          `attachment ${label}: direct uploads are not supported on this entrypoint`,
+        );
+      }
+      if (stagedUpload) {
+        // The registry has handed ownership to this request; every rejection
+        // below must delete the published media through the failure cleanup.
+        savedMediaIds.push(stagedUpload.id);
+      }
+      const b64 = normalized.base64 ?? "";
+      if (!stagedUpload && b64.length === 0) {
         throw new UnsupportedAttachmentError("empty-payload", `attachment ${label}: empty payload`);
       }
-      const prepared = await prepareMediaAttachment(
-        { base64: b64, label, mime, imageStorage: opts?.imageStorage },
-        maxBytes,
-        opts?.signal,
-      );
+      const prepared = stagedUpload
+        ? {
+            sizeBytes: stagedUpload.size,
+            mime: stagedUpload.contentType ?? "application/octet-stream",
+            buffer: undefined,
+          }
+        : await prepareMediaAttachment(
+            { base64: b64, label, mime, imageStorage: opts?.imageStorage },
+            maxBytes,
+            opts?.signal,
+          );
       const { sizeBytes, mime: finalMime } = prepared;
       const providedMime = normalizeMimeType(mime);
 
@@ -396,10 +442,18 @@ export async function parseMessageWithAttachments(
             `${TEXT_ONLY_OFFLOAD_LIMIT} was reached`,
         );
         updatedMessage += "\n[image attachment omitted: text-only attachment limit reached]";
+        if (stagedUpload) {
+          const omittedIndex = savedMediaIds.indexOf(stagedUpload.id);
+          if (omittedIndex >= 0) {
+            savedMediaIds.splice(omittedIndex, 1);
+          }
+          await deleteMediaBuffer(stagedUpload.id, "inbound");
+        }
         continue;
       }
 
       const shouldOffload =
+        Boolean(stagedUpload) ||
         shouldForceImageOffload ||
         !isImage ||
         (opts?.imageStorage !== "inline" && sizeBytes > ATTACHMENT_OFFLOAD_THRESHOLD_BYTES);
@@ -425,17 +479,24 @@ export async function parseMessageWithAttachments(
       let savedMedia: SavedMedia;
       let mediaRef: string;
       try {
-        const labelWithExt = ensureExtension(label, finalMime);
-        savedMedia = await saveMediaBuffer(
-          buffer,
-          finalMime,
-          "inbound",
-          maxBytes,
-          labelWithExt,
-          undefined,
-          { assertCommitAllowed: opts?.assertCurrent },
-        );
-        mediaRef = buildManagedInboundMediaRef(savedMedia.id);
+        if (stagedUpload) {
+          // Direct uploads are already published in the inbound store; this
+          // request only adopts the file and names its media reference.
+          savedMedia = stagedUpload;
+          mediaRef = buildManagedInboundMediaRef(savedMedia.id);
+        } else {
+          const labelWithExt = ensureExtension(label, finalMime);
+          savedMedia = await saveMediaBuffer(
+            buffer,
+            finalMime,
+            "inbound",
+            maxBytes,
+            labelWithExt,
+            undefined,
+            { assertCommitAllowed: opts?.assertCurrent },
+          );
+          mediaRef = buildManagedInboundMediaRef(savedMedia.id);
+        }
       } catch (err) {
         if (err instanceof SessionMutationAuthorizationChangedError) {
           throw err;
@@ -465,6 +526,7 @@ export async function parseMessageWithAttachments(
         label,
         sizeBytes,
         sourceIndex: idx,
+        ...(stagedUpload ? { directUpload: true as const } : {}),
         ...(att.origin === "paste" || att.origin === "file" ? { origin: att.origin } : {}),
         ...(typeof att.durationMs === "number" &&
         Number.isFinite(att.durationMs) &&

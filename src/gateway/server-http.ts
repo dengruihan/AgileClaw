@@ -74,6 +74,7 @@ import {
   getBoardHttpModule,
   getEmbeddingsHttpModule,
   getManagedMediaAttachmentsModule,
+  getChatAttachmentUploadsModule,
   getArtifactDownloadsModule,
   getMcpAppStandaloneModule,
   getModelsHttpModule,
@@ -671,6 +672,17 @@ export function createGatewayHttpServer(opts: {
       }
 
       addRequestStage(focusDocument, handleStandaloneControlUiRequest);
+
+      addRequestStage(
+        scopedRequestPath === "/api/chat/attachments/upload" ||
+          (controlUiRouteBasePath.length > 0 &&
+            scopedRequestPath === `${controlUiRouteBasePath}/api/chat/attachments/upload`),
+        async () =>
+          (await getChatAttachmentUploadsModule()).handleChatAttachmentUploadHttpRequest(req, res, {
+            ...routeAuth,
+            basePath: controlUiRouteBasePath,
+          }),
+      );
 
       addRequestStage(
         scopedRequestPath.startsWith("/api/chat/media/outgoing/") ||

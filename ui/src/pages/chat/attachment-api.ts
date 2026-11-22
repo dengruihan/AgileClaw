@@ -21,10 +21,37 @@ function dataUrlToBase64(dataUrl: string): { content: string; mimeType: string }
   return content && !/[\r\n\u2028\u2029]/.test(content) ? { mimeType, content } : null;
 }
 
-/** Converts composer attachments into the base64 payload accepted by chat.send. */
-export function buildChatApiAttachments(attachments?: readonly ChatAttachment[]) {
+/** Wire shape for one `chat.send` attachment: inline base64 or a direct upload reference. */
+export type ChatApiAttachment = {
+  type: string;
+  mimeType: string;
+  fileName?: string;
+  origin?: "paste" | "file";
+  content?: string;
+  uploadId?: string;
+  sizeBytes?: number;
+};
+
+/** Converts composer attachments into the payload accepted by chat.send. */
+export function buildChatApiAttachments(
+  attachments?: readonly ChatAttachment[],
+): ChatApiAttachment[] | undefined {
   return attachments?.length
-    ? attachments.map((attachment) => {
+    ? attachments.map((attachment): ChatApiAttachment => {
+        // Direct uploads already own their bytes on the Gateway; the send only
+        // references them and never encodes them into this frame.
+        if (attachment.uploadId) {
+          return {
+            type: attachment.mimeType.startsWith("image/") ? "image" : "file",
+            mimeType: attachment.mimeType,
+            fileName: attachment.fileName,
+            ...(attachment.origin ? { origin: attachment.origin } : {}),
+            uploadId: attachment.uploadId,
+            ...(typeof attachment.sizeBytes === "number"
+              ? { sizeBytes: attachment.sizeBytes }
+              : {}),
+          };
+        }
         const dataUrl = getChatAttachmentDataUrl(attachment);
         const parsed = dataUrl ? dataUrlToBase64(dataUrl) : null;
         if (!parsed) {

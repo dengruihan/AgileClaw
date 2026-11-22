@@ -3226,7 +3226,7 @@ describe("handleSendChat", () => {
         expect(
           await Promise.all(
             retained.map(async (attachment) =>
-              Buffer.from(await attachment.blob.arrayBuffer()).toString("base64"),
+              Buffer.from(await attachment.blob!.arrayBuffer()).toString("base64"),
             ),
           ),
         ).toEqual(dataUrls.map((url) => url.split(",")[1]));

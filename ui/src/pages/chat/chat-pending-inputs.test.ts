@@ -826,7 +826,7 @@ describe("server-owned pending input display", () => {
           throw new Error(`Expected stored custody bytes: ${stored.reason}`);
         }
         expect(stored.value).toHaveLength(1);
-        expect(Buffer.from(await stored.value[0]!.blob.arrayBuffer())).toEqual(imageBytes);
+        expect(Buffer.from(await stored.value[0]!.blob!.arrayBuffer())).toEqual(imageBytes);
       }
       expect(
         admitQueuedMessageForSession(
@@ -848,7 +848,7 @@ describe("server-owned pending input display", () => {
         const retained = await outboxPayloadStore.readOutboxPayload(payloadOwner, reference);
         expect(retained.status).toBe("ready");
         if (retained.status === "ready") {
-          expect(Buffer.from(await retained.value[0]!.blob.arrayBuffer())).toEqual(imageBytes);
+          expect(Buffer.from(await retained.value[0]!.blob!.arrayBuffer())).toEqual(imageBytes);
         }
       }
       const items = buildChatItems({

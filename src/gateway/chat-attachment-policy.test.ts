@@ -1,5 +1,8 @@
 // Attachment policy tests guard the numbers advertised on `hello-ok` against the
-// ceilings the parser actually enforces.
+// ceilings the parser actually enforces. The per-file ceiling is not a frame
+// budget: files above what one frame can carry stream through the direct upload
+// route, so the advertised value stays at the full decoded ceiling.
+import { MAX_IMAGE_BYTES } from "@openclaw/media-core/constants";
 import { describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
@@ -14,13 +17,17 @@ const cfgWithMediaMaxMb = (value: unknown): OpenClawConfig =>
   ({ agents: { defaults: { mediaMaxMb: value } } }) as unknown as OpenClawConfig;
 
 describe("resolveChatAttachmentMaxBytes", () => {
-  it("falls back to the default ceiling when unset", () => {
-    expect(resolveChatAttachmentMaxBytes({} as OpenClawConfig)).toBe(
-      DEFAULT_CHAT_ATTACHMENT_MAX_BYTES,
-    );
+  it("defaults to 1 GiB per file", () => {
+    expect(DEFAULT_CHAT_ATTACHMENT_MAX_BYTES).toBe(1024 * MB);
+    expect(resolveChatAttachmentMaxBytes({} as OpenClawConfig)).toBe(1024 * MB);
     expect(resolveChatAttachmentMaxBytes({ agents: {} } as unknown as OpenClawConfig)).toBe(
-      DEFAULT_CHAT_ATTACHMENT_MAX_BYTES,
+      1024 * MB,
     );
+  });
+
+  it("honors a configured ceiling exactly at the 1 GiB boundary", () => {
+    expect(resolveChatAttachmentMaxBytes(cfgWithMediaMaxMb(1024))).toBe(1024 * MB);
+    expect(resolveChatAttachmentMaxBytes(cfgWithMediaMaxMb(1024.000001))).toBe(1024 * MB + 1);
   });
 
   it("rejects non-positive, non-finite, or non-number values", () => {
@@ -40,18 +47,22 @@ describe("resolveChatAttachmentMaxBytes", () => {
   });
 });
 
-// Frame budget mirrored from the policy module: base64 expands 4/3 and the
-// JSON envelope needs slack, so the advertised ceiling must fit one WS frame.
-const MAX_ADVERTISED_BYTES = Math.floor(((25 * MB - 256 * 1024) * 3) / 4);
-
 describe("resolveChatAttachmentPolicy", () => {
-  it("clamps the advertised ceiling to what one WS frame can carry as base64", () => {
-    // The 20MB default and any raised mediaMaxMb both exceed the frame budget:
-    // advertising them would let the client encode a frame the server
-    // hard-drops with 1009.
-    expect(resolveChatAttachmentPolicy({} as OpenClawConfig).maxBytes).toBe(MAX_ADVERTISED_BYTES);
-    expect(resolveChatAttachmentPolicy(cfgWithMediaMaxMb(50)).maxBytes).toBe(MAX_ADVERTISED_BYTES);
-    expect(MAX_ADVERTISED_BYTES).toBeLessThan(20 * MB);
+  it("advertises the decoded per-file ceiling, not one frame's base64 budget", () => {
+    const policy = resolveChatAttachmentPolicy({} as OpenClawConfig);
+    expect(policy.maxBytes).toBe(1024 * MB);
+    // 1 GiB of base64 far exceeds one 25 MiB frame; the direct upload route
+    // carries these bytes instead, so the frame budget must not truncate it.
+    expect(policy.maxBytes).toBeGreaterThan(25 * MB);
+    expect(Number.isSafeInteger(policy.maxBytes)).toBe(true);
+  });
+
+  it("follows a configured ceiling above 1 GiB", () => {
+    expect(resolveChatAttachmentPolicy(cfgWithMediaMaxMb(2048)).maxBytes).toBe(2048 * MB);
+  });
+
+  it("keeps the image ceiling at the agent-hydration cap", () => {
+    expect(resolveChatAttachmentPolicy({} as OpenClawConfig).maxImageBytes).toBe(MAX_IMAGE_BYTES);
   });
 
   it("keeps both ceilings positive so the hello-ok schema stays satisfiable", () => {

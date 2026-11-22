@@ -1,17 +1,21 @@
 import type { ApplicationConfigCapability } from "../../../app/config.ts";
+import { t } from "../../../i18n/index.ts";
 import type { ChatAttachment } from "../../../lib/chat/chat-types.ts";
 import { showToast } from "../../../lib/toast.ts";
 import { uploadsEnabled, uploadsDisabledMessage } from "../../../lib/uploads.ts";
 import {
   generateAttachmentId,
   registerChatAttachmentPayload,
+  registerStagedChatAttachmentPayload,
 } from "../attachment-payload-store.ts";
 import {
   admitAttachmentFiles,
+  attachmentNeedsDirectUpload,
   attachmentReservationBytes,
   type ChatAttachmentLimits,
 } from "./chat-attachment-admission.ts";
 import { resizeChatAttachmentImage } from "./chat-attachment-image.ts";
+import { stageChatAttachment, type ChatAttachmentUploadTarget } from "./chat-attachment-upload.ts";
 
 const CHAT_ATTACHMENT_READ_TIMEOUT_MS = 15_000;
 
@@ -57,7 +61,12 @@ export class ChatAttachmentReadLifecycle {
     return this.entries.reduce(
       (total, entry) =>
         total +
-        (entry.state === "reading"
+        (entry.state === "reading" &&
+        !attachmentNeedsDirectUpload(
+          entry.attachment.sizeBytes ?? 0,
+          entry.attachment.mimeType,
+          limits,
+        )
           ? attachmentReservationBytes(
               entry.attachment.sizeBytes ?? 0,
               entry.attachment.mimeType,
@@ -133,6 +142,11 @@ export class ChatAttachmentReadLifecycle {
     this.notify();
   }
 
+  /** True while this exact slot is still tracked for an unfinished read. */
+  isActive(entry: ChatAttachmentRead): boolean {
+    return entry.state === "reading" && this.entries.includes(entry);
+  }
+
   remove(entry: ChatAttachmentRead): void {
     this.entries = this.entries.filter((candidate) => candidate !== entry);
     entry.cancel?.();
@@ -159,11 +173,17 @@ export function readChatAttachmentFile(
     readSignal?: AbortSignal;
     attachmentLimits?: ChatAttachmentLimits;
     uploadConfig?: ApplicationConfigCapability;
+    attachmentUpload?: ChatAttachmentUploadTarget;
+    onUploadStagedAttachment?: (attachment: ChatAttachment) => void;
   },
 ): void {
   const signal = props.readSignal ?? reads.readSignal;
   if (signal.aborted) {
     reads.remove(entry);
+    return;
+  }
+  if (attachmentNeedsDirectUpload(file.size, file.type, props.attachmentLimits)) {
+    readStagedChatAttachment(file, entry, reads, props, signal);
     return;
   }
   const reader = new FileReader();
@@ -269,4 +289,112 @@ export function readChatAttachmentFile(
   } else {
     readPreparedFile(file);
   }
+}
+
+/**
+ * Streams a file that cannot fit one `chat.send` frame to the Gateway staging
+ * store. The composer slot stays pending until the upload commits, so a send
+ * can never race ahead of the bytes it references.
+ */
+function readStagedChatAttachment(
+  file: File,
+  entry: PendingChatAttachmentRead,
+  reads: ChatAttachmentReadLifecycle,
+  props: {
+    readSignal?: AbortSignal;
+    uploadConfig?: ApplicationConfigCapability;
+    attachmentUpload?: ChatAttachmentUploadTarget;
+    onUploadStagedAttachment?: (attachment: ChatAttachment) => void;
+  },
+  signal: AbortSignal,
+): void {
+  const target = props.attachmentUpload;
+  if (!target) {
+    reads.settle(entry, "error");
+    return;
+  }
+  entry.destination.onPendingReadsChange?.(1);
+  // Each direct read owns a controller so removing one slot cancels only that
+  // transfer, and the global read signal still cancels every slot.
+  const controller = new AbortController();
+  const abortFromScope = () => controller.abort(signal.reason);
+  if (signal.aborted) {
+    abortFromScope();
+  } else {
+    signal.addEventListener("abort", abortFromScope, { once: true });
+  }
+  let settled = false;
+  const finish = (outcome: "ready" | "error" | "aborted") => {
+    if (settled) {
+      return;
+    }
+    settled = true;
+    entry.cancel = undefined;
+    signal.removeEventListener("abort", abortFromScope);
+    if (outcome === "aborted" || controller.signal.aborted) {
+      reads.remove(entry);
+    } else {
+      reads.settle(entry, outcome);
+    }
+    entry.destination.onPendingReadsChange?.(-1);
+  };
+  entry.cancel = () => {
+    controller.abort();
+    finish("aborted");
+  };
+  const isCurrent = () => !settled && !controller.signal.aborted && reads.isActive(entry);
+  void stageChatAttachment({
+    file,
+    target,
+    signal: controller.signal,
+    onProgress: (fraction) => {
+      if (isCurrent()) {
+        reads.updateProgress(entry, fraction);
+      }
+    },
+  })
+    .then((staged) => {
+      // A transport may finish after the slot was removed; never re-add it.
+      if (!isCurrent()) {
+        finish("aborted");
+        return;
+      }
+      if (!uploadsEnabled(props.uploadConfig)) {
+        showToast({ message: uploadsDisabledMessage() });
+        finish("error");
+        return;
+      }
+      const completedAttachment = registerStagedChatAttachmentPayload({
+        attachment: {
+          ...entry.attachment,
+          mimeType: staged.mimeType,
+          sizeBytes: staged.sizeBytes,
+          uploadId: staged.uploadId,
+        },
+        file,
+      });
+      const ready = [...entry.destination.getAttachments(), completedAttachment];
+      const readyIds = new Set(ready.map(({ id }) => id));
+      entry.destination.onAttachmentsChange(
+        reads
+          .project(ready)
+          .filter(({ attachment }) => readyIds.has(attachment.id))
+          .map(({ attachment }) => attachment),
+      );
+      props.onUploadStagedAttachment?.(completedAttachment);
+      finish("ready");
+    })
+    .catch((error: unknown) => {
+      if (!isCurrent()) {
+        finish("aborted");
+        return;
+      }
+      showToast({
+        message:
+          error instanceof Error && error.message
+            ? error.message
+            : t("chat.attachments.readFailed", { names: file.name, more: "" }),
+      });
+      finish("error");
+    });
 }

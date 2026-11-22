@@ -508,7 +508,7 @@ export async function writeDurableComposerDraft(
   },
 ): Promise<DurableComposerDraftWriteResult> {
   const payloadBytes = draft.attachments.reduce((total, attachment) => {
-    return total + attachment.blob.size;
+    return total + (attachment.blob?.size ?? 0);
   }, 0);
   if (payloadBytes > MAX_DURABLE_DRAFT_ATTACHMENT_BYTES) {
     const fallbackResult = await writeDurableComposerDraft(

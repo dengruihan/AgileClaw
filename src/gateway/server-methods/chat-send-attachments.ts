@@ -15,6 +15,11 @@ import type { UserTurnTranscriptRecorder } from "../../sessions/user-turn-transc
 import type { SkillSnapshot } from "../../skills/types.js";
 import { resolveChatAttachmentMaxBytes } from "../chat-attachment-policy.js";
 import {
+  ChatAttachmentUploadError,
+  chatAttachmentUploadOwnerKey,
+  consumeStagedChatAttachment,
+} from "../chat-attachment-upload-store.js";
+import {
   discardPreparedInboundMedia,
   MediaOffloadError,
   type OffloadedRef,
@@ -77,12 +82,14 @@ async function prestageMediaPathOffloads(params: {
   if (mediaPathRefs.length === 0) {
     return [];
   }
+  // Loaded before the guarded section so the failure mapping can name its error.
+  const [{ ensureSandboxWorkspaceForSession }, sandboxMediaModule] = await Promise.all([
+    import("../../agents/sandbox/context.js"),
+    import("../../auto-reply/reply/stage-sandbox-media.js"),
+  ]);
+  const { SANDBOX_MEDIA_MAX_BYTES, SandboxMediaStreamingUnsupportedError, stageSandboxMedia } =
+    sandboxMediaModule;
   try {
-    const [{ ensureSandboxWorkspaceForSession }, { SANDBOX_MEDIA_MAX_BYTES, stageSandboxMedia }] =
-      await Promise.all([
-        import("../../agents/sandbox/context.js"),
-        import("../../auto-reply/reply/stage-sandbox-media.js"),
-      ]);
     params.abortSignal.throwIfAborted();
     params.assertWorkAdmissionCurrent();
     const refsByManagedPath = (refs: OffloadedRef[]): MediaFact[] =>
@@ -92,9 +99,18 @@ async function prestageMediaPathOffloads(params: {
         fileName: ref.label,
         workspaceDir: path.dirname(ref.path),
       }));
+    // Direct uploads already enforced the advertised per-file ceiling, so their
+    // staging allowance follows it instead of the shared task-input allowance.
+    const directUploadMaxBytes = resolveChatAttachmentMaxBytes(params.cfg);
+    const stageLimitFor = (ref: OffloadedRef) =>
+      resolveSandboxStageMaxBytes({
+        directUpload: ref.directUpload,
+        chatAttachmentMaxBytes: directUploadMaxBytes,
+        sharedMaxBytes: SANDBOX_MEDIA_MAX_BYTES,
+      });
     // Host-readable managed PDFs above the staging cap do not need a sandbox copy.
     const refsToStage = mediaPathRefs.filter(
-      (ref) => !(ref.sizeBytes > SANDBOX_MEDIA_MAX_BYTES && isManagedInboundPdfOffloadRef(ref)),
+      (ref) => !(ref.sizeBytes > stageLimitFor(ref) && isManagedInboundPdfOffloadRef(ref)),
     );
     if (refsToStage.length === 0) {
       return refsByManagedPath(mediaPathRefs);
@@ -132,10 +148,11 @@ async function prestageMediaPathOffloads(params: {
       return refsByManagedPath(mediaPathRefs);
     }
 
-    // The parser admits more than the sandbox can stage. Reject non-PDF files
-    // in that gap as permanent 4xx instead of a retryable staging failure.
+    // The parser admits more than the shared task-input allowance. Inline files
+    // in that gap stay a permanent 4xx; direct uploads stream up to their own
+    // advertised ceiling instead.
     const oversizedForSandbox = refsToStage.filter(
-      (ref) => ref.sizeBytes > SANDBOX_MEDIA_MAX_BYTES,
+      (ref) => !ref.directUpload && ref.sizeBytes > SANDBOX_MEDIA_MAX_BYTES,
     );
     if (oversizedForSandbox.length > 0) {
       const details = oversizedForSandbox
@@ -150,6 +167,12 @@ async function prestageMediaPathOffloads(params: {
     const stagingCtx: MsgContext = {
       media: refsToStage.map((ref) => ({ path: ref.path, contentType: ref.mimeType })),
     };
+    const maxBytesByIndex = new Map<number, number>();
+    refsToStage.forEach((ref, index) => {
+      if (ref.directUpload) {
+        maxBytesByIndex.set(index, directUploadMaxBytes);
+      }
+    });
     let stageResult: StageSandboxMediaResult;
     try {
       stageResult = await stageSandboxMedia({
@@ -161,6 +184,7 @@ async function prestageMediaPathOffloads(params: {
         workspaceDir,
         skillsSnapshot,
         abortSignal: params.abortSignal,
+        ...(maxBytesByIndex.size > 0 ? { maxBytesByIndex } : {}),
       });
     } catch (stageErr) {
       // Cancellation is terminal; only ordinary managed-PDF failures can use
@@ -213,11 +237,28 @@ async function prestageMediaPathOffloads(params: {
     ) {
       throw err;
     }
+    if (err instanceof SandboxMediaStreamingUnsupportedError) {
+      // Remote sandboxes accept whole buffers only; keep this an explicit 4xx.
+      throw new UnsupportedAttachmentError("non-image-too-large-for-sandbox", err.message);
+    }
     throw new MediaOffloadError(
       `[Gateway Error] Failed to stage attachments into agent workspace: ${formatErrorMessage(err)}`,
       { cause: err },
     );
   }
+}
+
+/**
+ * Per-input sandbox staging allowance. Inline attachments keep the shared
+ * task-input budget; a direct upload was already admitted against the advertised
+ * per-file ceiling, so staging follows that ceiling instead.
+ */
+export function resolveSandboxStageMaxBytes(params: {
+  directUpload?: boolean;
+  chatAttachmentMaxBytes: number;
+  sharedMaxBytes: number;
+}): number {
+  return params.directUpload ? params.chatAttachmentMaxBytes : params.sharedMaxBytes;
 }
 
 /** Parse and pre-stage attachments before the caller's synchronous pre-ACK checks. */
@@ -274,13 +315,38 @@ export async function prepareChatSendAttachments(params: {
             });
             return imageSupport.value;
           };
+          const parseMaxBytes = resolveChatAttachmentMaxBytes(cfg);
+          const uploadOwnerKey = chatAttachmentUploadOwnerKey({
+            authenticatedUserProfile: client?.authenticatedUserProfile,
+            authenticatedUserId: client?.authenticatedUserId,
+          });
+          // Direct uploads stay bound to this client, session, and agent; the
+          // reference is consumed once or the send fails explicitly.
+          const stagedUploadScope = {
+            ...(uploadOwnerKey ? { ownerKey: uploadOwnerKey } : {}),
+            sessionKey,
+            ...(agentId ? { agentId } : {}),
+          };
           const parsed = await parseMessageWithAttachments(inboundMessage, normalizedAttachments, {
-            maxBytes: resolveChatAttachmentMaxBytes(cfg),
+            maxBytes: parseMaxBytes,
             log: context.logGateway,
             supportsImages: imageSupport.value ?? resolveSupportsImages,
             acceptNonImage: true,
             signal: activeRunAbort.controller.signal,
             assertCurrent: assertInputCurrent,
+            resolveStagedUpload: (uploadId) => {
+              try {
+                return consumeStagedChatAttachment(uploadId, stagedUploadScope, {
+                  maxBytes: parseMaxBytes,
+                });
+              } catch (error) {
+                // Keep the wire error readable: the class name adds nothing here.
+                if (error instanceof ChatAttachmentUploadError) {
+                  throw new Error(error.message, { cause: error });
+                }
+                throw error;
+              }
+            },
           });
           // The parser owns MIME classification. An unresolved capability means no image was seen,
           // so post-processing must not trigger catalog discovery for a non-image attachment.

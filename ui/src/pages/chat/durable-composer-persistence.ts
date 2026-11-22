@@ -98,12 +98,7 @@ export function captureDurableChatAttachments(
 ): DurableComposerDraftAttachment[] | null {
   const stored: DurableComposerDraftAttachment[] = [];
   for (const attachment of attachments) {
-    const blob = getChatAttachmentBlob(attachment);
-    if (!blob) {
-      return null;
-    }
-    stored.push({
-      blob,
+    const metadata = {
       mimeType: attachment.mimeType,
       ...(attachment.origin ? { origin: attachment.origin } : {}),
       ...(attachment.fileName ? { fileName: attachment.fileName } : {}),
@@ -114,7 +109,18 @@ export function captureDurableChatAttachments(
       ...(attachment.selectionAnnotation
         ? { selectionAnnotation: { ...attachment.selectionAnnotation } }
         : {}),
-    });
+    };
+    if (attachment.uploadId) {
+      // Direct uploads stay on the Gateway; persisting a local copy would write
+      // the whole file into IndexedDB and duplicate its storage.
+      stored.push({ ...metadata, uploadId: attachment.uploadId });
+      continue;
+    }
+    const blob = getChatAttachmentBlob(attachment);
+    if (!blob) {
+      return null;
+    }
+    stored.push({ ...metadata, blob });
   }
   return stored;
 }
@@ -124,19 +130,25 @@ export async function hydrateDurableComposerAttachments(
 ): Promise<ChatAttachment[]> {
   // No registry or URL ownership until the complete batch reaches a live owner.
   return Promise.all(
-    stored.map(async ({ blob, selectionAnnotation, ...metadata }) => {
+    stored.map(async ({ blob, uploadId, selectionAnnotation, ...metadata }) => {
       const annotation = readChatSelectionAnnotation(selectionAnnotation);
-      const source =
-        blob.type === metadata.mimeType ? blob : blob.slice(0, blob.size, metadata.mimeType);
-      return {
+      const restored = {
         ...metadata,
         id: generateAttachmentId(),
+        ...(uploadId ? { uploadId } : {}),
         ...(metadata.browserAnnotation
           ? { browserAnnotation: { ...metadata.browserAnnotation } }
           : {}),
         ...(annotation ? { selectionAnnotation: annotation } : {}),
-        dataUrl: await readBlobAsDataUrl(source),
       };
+      // Direct uploads have no local bytes to restore; their preview falls back
+      // to the file chip and a send still references the stored media.
+      if (!blob) {
+        return restored;
+      }
+      const source =
+        blob.type === metadata.mimeType ? blob : blob.slice(0, blob.size, metadata.mimeType);
+      return { ...restored, dataUrl: await readBlobAsDataUrl(source) };
     }),
   );
 }

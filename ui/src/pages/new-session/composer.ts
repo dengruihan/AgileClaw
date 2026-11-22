@@ -240,6 +240,7 @@ export function renderNewSessionComposer(options: NewSessionComposerOptions) {
   const attachmentProps = {
     attachmentReads: options.attachmentReads,
     attachmentLimits: options.attachmentLimits,
+    attachmentUpload: options.attachmentUpload,
     uploadConfig: options.uploadConfig,
     attachments: options.attachments,
     get disabled() {
