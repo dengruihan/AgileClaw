@@ -10,11 +10,15 @@ import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
+  beginStagedChatAttachment,
+  commitStagedChatAttachment,
   consumeStagedChatAttachment,
   discardChatAttachmentUploads,
   resetChatAttachmentUploadsForTests,
+  writeStagedChatAttachmentPart,
 } from "./chat-attachment-upload-store.js";
 import { handleChatAttachmentUploadHttpRequest } from "./chat-attachment-uploads.js";
+import { parseMessageWithAttachments } from "./chat-attachments.js";
 
 const GIB = 1024 * 1024 * 1024;
 
@@ -28,6 +32,37 @@ let origin = "";
 let stagingRoot = "";
 let stateDir = "";
 let config: OpenClawConfig = configWithMaxMb(1 / 1024);
+const PARSE_SCOPE = { sessionKey: "agent:main:main", agentId: "main" };
+
+/** Stages and commits one real upload, returning its reference. */
+async function stageUpload(bytes: Buffer, mimeType: string, fileName: string): Promise<string> {
+  const begin = await beginStagedChatAttachment({
+    scope: PARSE_SCOPE,
+    declaredBytes: bytes.length,
+    maxBytes: 1024 * 1024,
+    fileName,
+    mimeType,
+  });
+  await writeStagedChatAttachmentPart({
+    uploadId: begin.uploadId,
+    offset: 0,
+    stream: (async function* () {
+      yield bytes;
+    })(),
+    scope: PARSE_SCOPE,
+    maxBytes: 1024 * 1024,
+  });
+  await commitStagedChatAttachment({
+    uploadId: begin.uploadId,
+    scope: PARSE_SCOPE,
+    maxBytes: 1024 * 1024,
+  });
+  return begin.uploadId;
+}
+
+function stagedResolver(maxBytes = 1024 * 1024) {
+  return (uploadId: string) => consumeStagedChatAttachment(uploadId, PARSE_SCOPE, { maxBytes });
+}
 
 async function startServer(nextConfig: OpenClawConfig): Promise<void> {
   config = nextConfig;
@@ -281,5 +316,111 @@ describe("direct chat attachment uploads", () => {
     expect(await stagingFiles()).toHaveLength(1);
     await discardChatAttachmentUploads();
     expect(await stagingFiles()).toEqual([]);
+  });
+
+  it("deletes a consumed upload when a later validation rejects the send", async () => {
+    const uploadId = await stageUpload(Buffer.from("plain text"), "text/plain", "notes.txt");
+    let resolvedPath: string | undefined;
+    await expect(
+      parseMessageWithAttachments(
+        "see file",
+        [{ type: "file", mimeType: "text/plain", fileName: "notes.txt", uploadId }],
+        {
+          acceptNonImage: false,
+          resolveStagedUpload: (id) => {
+            const media = consumeStagedChatAttachment(id, PARSE_SCOPE, { maxBytes: 1024 });
+            resolvedPath = media.path;
+            return media;
+          },
+        },
+      ),
+    ).rejects.toThrow(/not supported on this entrypoint/);
+    expect(resolvedPath).toBeTruthy();
+    await expect(fs.stat(resolvedPath!)).rejects.toMatchObject({ code: "ENOENT" });
+    expect(() => stagedResolver()(uploadId)).toThrow(/already used/);
+  });
+
+  it("fails a duplicate upload reference and deletes the already adopted media", async () => {
+    const uploadId = await stageUpload(Buffer.from("%PDF-1.4\n"), "application/pdf", "once.pdf");
+    let resolvedPath: string | undefined;
+    await expect(
+      parseMessageWithAttachments(
+        "two references",
+        [
+          { type: "file", mimeType: "application/pdf", fileName: "once.pdf", uploadId },
+          { type: "file", mimeType: "application/pdf", fileName: "once.pdf", uploadId },
+        ],
+        {
+          resolveStagedUpload: (id) => {
+            const media = consumeStagedChatAttachment(id, PARSE_SCOPE, { maxBytes: 1024 });
+            resolvedPath ??= media.path;
+            return media;
+          },
+        },
+      ),
+    ).rejects.toThrow(/already used/);
+    expect(resolvedPath).toBeTruthy();
+    await expect(fs.stat(resolvedPath!)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("deletes consumed media when the request loses authority mid-parse", async () => {
+    const uploadId = await stageUpload(Buffer.from("payload"), "application/pdf", "brief.pdf");
+    let resolvedPath: string | undefined;
+    let checks = 0;
+    await expect(
+      parseMessageWithAttachments(
+        "see file",
+        [{ type: "file", mimeType: "application/pdf", fileName: "brief.pdf", uploadId }],
+        {
+          resolveStagedUpload: (id) => {
+            const media = consumeStagedChatAttachment(id, PARSE_SCOPE, { maxBytes: 1024 });
+            resolvedPath = media.path;
+            return media;
+          },
+          assertCurrent: () => {
+            checks += 1;
+            if (checks > 1) {
+              throw new Error("authority changed");
+            }
+          },
+        },
+      ),
+    ).rejects.toThrow(/authority changed/);
+    expect(resolvedPath).toBeTruthy();
+    await expect(fs.stat(resolvedPath!)).rejects.toMatchObject({ code: "ENOENT" });
+  });
+
+  it("drops uploads omitted by the text-only image cap and keeps the adopted ones", async () => {
+    const uploadIds: string[] = [];
+    for (let index = 0; index < 11; index += 1) {
+      uploadIds.push(
+        await stageUpload(Buffer.from([0x89, 0x50, 0x4e, 0x47]), "image/png", `shot-${index}.png`),
+      );
+    }
+    const omittedPaths: string[] = [];
+    const parsed = await parseMessageWithAttachments(
+      "screens",
+      uploadIds.map((uploadId) => ({
+        type: "image",
+        mimeType: "image/png",
+        fileName: "shot.png",
+        uploadId,
+      })),
+      {
+        supportsImages: false,
+        resolveStagedUpload: (id) => {
+          const media = consumeStagedChatAttachment(id, PARSE_SCOPE, { maxBytes: 1024 });
+          omittedPaths.push(media.path);
+          return media;
+        },
+      },
+    );
+    expect(parsed.offloadedRefs).toHaveLength(10);
+    expect(parsed.message).toContain("text-only attachment limit reached");
+    // The eleventh upload was consumed but omitted, so its file must be gone.
+    await expect(fs.stat(omittedPaths[10]!)).rejects.toMatchObject({ code: "ENOENT" });
+    for (const ref of parsed.offloadedRefs) {
+      await fs.rm(ref.path, { force: true });
+    }
   });
 });

@@ -15,7 +15,6 @@ import path from "node:path";
 import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import { saveMediaStream, type SavedMedia } from "../media/store.js";
 import { KeyedAsyncQueue } from "../plugin-sdk/keyed-async-queue.js";
-import { registerMediaCleanupDrain } from "./server-media-cleanup-lifecycle.js";
 
 /** Per-part body cap; the client sends parts so no single request runs for minutes. */
 export const CHAT_ATTACHMENT_UPLOAD_PART_BYTES = 16 * 1024 * 1024;
@@ -25,6 +24,10 @@ const STAGING_TTL_MS = 60 * 60 * 1000;
 const COMMITTED_TTL_MS = 6 * 60 * 60 * 1000;
 /** Caps concurrently staged files so abandoned uploads cannot exhaust the disk. */
 const MAX_STAGED_UPLOADS = 8;
+/** Caps committed-but-unsent uploads, which keep their published media. */
+const MAX_COMMITTED_UPLOADS = 12;
+/** Caps the published bytes waiting for a send; keeps retention a named bound. */
+const MAX_COMMITTED_TOTAL_BYTES = 4 * 1024 * 1024 * 1024;
 
 export const CHAT_ATTACHMENT_UPLOAD_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -36,6 +39,7 @@ export class ChatAttachmentUploadError extends Error {
       | "unknown-upload"
       | "offset-mismatch"
       | "too-large"
+      | "part-too-large"
       | "scope-mismatch"
       | "capacity",
     message: string,
@@ -58,6 +62,8 @@ type StagedUpload = ChatAttachmentUploadScope & {
   mimeType?: string;
   declaredBytes: number;
   receivedBytes: number;
+  /** Part ceiling advertised at begin; the server enforces the same value. */
+  partBytes: number;
   filePath: string;
   createdAtMs: number;
   handle?: FileHandle;
@@ -75,7 +81,6 @@ const committed = new Map<string, CommittedUpload>();
 const uploadQueue = new KeyedAsyncQueue();
 let stagingRootPromise: Promise<string> | undefined;
 let stagingRootOverride: (() => Promise<string>) | undefined;
-let cleanupRegistered = false;
 
 function stagingRoot(): Promise<string> {
   if (stagingRootOverride) {
@@ -129,20 +134,52 @@ function assertScope(
   }
 }
 
-function sweepExpired(now = Date.now()): void {
+function committedBytes(): number {
+  let total = 0;
+  for (const entry of committed.values()) {
+    total += entry.media.size;
+  }
+  return total;
+}
+
+async function sweepExpired(now = Date.now()): Promise<void> {
   for (const [id, entry] of staged) {
     if (now - entry.createdAtMs > STAGING_TTL_MS) {
       staged.delete(id);
-      void entry.handle?.close().catch(() => undefined);
-      void fs.rm(entry.filePath, { force: true }).catch(() => undefined);
+      await entry.handle?.close().catch(() => undefined);
+      await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
     }
   }
   for (const [id, entry] of committed) {
     if (now - entry.createdAtMs > COMMITTED_TTL_MS) {
       committed.delete(id);
-      void fs.rm(entry.media.path, { force: true }).catch(() => undefined);
+      await fs.rm(entry.media.path, { force: true }).catch(() => undefined);
     }
   }
+}
+
+/**
+ * Staging files survive a crash, so the first maintenance run of a new process
+ * removes anything past its TTL that no live upload owns.
+ */
+async function sweepOrphanedStagingFiles(now = Date.now()): Promise<void> {
+  const root = await stagingRoot().catch(() => undefined);
+  if (!root) {
+    return;
+  }
+  const names = await fs.readdir(root).catch(() => [] as string[]);
+  await Promise.allSettled(
+    names.map(async (name) => {
+      if (!name.endsWith(".part") || staged.has(name.slice(0, -".part".length))) {
+        return;
+      }
+      const filePath = path.join(root, name);
+      const stat = await fs.stat(filePath).catch(() => undefined);
+      if (stat && now - stat.mtimeMs > STAGING_TTL_MS) {
+        await fs.rm(filePath, { force: true });
+      }
+    }),
+  );
 }
 
 export function assertChatAttachmentUploadId(uploadId: string | undefined): string {
@@ -153,14 +190,25 @@ export function assertChatAttachmentUploadId(uploadId: string | undefined): stri
   return id;
 }
 
+/**
+ * Periodic maintenance: expires abandoned staging and unsent media, and clears
+ * staging files a previous process left behind. The Gateway maintenance owner
+ * schedules it and owns its stop.
+ */
+export async function runChatAttachmentUploadMaintenance(): Promise<void> {
+  await sweepExpired();
+  await sweepOrphanedStagingFiles();
+}
+
 export async function beginStagedChatAttachment(params: {
   scope: ChatAttachmentUploadScope;
   declaredBytes: number;
   maxBytes: number;
   fileName?: string;
   mimeType?: string;
+  partBytes?: number;
 }): Promise<{ uploadId: string; partBytes: number }> {
-  sweepExpired();
+  await sweepExpired();
   if (staged.size >= MAX_STAGED_UPLOADS) {
     throw new ChatAttachmentUploadError(
       "capacity",
@@ -176,6 +224,15 @@ export async function beginStagedChatAttachment(params: {
       `attachment exceeds size limit (${params.declaredBytes} > ${params.maxBytes} bytes)`,
     );
   }
+  if (
+    committed.size + staged.size >= MAX_COMMITTED_UPLOADS ||
+    committedBytes() + params.declaredBytes > MAX_COMMITTED_TOTAL_BYTES
+  ) {
+    throw new ChatAttachmentUploadError(
+      "capacity",
+      "too many attachment uploads are waiting to be sent; retry after sending or discarding one",
+    );
+  }
   const id = randomUUID();
   const filePath = path.join(await stagingRoot(), `${id}.part`);
   const handle = await fs.open(filePath, "wx", 0o600);
@@ -186,11 +243,12 @@ export async function beginStagedChatAttachment(params: {
     ...(params.mimeType ? { mimeType: params.mimeType } : {}),
     declaredBytes: params.declaredBytes,
     receivedBytes: 0,
+    partBytes: params.partBytes ?? CHAT_ATTACHMENT_UPLOAD_PART_BYTES,
     filePath,
     createdAtMs: Date.now(),
     handle,
   });
-  return { uploadId: id, partBytes: CHAT_ATTACHMENT_UPLOAD_PART_BYTES };
+  return { uploadId: id, partBytes: params.partBytes ?? CHAT_ATTACHMENT_UPLOAD_PART_BYTES };
 }
 
 export async function writeStagedChatAttachmentPart(params: {
@@ -200,7 +258,7 @@ export async function writeStagedChatAttachmentPart(params: {
   scope: ChatAttachmentUploadScope;
   maxBytes: number;
 }): Promise<{ uploadId: string; receivedBytes: number }> {
-  sweepExpired();
+  await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
   const entry = staged.get(id);
   if (!entry) {
@@ -225,6 +283,13 @@ export async function writeStagedChatAttachmentPart(params: {
       const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as Uint8Array);
       if (buffer.byteLength === 0) {
         continue;
+      }
+      if (partBytes + buffer.byteLength > entry.partBytes) {
+        throw new ChatAttachmentUploadError(
+          "part-too-large",
+          `attachment part exceeds ${entry.partBytes} bytes`,
+          entry.receivedBytes + partBytes,
+        );
       }
       // Actual bytes are the authority; the declared size only bounds it earlier.
       if (
@@ -262,8 +327,20 @@ export async function commitStagedChatAttachment(params: {
   maxBytes: number;
   assertCommitAllowed?: () => void;
 }): Promise<{ uploadId: string; sizeBytes: number; mimeType: string; fileName?: string }> {
-  sweepExpired();
+  await sweepExpired();
   const id = assertChatAttachmentUploadId(params.uploadId);
+  const replay = committed.get(id);
+  if (replay) {
+    // A commit whose response was lost is safe to repeat while the upload is
+    // still unsent and belongs to this caller; consumption stays single-use.
+    assertScope(replay, params.scope, "attachment upload");
+    return {
+      uploadId: id,
+      sizeBytes: replay.media.size,
+      mimeType: replay.media.contentType ?? "application/octet-stream",
+      ...(replay.fileName ? { fileName: replay.fileName } : {}),
+    };
+  }
   const entry = staged.get(id);
   if (!entry) {
     throw new ChatAttachmentUploadError(
@@ -329,10 +406,17 @@ export function consumeStagedChatAttachment(
   scope: ChatAttachmentUploadScope,
   options: { maxBytes: number },
 ): SavedMedia & { fileName?: string } {
-  sweepExpired();
   const id = assertChatAttachmentUploadId(uploadId);
   const entry = committed.get(id);
   if (!entry) {
+    throw new ChatAttachmentUploadError(
+      "unknown-upload",
+      "attachment upload is unknown, expired, or already used",
+    );
+  }
+  if (Date.now() - entry.createdAtMs > COMMITTED_TTL_MS) {
+    committed.delete(id);
+    void fs.rm(entry.media.path, { force: true }).catch(() => undefined);
     throw new ChatAttachmentUploadError(
       "unknown-upload",
       "attachment upload is unknown, expired, or already used",
@@ -363,17 +447,13 @@ export async function discardChatAttachmentUploads(): Promise<void> {
   await Promise.allSettled(files.map((filePath) => fs.rm(filePath, { force: true })));
 }
 
-/** Removes staging bytes on Gateway shutdown; committed uploads belong to the media store. */
-export function registerChatAttachmentUploadCleanup(): void {
-  if (cleanupRegistered) {
-    return;
-  }
-  cleanupRegistered = true;
-  registerMediaCleanupDrain(
-    discardChatAttachmentUploads().finally(() => {
-      stagingRootPromise = undefined;
-    }),
-  );
+/**
+ * Shutdown cleanup: stops accepting new references and removes staging plus
+ * unsent committed media. The Gateway maintenance owner awaits this.
+ */
+export async function shutdownChatAttachmentUploads(): Promise<void> {
+  await discardChatAttachmentUploads();
+  stagingRootPromise = undefined;
 }
 
 export function resetChatAttachmentUploadsForTests(options?: {
@@ -383,7 +463,6 @@ export function resetChatAttachmentUploadsForTests(options?: {
   committed.clear();
   stagingRootOverride = options?.stagingRoot;
   stagingRootPromise = undefined;
-  cleanupRegistered = false;
 }
 
 /** Serializes part and commit mutations per upload. */

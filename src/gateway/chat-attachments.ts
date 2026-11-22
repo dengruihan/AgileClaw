@@ -50,6 +50,8 @@ export type OffloadedRef = {
   origin?: MediaFact["origin"];
   sizeBytes: number;
   sourceIndex: number;
+  /** Bytes arrived through the direct upload route, not inline base64. */
+  directUpload?: true;
   durationMs?: number;
   width?: number;
   height?: number;
@@ -378,6 +380,11 @@ export async function parseMessageWithAttachments(
           `attachment ${label}: direct uploads are not supported on this entrypoint`,
         );
       }
+      if (stagedUpload) {
+        // The registry has handed ownership to this request; every rejection
+        // below must delete the published media through the failure cleanup.
+        savedMediaIds.push(stagedUpload.id);
+      }
       const b64 = normalized.base64 ?? "";
       if (!stagedUpload && b64.length === 0) {
         throw new UnsupportedAttachmentError("empty-payload", `attachment ${label}: empty payload`);
@@ -435,6 +442,13 @@ export async function parseMessageWithAttachments(
             `${TEXT_ONLY_OFFLOAD_LIMIT} was reached`,
         );
         updatedMessage += "\n[image attachment omitted: text-only attachment limit reached]";
+        if (stagedUpload) {
+          const omittedIndex = savedMediaIds.indexOf(stagedUpload.id);
+          if (omittedIndex >= 0) {
+            savedMediaIds.splice(omittedIndex, 1);
+          }
+          await deleteMediaBuffer(stagedUpload.id, "inbound");
+        }
         continue;
       }
 
@@ -512,6 +526,7 @@ export async function parseMessageWithAttachments(
         label,
         sizeBytes,
         sourceIndex: idx,
+        ...(stagedUpload ? { directUpload: true as const } : {}),
         ...(att.origin === "paste" || att.origin === "file" ? { origin: att.origin } : {}),
         ...(typeof att.durationMs === "number" &&
         Number.isFinite(att.durationMs) &&

@@ -22,12 +22,17 @@ function isStoredAttachment(value: unknown): value is DurableComposerDraftAttach
   }
   // SAFETY: IDB data is untrusted; every consumed field is validated below.
   const attachment = value as Partial<DurableComposerDraftAttachment>;
+  // A direct upload keeps its bytes on the Gateway; its reference is enough.
+  const hasUpload = typeof attachment.uploadId === "string" && attachment.uploadId.length > 0;
   return (
-    attachment.blob instanceof Blob &&
+    (attachment.blob instanceof Blob || hasUpload) &&
     typeof attachment.mimeType === "string" &&
+    (attachment.fileName === undefined || typeof attachment.fileName === "string") &&
+    (attachment.sizeBytes === undefined || Number.isFinite(attachment.sizeBytes)) &&
     (attachment.origin === undefined ||
       attachment.origin === "paste" ||
-      attachment.origin === "file")
+      attachment.origin === "file") &&
+    (!hasUpload || attachment.blob === undefined || attachment.blob instanceof Blob)
   );
 }
 

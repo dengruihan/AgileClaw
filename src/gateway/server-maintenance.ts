@@ -551,12 +551,24 @@ export function startGatewayMaintenanceTimers(params: {
           params.logHealth.error(`media cleanup failed: ${formatError(err)}`);
         });
       });
+      // Direct attachment uploads keep their own staging directory; the first run
+      // also clears staging files a previous process left behind.
+      scheduleMedia("chat-attachment-uploads", async () => {
+        const { runChatAttachmentUploadMaintenance } =
+          await import("./chat-attachment-upload-store.js");
+        await runChatAttachmentUploadMaintenance().catch((err: unknown) => {
+          params.logHealth.error(`attachment upload cleanup failed: ${formatError(err)}`);
+        });
+      });
     });
   };
   let stopMediaCleanupPromise: Promise<MediaCleanupStopResult> | undefined;
   const stopMediaCleanup = () => {
     stopMediaCleanupPromise ??= (async () => {
       registerMediaCleanupDrain(mediaScheduler.stop());
+      registerMediaCleanupDrain(
+        (await import("./chat-attachment-upload-store.js")).shutdownChatAttachmentUploads(),
+      );
       return await waitForMediaCleanupDrains({
         timeoutMs: MEDIA_CLEANUP_STOP_TIMEOUT_MS,
         onTimeout: () => {

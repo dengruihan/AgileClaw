@@ -142,6 +142,11 @@ export class ChatAttachmentReadLifecycle {
     this.notify();
   }
 
+  /** True while this exact slot is still tracked for an unfinished read. */
+  isActive(entry: ChatAttachmentRead): boolean {
+    return entry.state === "reading" && this.entries.includes(entry);
+  }
+
   remove(entry: ChatAttachmentRead): void {
     this.entries = this.entries.filter((candidate) => candidate !== entry);
     entry.cancel?.();
@@ -309,6 +314,15 @@ function readStagedChatAttachment(
     return;
   }
   entry.destination.onPendingReadsChange?.(1);
+  // Each direct read owns a controller so removing one slot cancels only that
+  // transfer, and the global read signal still cancels every slot.
+  const controller = new AbortController();
+  const abortFromScope = () => controller.abort(signal.reason);
+  if (signal.aborted) {
+    abortFromScope();
+  } else {
+    signal.addEventListener("abort", abortFromScope, { once: true });
+  }
   let settled = false;
   const finish = (outcome: "ready" | "error" | "aborted") => {
     if (settled) {
@@ -316,22 +330,32 @@ function readStagedChatAttachment(
     }
     settled = true;
     entry.cancel = undefined;
-    if (outcome === "aborted" || signal.aborted) {
+    signal.removeEventListener("abort", abortFromScope);
+    if (outcome === "aborted" || controller.signal.aborted) {
       reads.remove(entry);
     } else {
       reads.settle(entry, outcome);
     }
     entry.destination.onPendingReadsChange?.(-1);
   };
-  entry.cancel = () => finish("aborted");
+  entry.cancel = () => {
+    controller.abort();
+    finish("aborted");
+  };
+  const isCurrent = () => !settled && !controller.signal.aborted && reads.isActive(entry);
   void stageChatAttachment({
     file,
     target,
-    signal,
-    onProgress: (fraction) => reads.updateProgress(entry, fraction),
+    signal: controller.signal,
+    onProgress: (fraction) => {
+      if (isCurrent()) {
+        reads.updateProgress(entry, fraction);
+      }
+    },
   })
     .then((staged) => {
-      if (signal.aborted) {
+      // A transport may finish after the slot was removed; never re-add it.
+      if (!isCurrent()) {
         finish("aborted");
         return;
       }
@@ -361,7 +385,7 @@ function readStagedChatAttachment(
       finish("ready");
     })
     .catch((error: unknown) => {
-      if (signal.aborted) {
+      if (!isCurrent()) {
         finish("aborted");
         return;
       }

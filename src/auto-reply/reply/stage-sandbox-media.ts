@@ -39,6 +39,33 @@ import type { RuntimeMsgContext as MsgContext, TemplateContext } from "../templa
 
 /** Maximum size of one file copied into an agent sandbox or staging workspace. */
 export const SANDBOX_MEDIA_MAX_BYTES = STAGED_INPUT_MAX_BYTES;
+
+/**
+ * Stream a copy when the caller allowed a larger input than the shared task-input
+ * budget; buffering such a file would defeat the allowance. Local sandboxes only.
+ */
+export function shouldStreamSandboxCopy(params: {
+  sizeBytes: number;
+  maxBytes: number;
+  sharedMaxBytes?: number;
+}): boolean {
+  const shared = params.sharedMaxBytes ?? SANDBOX_MEDIA_MAX_BYTES;
+  return params.sizeBytes > shared && params.maxBytes > shared;
+}
+
+/** A file above the task-input allowance cannot be streamed by this transport. */
+export class SandboxMediaStreamingUnsupportedError extends Error {
+  constructor(
+    readonly fileName: string,
+    readonly sizeBytes: number,
+    readonly maxBytes: number,
+  ) {
+    super(
+      `${fileName} (${sizeBytes} bytes) exceeds remote sandbox staging limit ${maxBytes} bytes`,
+    );
+    this.name = "SandboxMediaStreamingUnsupportedError";
+  }
+}
 const SCP_STDERR_TAIL_CHARS = 16_384;
 
 // Attachment indexes are the staging identity. Callers use this map to detect
@@ -59,6 +86,12 @@ export async function stageSandboxMedia(params: {
   skillsSnapshot?: SkillSnapshot;
   remoteMediaMode?: "sandbox-or-cache" | "cache";
   abortSignal?: AbortSignal;
+  /**
+   * Absolute per-input byte allowance when a caller owns a larger bound than the
+   * shared task-input allowance (direct uploads already enforced their ceiling).
+   * Local sandboxes stream files above the shared allowance instead of buffering.
+   */
+  maxBytesByIndex?: ReadonlyMap<number, number>;
 }): Promise<StageSandboxMediaResult> {
   const { ctx, sessionCtx, cfg, sessionKey, workspaceDir, abortSignal } = params;
   abortSignal?.throwIfAborted();
@@ -166,11 +199,21 @@ export async function stageSandboxMedia(params: {
     const relativeDest = path.posix.join(inputDirectory, fileName);
     const dest = path.join(effectiveWorkspaceDir, relativeDest);
     let downloadedMediaUri: string | undefined;
+    const maxBytes = params.maxBytesByIndex?.get(entry.index) ?? SANDBOX_MEDIA_MAX_BYTES;
+    const sourceSize = (await fs.stat(source).catch(() => undefined))?.size ?? 0;
     const stageSource = async (sourcePath: string) => {
       if (remoteBridge) {
+        if (shouldStreamSandboxCopy({ sizeBytes: sourceSize, maxBytes })) {
+          // The remote bridge only accepts whole buffers, so this bound is real.
+          throw new SandboxMediaStreamingUnsupportedError(
+            fileName,
+            sourceSize,
+            SANDBOX_MEDIA_MAX_BYTES,
+          );
+        }
         const { buffer } = await readLocalFileSafely({
           filePath: sourcePath,
-          maxBytes: SANDBOX_MEDIA_MAX_BYTES,
+          maxBytes,
         });
         abortSignal?.throwIfAborted();
         await prepareDestination();
@@ -193,7 +236,7 @@ export async function stageSandboxMedia(params: {
             buffer,
             media[entry.index]?.contentType,
             "inbound",
-            SANDBOX_MEDIA_MAX_BYTES,
+            maxBytes,
             path.basename(source),
             undefined,
             { assertCommitAllowed: () => abortSignal?.throwIfAborted() },
@@ -202,9 +245,22 @@ export async function stageSandboxMedia(params: {
         }
       } else {
         const root = await fsRoot(effectiveWorkspaceDir);
+        if (shouldStreamSandboxCopy({ sizeBytes: sourceSize, maxBytes })) {
+          // Stream larger admitted inputs instead of buffering them in memory.
+          const { openLocalMediaFile } = await import("../../media/local-media-access.js");
+          await using opened = await openLocalMediaFile(sourcePath, "any", { maxBytes });
+          abortSignal?.throwIfAborted();
+          await prepareDestination();
+          abortSignal?.throwIfAborted();
+          await root.create(relativeDest, opened.handle.createReadStream({ autoClose: false }), {
+            maxBytes,
+            signal: abortSignal,
+          });
+          return;
+        }
         const { buffer } = await readLocalFileSafely({
           filePath: sourcePath,
-          maxBytes: SANDBOX_MEDIA_MAX_BYTES,
+          maxBytes,
         });
         // A completed read must not start a new copy after cancellation.
         abortSignal?.throwIfAborted();
@@ -228,6 +284,9 @@ export async function stageSandboxMedia(params: {
       }
     } catch (err) {
       if (abortSignal?.aborted && Object.is(err, abortSignal.reason)) {
+        throw err;
+      }
+      if (err instanceof SandboxMediaStreamingUnsupportedError) {
         throw err;
       }
       if (err instanceof FsSafeError && err.code === "too-large") {

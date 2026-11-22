@@ -11,7 +11,6 @@ import {
   chatAttachmentUploadOwnerKey,
   commitStagedChatAttachment,
   type ChatAttachmentUploadScope,
-  registerChatAttachmentUploadCleanup,
   runStagedChatAttachmentMutation,
   writeStagedChatAttachmentPart,
 } from "./chat-attachment-upload-store.js";
@@ -27,6 +26,7 @@ const ERROR_STATUS: Record<ChatAttachmentUploadError["code"], number> = {
   "unknown-upload": 404,
   "offset-mismatch": 409,
   "too-large": 413,
+  "part-too-large": 413,
   "scope-mismatch": 403,
   capacity: 503,
 };
@@ -65,7 +65,6 @@ export async function handleChatAttachmentUploadHttpRequest(
     sendMethodNotAllowed(res);
     return true;
   }
-  registerChatAttachmentUploadCleanup();
   // Control UI HTTP surfaces authenticate with the same cookie/device-token
   // path as their other requests; the upload additionally needs the write
   // authority that `chat.send` implies.
@@ -105,7 +104,10 @@ export async function handleChatAttachmentUploadHttpRequest(
   const uploadId = readQuery(url, "uploadId") ?? "";
   const offset = readQuery(url, "offset");
   try {
-    const result = await runStagedChatAttachmentMutation(uploadId || "begin", async () => {
+    // Every begin shares one lane so the staged/committed capacity check cannot
+    // race; part and commit mutations stay serialized per upload.
+    const queueKey = action === "begin" ? "begin" : uploadId || "missing";
+    const result = await runStagedChatAttachmentMutation(queueKey, async () => {
       switch (action) {
         case "begin":
           return await beginStagedChatAttachment({

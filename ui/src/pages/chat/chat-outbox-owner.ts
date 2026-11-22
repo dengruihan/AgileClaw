@@ -213,7 +213,7 @@ class ChatOutboxGatewayOwner {
         !key ||
         item.attachmentStorageError ||
         this.hydrating.has(key) ||
-        item.attachments?.every((attachment) => getChatAttachmentDataUrl(attachment))
+        item.attachments?.every((a) => a.uploadId || getChatAttachmentDataUrl(a))
       ) {
         continue;
       }

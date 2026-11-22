@@ -85,7 +85,7 @@ Gateway responds with `hello-ok`:
       "maxPayload": 26214400,
       "maxBufferedBytes": 52428800,
       "tickIntervalMs": 15000,
-      "attachments": { "maxBytes": 20971520, "maxImageBytes": 6291456 }
+      "attachments": { "maxBytes": 1073741824, "maxImageBytes": 6291456 }
     }
   }
 }
@@ -122,13 +122,21 @@ Validating before send:
    bodies capped at 16 MiB) and send it as
    `{ type, mimeType, fileName, uploadId }` without `content`. The upload ID is
    single-use, expires after six hours if unsent, and stays bound to the
-   authenticated owner plus the `sessionKey`/`agentId` it was admitted for.
-3. Treat the server as authoritative for everything else. Accepted MIME types and
+   authenticated owner plus the `sessionKey`/`agentId` it was admitted for; the
+   same scope must be repeated on every part and on commit. Repeating a commit
+   for the same ID replays its result, while consuming it for a send stays
+   single-use. At most 12 unsent uploads and 4 GiB of unsent published bytes are
+   retained per Gateway; beyond that begin returns an explicit capacity error.
+3. A sandboxed session streams direct uploads up to `maxBytes` into the
+   sandbox workspace. Inline base64 attachments keep the shared 50 MiB
+   task-input allowance, and a remote/SSH sandbox — which stages whole buffers
+   only — rejects direct uploads above that allowance with an explicit error.
+4. Treat the server as authoritative for everything else. Accepted MIME types and
    per-message handling are deliberately not advertised because they depend on
    the entrypoint, the resolved model, and payload sniffing. The gateway can
    return a typed rejection, while text-only model runs can omit additional
    images after their offload cap and still complete the request.
-4. Re-read the values on every reconnect. They are a connection-time snapshot, so
+5. Re-read the values on every reconnect. They are a connection-time snapshot, so
    a live `mediaMaxMb` edit reaches existing connections only after they reconnect.
 
 `pluginSurfaceUrls` is optional and maps plugin surface names (e.g.

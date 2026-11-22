@@ -126,10 +126,14 @@ describe("stageChatAttachment", () => {
       "part",
       "commit",
     ]);
-    const begin = new URLSearchParams(requests[0]!.url);
-    expect(begin.get("sessionKey")).toBe("agent:main:main");
-    expect(begin.get("agentId")).toBe("main");
-    expect(begin.get("sizeBytes")).toBe("4");
+    // Every protocol step repeats the admitted scope; only begin used to carry it.
+    for (const request of requests) {
+      const query = new URLSearchParams(request.url);
+      expect(query.get("sessionKey")).toBe("agent:main:main");
+      expect(query.get("agentId")).toBe("main");
+    }
+    expect(new URLSearchParams(requests[0]!.url).get("sizeBytes")).toBe("4");
+    expect(new URLSearchParams(requests[1]!.url).get("offset")).toBe("0");
     expect(requests[1]!.body?.size).toBe(4);
     expect(progress.at(-1)).toBe(1);
     expect(String(vi.mocked(fetch).mock.calls[0]?.[0])).toBe(

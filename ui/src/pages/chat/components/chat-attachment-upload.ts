@@ -1,14 +1,19 @@
-import { fetchControlUiResource } from "../../../app/browser-http.ts";
-import { resolveControlUiAuthToken } from "../../../app/control-ui-auth.ts";
-import { t } from "../../../i18n/index.ts";
 // Direct chat attachment upload client. A file whose base64 form cannot fit one
 // `chat.send` frame (and whose browser string would exceed V8's string ceiling)
 // streams to the Gateway in parts instead; the send then references it by ID.
+import {
+  ChatAttachmentUploadClientError,
+  uploadChatAttachmentInParts,
+  type ChatAttachmentUploadResponse,
+  type StagedChatAttachmentUpload,
+} from "../../../../../src/shared/chat-attachment-upload-client.ts";
+import { fetchControlUiResource } from "../../../app/browser-http.ts";
+import { resolveControlUiAuthToken } from "../../../app/control-ui-auth.ts";
+import { t } from "../../../i18n/index.ts";
 import { buildChatMediaFetchHeaders } from "./chat-media-playback.ts";
 
-export const CHAT_ATTACHMENT_UPLOAD_PATH = "/api/chat/attachments/upload";
-/** Matches the Gateway part cap so each request stays small and short-lived. */
-const UPLOAD_PART_BYTES = 16 * 1024 * 1024;
+export { CHAT_ATTACHMENT_UPLOAD_PATH } from "../../../../../src/shared/chat-attachment-upload-client.ts";
+export type { StagedChatAttachmentUpload };
 
 export type ChatAttachmentUploadTarget = {
   basePath?: string;
@@ -40,49 +45,19 @@ export function resolveChatAttachmentUploadTarget(source: {
   };
 }
 
-export type StagedChatAttachmentUpload = {
-  uploadId: string;
-  sizeBytes: number;
-  mimeType: string;
-  fileName?: string;
-};
-
-type UploadErrorBody = {
-  error?: { code?: string; message?: string; receivedBytes?: number };
-};
-
-function uploadUrl(target: ChatAttachmentUploadTarget, query: URLSearchParams): string {
-  const base =
-    target.basePath && target.basePath !== "/" ? target.basePath.replace(/\/+$/, "") : "";
-  return `${base}${CHAT_ATTACHMENT_UPLOAD_PATH}?${query.toString()}`;
-}
-
 async function postUpload(
   target: ChatAttachmentUploadTarget,
-  query: URLSearchParams,
-  body: Blob | undefined,
-  signal: AbortSignal,
-): Promise<Record<string, unknown>> {
-  const response = await fetchControlUiResource(uploadUrl(target, query), {
+  request: { url: string; body?: Blob; signal: AbortSignal },
+): Promise<ChatAttachmentUploadResponse> {
+  const response = await fetchControlUiResource(request.url, {
     method: "POST",
     headers: buildChatMediaFetchHeaders(target.authToken),
     credentials: "same-origin",
-    ...(body ? { body } : {}),
-    signal,
+    ...(request.body ? { body: request.body } : {}),
+    signal: request.signal,
   });
-  const payload = (await response.json().catch(() => null)) as
-    | (UploadErrorBody & Record<string, unknown>)
-    | null;
-  if (!response.ok) {
-    const error = new Error(payload?.error?.message || `HTTP ${response.status}`) as Error & {
-      code?: string;
-      receivedBytes?: number;
-    };
-    error.code = payload?.error?.code;
-    error.receivedBytes = payload?.error?.receivedBytes;
-    throw error;
-  }
-  return payload ?? {};
+  const body = (await response.json().catch(() => null)) as unknown;
+  return { status: response.status, body };
 }
 
 /**
@@ -96,63 +71,35 @@ export async function stageChatAttachment(params: {
   onProgress?: (fraction: number) => void;
 }): Promise<StagedChatAttachmentUpload> {
   const { file, target, signal } = params;
-  const begin = new URLSearchParams({ action: "begin", sizeBytes: String(file.size) });
-  if (file.name) {
-    begin.set("fileName", file.name);
-  }
-  if (file.type) {
-    begin.set("mimeType", file.type);
-  }
-  if (target.sessionKey) {
-    begin.set("sessionKey", target.sessionKey);
-  }
-  if (target.agentId) {
-    begin.set("agentId", target.agentId);
-  }
-  const started = await postUpload(target, begin, undefined, signal);
-  const uploadId = typeof started.uploadId === "string" ? started.uploadId : "";
-  if (!uploadId) {
-    throw new Error(t("chat.attachments.readFailed", { names: file.name, more: "" }));
-  }
-  let offset = 0;
-  while (offset < file.size) {
-    signal.throwIfAborted();
-    const end = Math.min(file.size, offset + UPLOAD_PART_BYTES);
-    try {
-      const part = await postUpload(
-        target,
-        new URLSearchParams({ action: "part", uploadId, offset: String(offset) }),
-        file.slice(offset, end, file.type || "application/octet-stream"),
-        signal,
-      );
-      const received = typeof part.receivedBytes === "number" ? part.receivedBytes : end;
-      offset = Math.max(offset, Math.min(file.size, received));
-      params.onProgress?.(offset / file.size);
-    } catch (error) {
-      const receivedBytes = (error as { receivedBytes?: number }).receivedBytes;
-      // A transport failure or rejected part can report how much reached disk;
-      // resume there once instead of re-sending the whole file.
-      if (typeof receivedBytes === "number" && receivedBytes > offset) {
-        offset = Math.min(file.size, receivedBytes);
-        params.onProgress?.(offset / file.size);
-        continue;
-      }
+  try {
+    return await uploadChatAttachmentInParts({
+      basePath: target.basePath,
+      file,
+      sizeBytes: file.size,
+      mimeType: file.type || "application/octet-stream",
+      ...(file.name ? { fileName: file.name } : {}),
+      scope: {
+        ...(target.sessionKey ? { sessionKey: target.sessionKey } : {}),
+        ...(target.agentId ? { agentId: target.agentId } : {}),
+      },
+      signal,
+      send: (request) => postUpload(target, request),
+      ...(params.onProgress ? { onProgress: params.onProgress } : {}),
+    });
+  } catch (error) {
+    // jsdom and browsers disagree on whether AbortError extends Error; keep the
+    // abort identity so callers can tell cancellation from a failed transfer.
+    if (error && typeof error === "object" && (error as { name?: unknown }).name === "AbortError") {
       throw error;
     }
+    if (error instanceof ChatAttachmentUploadClientError) {
+      throw new Error(error.message, { cause: error });
+    }
+    if (error instanceof Error && error.message) {
+      throw error;
+    }
+    throw new Error(t("chat.attachments.readFailed", { names: file.name, more: "" }), {
+      cause: error,
+    });
   }
-  const committed = await postUpload(
-    target,
-    new URLSearchParams({ action: "commit", uploadId }),
-    undefined,
-    signal,
-  );
-  return {
-    uploadId,
-    sizeBytes: typeof committed.sizeBytes === "number" ? committed.sizeBytes : file.size,
-    mimeType:
-      typeof committed.mimeType === "string" && committed.mimeType
-        ? committed.mimeType
-        : file.type || "application/octet-stream",
-    ...(file.name ? { fileName: file.name } : {}),
-  };
 }
