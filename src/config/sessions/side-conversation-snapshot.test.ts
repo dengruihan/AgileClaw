@@ -1,0 +1,802 @@
+// Behavior tests for the frozen side-conversation snapshot projection.
+import path from "node:path";
+import { afterAll, describe, expect, it } from "vitest";
+import { convertToLlm } from "../../../packages/agent-core/src/harness/messages.js";
+import {
+  buildSessionContext,
+  projectSessionEntryMessage,
+} from "../../../packages/agent-core/src/harness/session/session.js";
+import type { SessionTreeEntry } from "../../../packages/agent-core/src/harness/types.js";
+import type { AgentMessage } from "../../../packages/agent-core/src/types.js";
+import { normalizeMessagesForLlmBoundary } from "../../agents/embedded-agent-runner/run/attempt-llm-boundary.js";
+import { repairToolUseResultPairing } from "../../agents/session-transcript-repair.js";
+import { projectChatDisplayMessages } from "../../gateway/chat-display-projection.js";
+import { useSessionStoreTempDirs } from "../../test-utils/session-state-cleanup.js";
+import { replaceSessionEntry, replaceTranscriptEvents } from "./session-accessor.js";
+import {
+  buildForkedChildTranscriptEvents,
+  type ParentForkSourceTranscript,
+} from "./session-accessor.sqlite-parent-fork.js";
+import { prepareSideConversationForkTranscript } from "./session-accessor.sqlite-parent-session.js";
+import { projectSideConversationSnapshot } from "./side-conversation-snapshot.js";
+
+// Persisted snapshot format: these literals are the transcript contract M201 reads.
+const SNAPSHOT_BOUNDARY_ENTRY_ID = "side-conversation-snapshot-boundary";
+const SNAPSHOT_CUSTOM_TYPE = "openclaw.side-conversation-snapshot";
+const SNAPSHOT_PROJECTION_VERSION = 1;
+
+const ZERO_USAGE = {
+  input: 0,
+  output: 0,
+  cacheRead: 0,
+  cacheWrite: 0,
+  totalTokens: 0,
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+};
+
+function messageEntry(
+  id: string,
+  parentId: string | null,
+  message: Record<string, unknown>,
+  timestamp = "2026-01-01T00:00:00.000Z",
+) {
+  return { type: "message", id, parentId, timestamp, message };
+}
+
+function userMessage(id: string, parentId: string | null, content: unknown) {
+  return messageEntry(id, parentId, { role: "user", content, timestamp: 1_700_000_000_000 });
+}
+
+function assistantMessage(
+  id: string,
+  parentId: string | null,
+  content: unknown,
+  overrides: Record<string, unknown> = {},
+) {
+  return messageEntry(id, parentId, {
+    role: "assistant",
+    content,
+    api: "anthropic-messages",
+    provider: "anthropic",
+    model: "claude-test",
+    usage: ZERO_USAGE,
+    stopReason: "stop",
+    timestamp: 1_700_000_000_000,
+    ...overrides,
+  });
+}
+
+function toolResultMessage(
+  id: string,
+  parentId: string | null,
+  toolCallId: string,
+  content: unknown = [{ type: "text", text: "result" }],
+) {
+  return messageEntry(id, parentId, {
+    role: "toolResult",
+    toolCallId,
+    toolName: "read",
+    content,
+    isError: false,
+    timestamp: 1_700_000_000_000,
+  });
+}
+
+function toolCallBlock(id: string, extra: Record<string, unknown> = {}) {
+  return { type: "toolCall", id, name: "read", arguments: { path: "README.md" }, ...extra };
+}
+
+function bashEntry(id: string, parentId: string | null, command: string, output: string) {
+  return messageEntry(id, parentId, {
+    role: "bashExecution",
+    command,
+    output,
+    exitCode: 0,
+    cancelled: false,
+    truncated: false,
+    timestamp: 1_700_000_000_000,
+  });
+}
+
+function projectAll(events: unknown[]): AgentMessage[] {
+  return events
+    .map((event) => projectSessionEntryMessage(event as SessionTreeEntry))
+    .filter((message): message is AgentMessage => message !== undefined);
+}
+
+function project(branchEntries: unknown[], overrides: Record<string, unknown> = {}) {
+  return projectSideConversationSnapshot({
+    branchEntries,
+    sourceSessionKey: "agent:main:main",
+    sourceSessionId: "parent-session",
+    sourceLeafEntryId: "a1",
+    ...overrides,
+  });
+}
+
+function entryParentId(entry: unknown): string | null {
+  const parentId = (entry as { parentId?: unknown }).parentId;
+  return typeof parentId === "string" ? parentId : null;
+}
+
+function entryId(entry: unknown): string {
+  return (entry as { id: string }).id;
+}
+
+describe("projectSideConversationSnapshot", () => {
+  it("keeps a complete tool round and re-chains the copied rows", () => {
+    const projection = project([
+      userMessage("u1", null, "explain the repo"),
+      assistantMessage("a1", "u1", [{ type: "text", text: "checking" }, toolCallBlock("call-1")], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a1", "call-1"),
+      assistantMessage("a2", "r1", [{ type: "text", text: "done" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+      "side-conversation-snapshot-boundary",
+    ]);
+    expect(projection.events.slice(0, 4).map(entryParentId)).toEqual([null, "u1", "a1", "r1"]);
+    expect(entryParentId(projection.events.at(-1))).toBe("a2");
+    expect(projection.facts).toMatchObject({
+      sourceSessionKey: "agent:main:main",
+      sourceSessionId: "parent-session",
+      sourceLeafEntryId: "a1",
+      projectionVersion: SNAPSHOT_PROJECTION_VERSION,
+      retainedMessages: 4,
+      droppedIncompleteToolRounds: 0,
+      droppedIncompleteAssistantMessages: 0,
+      droppedOrphanToolResults: 0,
+    });
+
+    const llmMessages = convertToLlm(projectAll(projection.events));
+    expect(llmMessages.map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "toolResult",
+      "assistant",
+      "user",
+    ]);
+  });
+
+  it("drops an incomplete tool round and counts its orphan results", () => {
+    const projection = project([
+      userMessage("u1", null, "run both reads"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1"), toolCallBlock("call-2")], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a1", "call-1"),
+      assistantMessage("a2", "r1", [{ type: "text", text: "settled" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual(["u1", "a2", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 2,
+      droppedIncompleteToolRounds: 1,
+      droppedOrphanToolResults: 1,
+    });
+    expect(entryParentId(projection.events[1])).toBe("u1");
+  });
+
+  it("keeps an async tool round whose result lands after a continuation turn", () => {
+    const projection = project([
+      userMessage("u1", null, "start a long read"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1", { async: true })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [{ type: "text", text: "waiting on the read" }]),
+      toolResultMessage("r1", "a2", "call-1"),
+    ]);
+
+    // The result moves into its owner's block so replay pairing cannot award it
+    // to the continuation turn; the continuation follows the closed round.
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(projection.events.slice(0, 4).map(entryParentId)).toEqual([null, "u1", "a1", "r1"]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 4,
+      droppedIncompleteToolRounds: 0,
+      droppedOrphanToolResults: 0,
+    });
+  });
+
+  it("orders duplicate async rounds so replay pairing keeps both real results", () => {
+    const projection = project([
+      userMessage("u1", null, "start two reads"),
+      assistantMessage("a1", "u1", [toolCallBlock("dup", { arguments: { phase: "first" } })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [toolCallBlock("dup", { arguments: { phase: "second" } })], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a2", "dup", [{ type: "text", text: "FIRST" }]),
+      toolResultMessage("r2", "r1", "dup", [{ type: "text", text: "SECOND" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+      "r2",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(projection.events.slice(0, 5).map(entryParentId)).toEqual([
+      null,
+      "u1",
+      "a1",
+      "r1",
+      "a2",
+    ]);
+
+    const context = buildSessionContext(projection.events as unknown as SessionTreeEntry[]);
+    const repaired = repairToolUseResultPairing(context.messages);
+    expect(repaired.added).toHaveLength(0);
+    expect(repaired.discarded).toHaveLength(0);
+    expect(repaired.droppedDuplicateCount).toBe(0);
+
+    const ownership: Array<[string, string]> = [];
+    let callPhase = "";
+    for (const message of repaired.messages) {
+      if (message.role === "assistant") {
+        const call = message.content.find((block) => block.type === "toolCall");
+        callPhase = call && call.type === "toolCall" ? String(call.arguments.phase) : "";
+        continue;
+      }
+      if (message.role === "toolResult") {
+        const text = message.content.find((block) => block.type === "text");
+        ownership.push([callPhase, text && text.type === "text" ? text.text : ""]);
+      }
+    }
+    // FIRST belongs to the first call occurrence, SECOND to the second.
+    expect(ownership).toEqual([
+      ["first", "FIRST"],
+      ["second", "SECOND"],
+    ]);
+    expect(repaired.messages.filter((message) => message.role === "toolResult")).toHaveLength(2);
+  });
+
+  it("groups displaced results for several calls under their owner", () => {
+    const projection = project([
+      userMessage("u1", null, "run two tools"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-a"), toolCallBlock("call-b")], {
+        stopReason: "toolUse",
+      }),
+      bashEntry("b1", "a1", "git diff --stat", "2 files changed"),
+      assistantMessage("a2", "b1", [{ type: "text", text: "still running" }]),
+      toolResultMessage("rb", "a2", "call-b", [{ type: "text", text: "B" }]),
+      toolResultMessage("ra", "rb", "call-a", [{ type: "text", text: "A" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual([
+      "u1",
+      "a1",
+      "rb",
+      "ra",
+      "b1",
+      "a2",
+      SNAPSHOT_BOUNDARY_ENTRY_ID,
+    ]);
+    expect(convertToLlm(projectAll(projection.events)).map((message) => message.role)).toEqual([
+      "user",
+      "assistant",
+      "toolResult",
+      "toolResult",
+      "user",
+      "assistant",
+      "user",
+    ]);
+
+    const repaired = repairToolUseResultPairing(
+      buildSessionContext(projection.events as unknown as SessionTreeEntry[]).messages,
+    );
+    expect(repaired.added).toHaveLength(0);
+    expect(repaired.discarded).toHaveLength(0);
+    const resultTextByCallId = new Map(
+      repaired.messages
+        .filter((message) => message.role === "toolResult")
+        .map((message) => {
+          const text = message.content.find((block) => block.type === "text");
+          return [message.toolCallId, text && text.type === "text" ? text.text : ""] as const;
+        }),
+    );
+    expect([...resultTextByCallId]).toEqual([
+      ["call-a", "A"],
+      ["call-b", "B"],
+    ]);
+  });
+
+  it("drops an async tool round that never received its result", () => {
+    const projection = project([
+      userMessage("u1", null, "start a long read"),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1", { async: true })], {
+        stopReason: "toolUse",
+      }),
+      assistantMessage("a2", "a1", [{ type: "text", text: "waiting on the read" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual(["u1", "a2", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 2,
+      droppedIncompleteToolRounds: 1,
+    });
+    const serialized = JSON.stringify(projection.events);
+    expect(serialized).not.toContain("call-1");
+  });
+
+  it("pairs duplicate tool ids by occurrence", () => {
+    const projection = project([
+      userMessage("u1", null, "two calls share an id"),
+      assistantMessage("a1", "u1", [toolCallBlock("dup")], { stopReason: "toolUse" }),
+      assistantMessage("a2", "a1", [toolCallBlock("dup")], { stopReason: "toolUse" }),
+      toolResultMessage("r1", "a2", "dup"),
+    ]);
+
+    // The first occurrence owns the only result; the second turn stays incomplete.
+    expect(projection.events.map(entryId)).toEqual(["u1", "a1", "r1", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 3,
+      droppedIncompleteToolRounds: 1,
+      droppedOrphanToolResults: 0,
+    });
+  });
+
+  it("drops aborted and error assistant turns plus their tool results", () => {
+    const projection = project([
+      userMessage("u1", null, "start"),
+      assistantMessage("a1", "u1", [{ type: "text", text: "partial answer" }], {
+        stopReason: "aborted",
+      }),
+      assistantMessage("a2", "a1", [toolCallBlock("call-1")], { stopReason: "error" }),
+      toolResultMessage("r1", "a2", "call-1"),
+      userMessage("u2", "r1", "try again"),
+      assistantMessage("a3", "u2", [{ type: "text", text: "final" }]),
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual(["u1", "u2", "a3", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 3,
+      droppedIncompleteAssistantMessages: 2,
+      droppedOrphanToolResults: 1,
+    });
+  });
+
+  it("turns reasoning into plain text without provider signatures", () => {
+    const projection = project([
+      userMessage("u1", null, "plan"),
+      assistantMessage(
+        "a1",
+        "u1",
+        [
+          {
+            type: "thinking",
+            thinking: "weigh options",
+            thinkingSignature: "sig-1",
+            redacted: true,
+          },
+          { type: "text", text: "answer", textSignature: "text-sig" },
+          toolCallBlock("call-1", { thoughtSignature: "thought-sig" }),
+        ],
+        {
+          stopReason: "toolUse",
+          responseId: "resp-1",
+          providerReplay: { v: 1, type: "reasoning", data: "opaque", provider: "anthropic" },
+        },
+      ),
+      toolResultMessage("r1", "a1", "call-1"),
+    ]);
+
+    const [assistant] = projection.events.slice(1, 2) as Array<{
+      message: { content: Array<Record<string, unknown>> };
+    }>;
+    const content = assistant?.message.content ?? [];
+    expect(content[0]).toEqual({
+      type: "text",
+      text: "Earlier reasoning snapshot (reference only):\nweigh options",
+    });
+    expect(content[1]).toEqual({ type: "text", text: "answer" });
+    expect(content[2]).toMatchObject({ type: "toolCall", id: "call-1" });
+    expect(content[2]).not.toHaveProperty("thoughtSignature");
+
+    const serialized = JSON.stringify(projection.events);
+    for (const forbidden of [
+      "sig-1",
+      "text-sig",
+      "thought-sig",
+      "resp-1",
+      "providerReplay",
+      "redacted",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it("keeps multimodal user and tool result content intact", () => {
+    const image = { type: "image", data: "aGVsbG8=", mimeType: "image/png" };
+    const projection = project([
+      userMessage("u1", null, [{ type: "text", text: "look", textSignature: "drop-me" }, image]),
+      assistantMessage("a1", "u1", [toolCallBlock("call-1")], { stopReason: "toolUse" }),
+      toolResultMessage("r1", "a1", "call-1", [
+        { type: "text", text: "screenshot" },
+        { type: "image", data: "d29ybGQ=", mimeType: "image/jpeg" },
+      ]),
+    ]);
+
+    const [user, , result] = projection.events as Array<{
+      message: { content: Array<Record<string, unknown>> };
+    }>;
+    expect(user?.message.content).toEqual([{ type: "text", text: "look" }, image]);
+    expect(result?.message.content).toEqual([
+      { type: "text", text: "screenshot" },
+      { type: "image", data: "d29ybGQ=", mimeType: "image/jpeg" },
+    ]);
+  });
+
+  it("hides every copied role from display while keeping it in model context", () => {
+    const projection = project([
+      userMessage("u1", null, "kept"),
+      assistantMessage("a1", "u1", [{ type: "text", text: "checking" }, toolCallBlock("call-1")], {
+        stopReason: "toolUse",
+      }),
+      toolResultMessage("r1", "a1", "call-1"),
+      bashEntry("b1", "r1", "git status", "clean"),
+      assistantMessage("a2", "b1", [{ type: "text", text: "summary" }]),
+    ]);
+
+    const modelMessages = projectAll(projection.events);
+    expect(modelMessages).toHaveLength(6);
+    expect(projectChatDisplayMessages(modelMessages)).toEqual([]);
+    for (const message of modelMessages) {
+      const record = message as { display?: unknown; excludeFromContext?: unknown };
+      expect(record.display).toBe(false);
+      expect(record.excludeFromContext).toBeUndefined();
+    }
+    expect(projection.facts.retainedMessages).toBe(5);
+  });
+
+  it("drops a context-excluded message but keeps the rest visible to the model", () => {
+    const projection = project([
+      userMessage("u1", null, "kept"),
+      messageEntry(
+        "hidden",
+        "u1",
+        { role: "user", content: "display only", excludeFromContext: true },
+        "2026-01-01T00:00:01.000Z",
+      ),
+      userMessage("u2", "hidden", "visible again"),
+    ]);
+
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 2,
+      droppedContextExcludedMessages: 1,
+    });
+    expect(convertToLlm(projectAll(projection.events))).toHaveLength(3);
+  });
+
+  it("counts control rows and persisted custom messages separately", () => {
+    const projection = project([
+      {
+        type: "model_change",
+        id: "m1",
+        parentId: null,
+        provider: "anthropic",
+        modelId: "x",
+        timestamp: "t",
+      },
+      userMessage("u1", "m1", "hello"),
+      {
+        type: "compaction",
+        id: "c1",
+        parentId: "u1",
+        summary: "old",
+        firstKeptEntryId: "u1",
+        tokensBefore: 1,
+        timestamp: "t",
+      },
+      { type: "label", id: "l1", parentId: "c1", targetId: "u1", label: "note", timestamp: "t" },
+      {
+        type: "custom_message",
+        id: "cm1",
+        parentId: "l1",
+        timestamp: "2026-01-01T00:00:03.000Z",
+        customType: "test.plugin-note",
+        content: [{ type: "text", text: "plugin note" }],
+        display: true,
+        details: { source: "fixture" },
+      },
+    ]);
+
+    expect(projection.events.map(entryId)).toEqual(["u1", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 1,
+      droppedNonMessageEntries: 3,
+      droppedCustomMessages: 1,
+    });
+  });
+
+  it("reproduces identical bytes for the same source", () => {
+    const branch = [
+      userMessage("u1", null, "hello"),
+      assistantMessage("a1", "u1", [
+        { type: "thinking", thinking: "reason", thinkingSignature: "s" },
+        { type: "text", text: "hi" },
+      ]),
+      assistantMessage("a2", "a1", [toolCallBlock("call-1")], { stopReason: "toolUse" }),
+    ];
+    const first = project(branch);
+    const second = project(structuredClone(branch));
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+  });
+
+  it("appends a hidden boundary naming the source and every drop count", () => {
+    const projection = project(
+      [
+        {
+          type: "model_change",
+          id: "m1",
+          parentId: null,
+          provider: "anthropic",
+          modelId: "x",
+          timestamp: "t",
+        },
+        messageEntry("x1", "m1", { role: "user", content: "hidden", excludeFromContext: true }),
+        messageEntry("c1", "x1", {
+          role: "custom",
+          customType: "test.note",
+          content: "note",
+          timestamp: 1_700_000_000_000,
+        }),
+        userMessage("u1", "c1", "kept"),
+        assistantMessage("a1", "u1", [toolCallBlock("call-1")], { stopReason: "toolUse" }),
+        toolResultMessage("r1", "a1", "call-2"),
+        assistantMessage("a2", "r1", [{ type: "text", text: "partial" }], {
+          stopReason: "aborted",
+        }),
+      ],
+      { sourceLeafEntryId: null },
+    );
+
+    const boundary = projection.events.at(-1) as Record<string, unknown>;
+    expect(boundary).toMatchObject({
+      type: "custom_message",
+      id: SNAPSHOT_BOUNDARY_ENTRY_ID,
+      parentId: "u1",
+      customType: SNAPSHOT_CUSTOM_TYPE,
+      display: false,
+      details: {
+        source: "openclaw-side-conversation-snapshot",
+        snapshot: projection.facts,
+      },
+    });
+    expect(boundary).not.toHaveProperty("excludeFromContext");
+    expect(projection.facts).toMatchObject({
+      retainedMessages: 1,
+      droppedIncompleteToolRounds: 1,
+      droppedIncompleteAssistantMessages: 1,
+      droppedOrphanToolResults: 1,
+      droppedContextExcludedMessages: 1,
+      droppedNonMessageEntries: 1,
+      droppedCustomMessages: 1,
+    });
+
+    const content = String(boundary.content);
+    for (const text of [
+      "agent:main:main",
+      "parent-session",
+      "leaf none",
+      "Do not continue, resume, or take over the parent session's task",
+      "Only change the worktree or workspace when the operator explicitly asks",
+      "1 incomplete tool rounds",
+      "1 incomplete assistant messages",
+      "1 orphan tool results",
+      "1 context-excluded messages",
+      "1 non-message entries",
+      "1 custom messages",
+    ]) {
+      expect(content).toContain(text);
+    }
+    // The boundary is model-only context: it converts to a visible-to-model user turn.
+    const boundaryMessage = projectSessionEntryMessage(boundary as unknown as SessionTreeEntry);
+    if (!boundaryMessage) {
+      throw new Error("expected the boundary row to project into model context");
+    }
+    expect(convertToLlm([boundaryMessage])).toMatchObject([{ role: "user" }]);
+  });
+
+  it("keeps the boundary in model context after later turns", () => {
+    const projection = project([userMessage("u1", null, "hello")]);
+    const normalized = normalizeMessagesForLlmBoundary([
+      ...projectAll(projection.events),
+      { role: "user", content: "first side question", timestamp: 1_700_000_000_100 },
+      {
+        role: "assistant",
+        content: [{ type: "text", text: "answer" }],
+        api: "anthropic-messages",
+        provider: "anthropic",
+        model: "claude-test",
+        usage: ZERO_USAGE,
+        stopReason: "stop",
+        timestamp: 1_700_000_000_200,
+      },
+      { role: "user", content: "follow-up", timestamp: 1_700_000_000_300 },
+    ]);
+
+    const boundaries = normalized.filter(
+      (message) => (message as { customType?: string }).customType === SNAPSHOT_CUSTOM_TYPE,
+    );
+    expect(boundaries).toHaveLength(1);
+  });
+});
+
+describe("side conversation fork integration", () => {
+  const source: ParentForkSourceTranscript = {
+    appendParentId: "a1",
+    branchEntries: [],
+    cwd: "/tmp/workspace",
+    version: 3,
+    labelsToWrite: [
+      { targetId: "dropped-control", label: "old label", timestamp: "2026-01-01T00:00:00.000Z" },
+    ],
+    leafId: "a1",
+    preserveLeafControl: true,
+  };
+
+  it("replaces the raw branch copy and suppresses labels and leaf controls", () => {
+    const branchEntries = [
+      {
+        type: "model_change",
+        id: "dropped-control",
+        parentId: null,
+        provider: "anthropic",
+        modelId: "x",
+        timestamp: "t",
+      },
+      userMessage("u1", "dropped-control", "hello"),
+      assistantMessage("a1", "u1", [{ type: "text", text: "hi" }]),
+    ];
+    const projection = project(branchEntries);
+    const build = () =>
+      buildForkedChildTranscriptEvents({
+        parentSessionFile: "agent:main:main",
+        source: { ...source, branchEntries },
+        targetSessionId: "child-session",
+        sideConversationSnapshot: projection,
+      });
+
+    const events = build();
+    const header = events[0] as Record<string, unknown>;
+    expect(header).toMatchObject({ type: "session", parentSession: "agent:main:main" });
+    const copied = events.slice(1);
+    expect(copied.map(entryId)).toEqual(["u1", "a1", SNAPSHOT_BOUNDARY_ENTRY_ID]);
+    for (const entry of copied) {
+      const type = (entry as { type: string }).type;
+      expect(type).not.toBe("label");
+      expect(type).not.toBe("leaf");
+    }
+    expect(JSON.stringify(build().slice(1))).toBe(JSON.stringify(copied));
+  });
+
+  const sessionDirs = useSessionStoreTempDirs(afterAll, "openclaw-side-conversation-");
+
+  it("prepares a frozen transcript and refuses an oversized snapshot", async () => {
+    const root = sessionDirs.make();
+    const storePath = path.join(root, "sessions.json");
+    const parentKey = "agent:main:side-parent";
+    const parentSessionId = "side-parent-session";
+    await replaceTranscriptEvents(
+      { agentId: "main", sessionId: parentSessionId, sessionKey: parentKey, storePath },
+      [
+        { type: "session", version: 3, id: parentSessionId, timestamp: "2026-09-15T00:00:00Z" },
+        userMessage("u1", null, "explain the change"),
+        assistantMessage("a1", "u1", [toolCallBlock("call-1")], { stopReason: "toolUse" }),
+        toolResultMessage("r1", "a1", "call-1"),
+        assistantMessage("a2", "r1", [{ type: "text", text: "settled answer" }]),
+      ],
+    );
+    await replaceSessionEntry(
+      { sessionKey: parentKey, storePath },
+      { sessionId: parentSessionId, updatedAt: 1 },
+    );
+
+    const prepared = await prepareSideConversationForkTranscript({
+      agentId: "main",
+      parentEntry: { sessionId: parentSessionId, updatedAt: 1 },
+      parentSessionKey: parentKey,
+      sessionKey: "agent:main:side-child",
+      storePath,
+    });
+
+    expect(prepared.status).toBe("prepared");
+    if (prepared.status !== "prepared") {
+      return;
+    }
+    expect(prepared.snapshot).toMatchObject({
+      sourceSessionKey: parentKey,
+      sourceSessionId: parentSessionId,
+      retainedMessages: 4,
+      droppedIncompleteToolRounds: 0,
+    });
+    const events = prepared.events;
+    expect(events).toHaveLength(6);
+    expect(entryId(events.at(-1))).toBe(SNAPSHOT_BOUNDARY_ENTRY_ID);
+
+    const oversized = await prepareSideConversationForkTranscript({
+      agentId: "main",
+      parentEntry: { sessionId: parentSessionId, updatedAt: 1 },
+      parentSessionKey: parentKey,
+      sessionKey: "agent:main:side-child",
+      storePath,
+      maxTokens: 1,
+    });
+    expect(oversized.status).toBe("snapshot-too-large");
+    if (oversized.status === "snapshot-too-large") {
+      expect(oversized.maxTokens).toBe(1);
+      expect(oversized.snapshotTokens).toBeGreaterThan(1);
+      expect(oversized.message).toContain("never truncated silently");
+      expect(oversized).not.toHaveProperty("events");
+    }
+  });
+
+  it("refuses an oversized snapshot instead of trusting a compacted turn's usage", async () => {
+    const root = sessionDirs.make();
+    const storePath = path.join(root, "sessions.json");
+    const parentKey = "agent:main:side-large-parent";
+    const parentSessionId = "side-large-parent-session";
+    await replaceTranscriptEvents(
+      { agentId: "main", sessionId: parentSessionId, sessionKey: parentKey, storePath },
+      [
+        { type: "session", version: 3, id: parentSessionId, timestamp: "2026-09-15T00:00:00Z" },
+        userMessage("u-old", null, "x".repeat(500_000)),
+        {
+          type: "compaction",
+          id: "c1",
+          parentId: "u-old",
+          summary: "compacted history",
+          firstKeptEntryId: "u-recent",
+          tokensBefore: 120_000,
+          timestamp: "2026-09-15T00:00:01Z",
+        },
+        userMessage("u-recent", "c1", "recent question"),
+        assistantMessage("a1", "u-recent", [{ type: "text", text: "ok" }], {
+          usage: {
+            ...ZERO_USAGE,
+            contextUsage: { state: "available", promptTokens: 110, totalTokens: 110 },
+          },
+        }),
+      ],
+    );
+    await replaceSessionEntry(
+      { sessionKey: parentKey, storePath },
+      { sessionId: parentSessionId, updatedAt: 1 },
+    );
+
+    const oversized = await prepareSideConversationForkTranscript({
+      agentId: "main",
+      parentEntry: { sessionId: parentSessionId, updatedAt: 1 },
+      parentSessionKey: parentKey,
+      sessionKey: "agent:main:side-large-child",
+      storePath,
+    });
+
+    expect(oversized.status).toBe("snapshot-too-large");
+    if (oversized.status !== "snapshot-too-large") {
+      return;
+    }
+    // The frozen projection keeps the pre-compaction prefix, and that prefix
+    // decides the cap; the parent's 110-token window must not stand in for it.
+    expect(oversized.maxTokens).toBe(100_000);
+    expect(oversized.snapshotTokens).toBeGreaterThan(100_000);
+    expect(oversized.message).toContain("never truncated silently");
+    expect(oversized).not.toHaveProperty("events");
+  });
+});
