@@ -9,8 +9,10 @@ import {
 import type { ModelCatalogSnapshot } from "../../agents/model-catalog.js";
 import type { SessionEntry } from "../../config/sessions.js";
 import type { SessionAccessScope } from "../../config/sessions/session-accessor.js";
+import { loadSessionEntry as loadInternalSessionEntry } from "../../config/sessions/session-accessor.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import { resolveAgentIdFromSessionKey } from "../../routing/session-key.js";
 import { resolveMissingAgentHarnessSessionError } from "../../sessions/agent-harness-session-key.js";
 import {
   SessionWorktreeLifecycleError,
@@ -46,6 +48,11 @@ import {
   resolveSessionWorkerPlacementPatchError,
   sessionLog,
 } from "./sessions-shared.js";
+import {
+  archiveSideConversationChildrenInParentFence,
+  readRegisteredSideConversationChildren,
+  resolveSideConversationArchiveBlocker,
+} from "./side-conversations-fence.js";
 import type { GatewayRequestContext } from "./types.js";
 
 export type SessionPatchArchivePreparation = {
@@ -366,24 +373,89 @@ export async function prepareSessionPatchArchiveTransition(params: {
       },
     });
   // Carry the exact restored binding through the later metadata commit.
-  const assertCommitAllowed = params.archived ? commitGuard : await synchronize(params.entry);
-  return {
-    assertCommitAllowed,
-    afterCommit:
-      params.archived && params.entry.worktree && !placement.cleanupPending
-        ? async (entry) => {
-            try {
-              // The durable archive row hands failed cleanup to GC. Keep the lifecycle
-              // fence and compare the exact committed projection, never a fresh successor.
-              assertWorktreeMutationAllowed =
-                prepareSessionWorkerPlacementMutationCheck(placementTarget);
-              await synchronize(entry);
-            } catch (error) {
-              sessionLog.warn(
-                `sessions.patch: archived worktree cleanup deferred for ${params.scope.sessionKey}: ${formatErrorMessage(error)}`,
-              );
-            }
-          }
-        : undefined,
+  const sideParentScope = {
+    agentId:
+      params.scope.agentId ?? resolveAgentIdFromSessionKey(params.scope.sessionKey) ?? "main",
+    sessionKey: params.scope.sessionKey,
+    storePath: params.scope.storePath,
   };
+  const sideStorePath = params.scope.storePath;
+  const sideParentEntry =
+    params.archived && sideStorePath
+      ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
+      : undefined;
+  const sideChildren = sideParentEntry
+    ? readRegisteredSideConversationChildren({
+        agentId: sideParentScope.agentId,
+        parentEntry: sideParentEntry,
+        parentSessionKey: params.scope.sessionKey,
+        storePath: sideStorePath!,
+      })
+    : [];
+  const assertNoActiveSideChildren = () => {
+    const blocker = resolveSideConversationArchiveBlocker({
+      agentId: sideParentScope.agentId,
+      context: params.context,
+      parentEntry: sideParentEntry!,
+      parentSessionKey: params.scope.sessionKey,
+      storePath: sideStorePath!,
+    });
+    if (blocker) {
+      // Archive refuses while a hidden child still owns work; closing it first
+      // is the only path that keeps the child's transcript untouched.
+      throw new SessionWorktreeLifecycleError(blocker.message, "busy");
+    }
+  };
+  const assertCommitAllowed = params.archived
+    ? () => {
+        assertNoActiveSideChildren();
+        commitGuard();
+      }
+    : await synchronize(params.entry);
+  const worktreeAfterCommit =
+    params.archived && params.entry.worktree && !placement.cleanupPending
+      ? async (entry: SessionEntry) => {
+          try {
+            // The durable archive row hands failed cleanup to GC. Keep the lifecycle
+            // fence and compare the exact committed projection, never a fresh successor.
+            assertWorktreeMutationAllowed =
+              prepareSessionWorkerPlacementMutationCheck(placementTarget);
+            await synchronize(entry);
+          } catch (error) {
+            sessionLog.warn(
+              `sessions.patch: archived worktree cleanup deferred for ${params.scope.sessionKey}: ${formatErrorMessage(error)}`,
+            );
+          }
+        }
+      : undefined;
+  const afterCommit =
+    params.archived && (worktreeAfterCommit || sideChildren.length > 0)
+      ? async (entry: SessionEntry) => {
+          await worktreeAfterCommit?.(entry);
+          if (sideChildren.length === 0) {
+            return;
+          }
+          const parent = sideStorePath
+            ? loadInternalSessionEntry({ ...sideParentScope, storePath: sideStorePath })
+            : undefined;
+          if (!parent || !sideStorePath) {
+            return;
+          }
+          const archived = await archiveSideConversationChildrenInParentFence({
+            cfg: params.context.getRuntimeConfig(),
+            agentId: sideParentScope.agentId,
+            context: params.context,
+            parentEntry: parent,
+            parentSessionKey: params.scope.sessionKey,
+            storePath: sideStorePath,
+            commitGuard,
+          });
+          if (archived.ok && archived.preserved.length > 0) {
+            sessionLog.warn(
+              `sessions.patch: ${archived.preserved.length} side conversation worktree(s) preserved for ${params.scope.sessionKey}`,
+            );
+          }
+        }
+      : undefined;
+  return { assertCommitAllowed, afterCommit };
 }

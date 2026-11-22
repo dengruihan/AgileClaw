@@ -36,6 +36,8 @@ const PRIVATE_SESSION_ENTRY_KEYS = [
   "pendingWorktree",
   "sessionDiffBaselineCapture",
   "transcriptByteCompactionLatch",
+  "sideConversation",
+  "sideConversations",
 ] as const satisfies readonly (keyof InternalSessionEntry)[];
 
 function stripPrivateSessionEntryFields(entry: InternalSessionEntry): SessionEntry;

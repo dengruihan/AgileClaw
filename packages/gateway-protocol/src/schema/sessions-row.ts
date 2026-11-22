@@ -12,6 +12,7 @@ import {
 import { SessionActivitySummarySchema } from "./sessions-activity-summary.js";
 import { SessionProviderReviewProjectionSchema } from "./sessions-provider-review.js";
 import { SessionSharingRoleSchema, SessionVisibilitySchema } from "./sessions-sharing-values.js";
+import { SideConversationRowMarkerSchema } from "./side-conversations.js";
 
 export const SessionPermissionModeSchema = Type.Union([
   Type.Literal("read-only"),
@@ -178,6 +179,9 @@ export const SessionRowSchema = Type.Object(
     parentSessionId: Type.Optional(Type.String()),
     controlOwnerSessionKey: Type.Optional(Type.String()),
     childSessions: Type.Optional(Type.Array(Type.String())),
+    /** Hidden side-conversation membership; the parent row exposes only the count. */
+    sideConversation: Type.Optional(SideConversationRowMarkerSchema),
+    sideConversationCount: Type.Optional(Type.Integer({ minimum: 0 })),
     forkedFromParent: Type.Optional(Type.Boolean()),
     spawnDepth: Type.Optional(Type.Number()),
     subagentRole: Type.Optional(Type.Union([Type.Literal("orchestrator"), Type.Literal("leaf")])),

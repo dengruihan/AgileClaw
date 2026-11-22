@@ -33,6 +33,11 @@ export const SessionsListParamsSchema = closedObject({
   excludeCron: Type.Optional(Type.Boolean()),
   /** Exclude machine-created probe/system sessions using recorded provenance. */
   excludeSystem: Type.Optional(Type.Boolean()),
+  /**
+   * Include hidden side-conversation child rows. Parent rows always expose the
+   * read-only sideConversationCount; children stay out of default lists and searches.
+   */
+  includeSideConversations: Type.Optional(Type.Boolean()),
   /** Limit agent-scoped rows to agents currently present in config. */
   configuredAgentsOnly: Type.Optional(Type.Boolean()),
   /**

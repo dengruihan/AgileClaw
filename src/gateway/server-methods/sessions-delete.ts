@@ -14,8 +14,12 @@ import {
   SESSION_LIFECYCLE_CHANGED_ERROR_REASON,
   type SessionEntry,
 } from "../../config/sessions.js";
-import { rollbackPluginOwnedSessionEntryLifecycle } from "../../config/sessions/session-accessor.js";
+import {
+  loadSessionEntry as loadInternalSessionEntry,
+  rollbackPluginOwnedSessionEntryLifecycle,
+} from "../../config/sessions/session-accessor.js";
 import { resolvePersistedSessionStoreOwnerForKey } from "../../config/sessions/session-store-owner.js";
+import { removeSideConversationIntent } from "../../config/sessions/side-conversation-registry.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import {
   isIncognitoSessionKey,
@@ -52,7 +56,9 @@ import {
   loadAccessorSessionEntryForGatewayTarget,
   isAgentMainSessionKey,
   requireSessionKey,
+  sessionLog,
 } from "./sessions-shared.js";
+import { deleteSideConversationChildrenInParentFence } from "./side-conversations-fence.js";
 import type { GatewayRequestHandlerOptions, GatewayRequestHandlers } from "./types.js";
 import { assertValidParams } from "./validation.js";
 
@@ -115,6 +121,11 @@ export async function deleteGatewaySession({
   const initialDeleteEntry = loadSessionEntry(key, {
     agentId: requestedAgentId,
   }).entry;
+  const deletedMarkerAtStart = loadInternalSessionEntry({
+    agentId: requestedAgentId,
+    sessionKey: target.canonicalKey,
+    storePath,
+  })?.sideConversation;
   const expectedSessionId = p.expectedSessionId?.trim();
   const expectedLifecycleRevision = p.expectedLifecycleRevision?.trim();
   const sessionChangedError = () =>
@@ -184,6 +195,7 @@ export async function deleteGatewaySession({
   ];
   let drain: SessionLifecycleDrain | undefined;
   let worktreePreserved: PreservedSessionWorktree | undefined;
+  let preservedChildWorktree: PreservedSessionWorktree | undefined;
   const deleteCurrent = async () => {
     try {
       const current = assertCurrent();
@@ -251,6 +263,27 @@ export async function deleteGatewaySession({
             }
           };
           commitGuard();
+          // Registered hidden children are processed serially inside this same
+          // fence with storage primitives; the parent already owns the mutex.
+          const parentSideRegistryEntry =
+            loadInternalSessionEntry({
+              agentId: target.agentId,
+              sessionKey: target.canonicalKey,
+              storePath,
+            }) ?? entry!;
+          const sideChildren = await deleteSideConversationChildrenInParentFence({
+            agentId: target.agentId,
+            context,
+            parentEntry: parentSideRegistryEntry,
+            parentSessionKey: target.canonicalKey,
+            storePath,
+            deleteTranscript,
+            commitGuard,
+          });
+          if (!sideChildren.ok) {
+            throw new SessionDeletionError(sideChildren.error);
+          }
+          preservedChildWorktree = sideChildren.preserved;
           const mutationCleanupError = await cleanupSessionBeforeMutation({
             cfg,
             key,
@@ -328,6 +361,25 @@ export async function deleteGatewaySession({
             // this fence opens, so a same-key successor cannot be mistaken for it.
             const deletedSessionKey = target.canonicalKey ?? key;
             handleSessionStateSessionDeleted(deletedSessionKey, requestedAgentId);
+            const deletedSideConversation =
+              loadInternalSessionEntry({
+                agentId: requestedAgentId,
+                sessionKey: deletedSessionKey,
+                storePath,
+              })?.sideConversation ?? deletedMarkerAtStart;
+            if (deletedSideConversation) {
+              // A directly deleted hidden child also leaves its parent registry.
+              await removeSideConversationIntent({
+                agentId: requestedAgentId,
+                cfg,
+                intentId: deletedSideConversation.intentId,
+                parentSessionKey: deletedSideConversation.parentSessionKey,
+              }).catch((error: unknown) => {
+                sessionLog.warn(
+                  `side conversation registry cleanup failed for ${deletedSessionKey}: ${formatErrorMessage(error)}`,
+                );
+              });
+            }
             // A deleted root releases its device lease at the node too: occupancy
             // has no TTL, so dropping only the mirror would keep the device
             // reserved for other sessions. A deleted child has no mirror of its
@@ -361,12 +413,13 @@ export async function deleteGatewaySession({
     }
     return { ok: false, error: error.error };
   }
+  const preservedWorktree = worktreePreserved ?? preservedChildWorktree;
   const response: SessionsDeleteResult = {
     ok: true,
     key: target.canonicalKey,
     deleted: deletion.deleted,
     archived: deletion.archivedTranscripts.map((entry) => entry.archivedPath),
-    ...(worktreePreserved ? { worktreePreserved } : {}),
+    ...(preservedWorktree ? { worktreePreserved: preservedWorktree } : {}),
   };
   onDeleted?.(response);
   if (deletion.deleted) {

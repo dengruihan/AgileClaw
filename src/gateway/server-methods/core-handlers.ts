@@ -150,6 +150,8 @@ const CORE_GATEWAY_HANDLER_MODULES = {
     import("../session-observer-rpc.js").then((module) => module.sessionObserverHandlers),
   "session-companion-rpc": () =>
     import("../session-companion-rpc.js").then((module) => module.sessionCompanionHandlers),
+  "side-conversations": () =>
+    import("./side-conversations.js").then((module) => module.sideConversationHandlers),
   "hooks-status": () => import("./hooks-status.js").then((module) => module.hooksStatusHandlers),
   skills: () => import("./skills.js").then((module) => module.skillsHandlers),
   system: () => import("./system.js").then((module) => module.systemHandlers),

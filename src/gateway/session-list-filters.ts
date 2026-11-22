@@ -15,6 +15,7 @@ import {
   sessionCreatorProfileId,
 } from "../config/sessions/session-entry-provenance.js";
 import { isPinnableSessionEntry } from "../config/sessions/session-pin-policy.js";
+import { isSideConversationEntry } from "../config/sessions/side-conversation-registry.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { normalizeAgentId } from "../routing/session-key.js";
 import { sessionActivityTimestamp } from "../shared/session-activity-timestamp.js";
@@ -89,6 +90,11 @@ function createSessionCandidateFilter(params: SessionListFilterParams) {
     const target = expectDefined(params.getTarget(key), "selection row owner");
     const { selection } = target;
     const storeKey = target.storeKey ?? key;
+    // Hidden side-conversation children stay out of default lists, searches, and
+    // owner facets; exact describe/history/subscribe and includeSideConversations opt in.
+    if (isSideConversationEntry(entry) && opts.includeSideConversations !== true) {
+      return false;
+    }
     if (
       selection.isCronRun ||
       (opts.excludeCron === true && selection.isCron) ||
