@@ -4,12 +4,9 @@
 import { MAX_IMAGE_BYTES } from "@openclaw/media-core/constants";
 import { asPositiveFiniteNumber } from "@openclaw/normalization-core/number-coercion";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
-import { resolveChatAttachmentFrameBudgetBytes } from "../shared/chat-attachment-frame-budget.js";
-import { MAX_PAYLOAD_BYTES } from "./server-constants.js";
 
-const DEFAULT_CHAT_ATTACHMENT_MAX_MB = 20;
-
-const MAX_ADVERTISED_ATTACHMENT_BYTES = resolveChatAttachmentFrameBudgetBytes(MAX_PAYLOAD_BYTES);
+/** Default decoded per-file ceiling: 1 GiB. */
+const DEFAULT_CHAT_ATTACHMENT_MAX_MB = 1024;
 
 /** Default decoded-size ceiling when `agents.defaults.mediaMaxMb` is unset or invalid. */
 export const DEFAULT_CHAT_ATTACHMENT_MAX_BYTES = DEFAULT_CHAT_ATTACHMENT_MAX_MB * 1024 * 1024;
@@ -27,8 +24,13 @@ export function resolveChatAttachmentMaxBytes(cfg: OpenClawConfig): number {
 /**
  * Connection-wide decoded-size ceilings; MIME and count limits depend on the
  * entrypoint and model. Images must also fit the agent-hydration cap.
+ *
+ * These are per-attachment ceilings, never a frame budget: a file above what one
+ * WebSocket frame can carry is streamed to the inbound media store through the
+ * direct upload route and referenced from `chat.send` by upload ID. Clients
+ * still bound every single request by `policy.maxPayload`.
  */
 export function resolveChatAttachmentPolicy(cfg: OpenClawConfig) {
-  const maxBytes = Math.min(resolveChatAttachmentMaxBytes(cfg), MAX_ADVERTISED_ATTACHMENT_BYTES);
+  const maxBytes = resolveChatAttachmentMaxBytes(cfg);
   return { maxBytes, maxImageBytes: Math.min(maxBytes, MAX_IMAGE_BYTES) };
 }

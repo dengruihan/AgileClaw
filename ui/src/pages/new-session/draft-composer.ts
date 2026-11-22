@@ -5,6 +5,7 @@ import { t } from "../../i18n/index.ts";
 import { registerNewSessionSetupEnglish } from "../../i18n/locales/en-new-session-setup.ts";
 import { refreshSlashCommands } from "../chat/chat-commands.ts";
 import { resolveChatAttachmentLimits } from "../chat/components/chat-attachment-admission.ts";
+import { resolveChatAttachmentUploadTarget } from "../chat/components/chat-attachment-upload.ts";
 import type { NewSessionAttachmentDraft } from "./attachment-draft.ts";
 import type { NewSessionComposerOptions } from "./composer-types.ts";
 import { renderNewSessionComposer } from "./composer.ts";
@@ -100,6 +101,14 @@ export function renderNewSessionDraftComposer(
     ...options,
     uploadConfig: options.context?.config,
     attachmentLimits: resolveChatAttachmentLimits(options.context?.gateway.snapshot.hello?.policy),
+    // A new draft has no session key yet; the send establishes that scope.
+    attachmentUpload: resolveChatAttachmentUploadTarget({
+      resourceBasePath: options.context?.resourceBasePath,
+      hello: options.context?.gateway.snapshot.hello,
+      settings: { token: options.context?.gateway.connection.token },
+      password: options.context?.gateway.connection.password,
+      agentId: options.agentId,
+    }),
     attachments: options.attachmentDraft.attachments,
     getAttachments: () => options.attachmentDraft.attachments,
     get message() {

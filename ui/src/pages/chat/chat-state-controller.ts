@@ -5,7 +5,10 @@ import { registerControlUiReloadGuard } from "../../app/document-reload-guard.ts
 import { t } from "../../i18n/index.ts";
 import type { ChatQueueItem } from "../../lib/chat/chat-types.ts";
 import { parseStoredChatOutboxScope } from "../../lib/chat/outbox-store.ts";
-import { resolveUiConversationIdentity } from "../../lib/sessions/session-key.ts";
+import {
+  resolveUiConversationIdentity,
+  resolveUiSelectedSessionAgentId,
+} from "../../lib/sessions/session-key.ts";
 import { showToast } from "../../lib/toast.ts";
 import { releaseDisplacedChatAttachmentPayloads } from "./attachment-payload-store.ts";
 import { disposeSelectedSessionMessageSubscription } from "./chat-history-subscription.ts";
@@ -17,6 +20,7 @@ import { invalidateImageLightbox } from "./chat-state-page.ts";
 import { cancelChatStreamRenderFrame } from "./chat-state-render.ts";
 import { resolveChatAttachmentLimits } from "./components/chat-attachment-admission.ts";
 import { ChatAttachmentReadLifecycle } from "./components/chat-attachment-reads.ts";
+import { resolveChatAttachmentUploadTarget } from "./components/chat-attachment-upload.ts";
 import { releaseChatMediaResourceSubscriber } from "./components/chat-message-media.ts";
 import {
   clearSessionWorkspacePreviews,
@@ -98,6 +102,10 @@ export class ChatStateController<TState extends ChatPageHost> implements Reactiv
       attachmentReads: reads,
       attachments: state.chatAttachments,
       attachmentLimits: resolveChatAttachmentLimits(state.hello?.policy),
+      attachmentUpload: resolveChatAttachmentUploadTarget({
+        ...state,
+        agentId: resolveUiSelectedSessionAgentId(state),
+      }),
       getAttachments: () => state.chatAttachments,
       pendingAttachmentReads: reads.pendingReads,
       getPendingAttachmentReads: () => reads.pendingReads,

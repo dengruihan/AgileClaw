@@ -41,12 +41,15 @@ export function normalizeRpcAttachmentsToChatAttachments(
         const durationMs = normalizeAttachmentNumber(a?.durationMs);
         const width = normalizeAttachmentNumber(a?.width);
         const height = normalizeAttachmentNumber(a?.height);
+        const uploadId =
+          typeof a?.uploadId === "string" && a.uploadId.trim() ? a.uploadId.trim() : undefined;
 
         return {
           type: typeof a?.type === "string" ? a.type : undefined,
           mimeType: typeof a?.mimeType === "string" ? a.mimeType : sourceMimeType,
           fileName: typeof a?.fileName === "string" ? a.fileName : undefined,
           content: normalizeAttachmentContent(a?.content) ?? sourceContent,
+          ...(uploadId ? { uploadId } : {}),
           ...(a?.origin === "paste" || a?.origin === "file" ? { origin: a.origin } : {}),
           ...(sizeBytes !== undefined ? { sizeBytes } : {}),
           ...(durationMs !== undefined ? { durationMs } : {}),
@@ -54,6 +57,6 @@ export function normalizeRpcAttachmentsToChatAttachments(
           ...(height !== undefined ? { height } : {}),
         };
       })
-      .filter((a) => a.content !== undefined) ?? []
+      .filter((a) => a.content !== undefined || a.uploadId !== undefined) ?? []
   );
 }

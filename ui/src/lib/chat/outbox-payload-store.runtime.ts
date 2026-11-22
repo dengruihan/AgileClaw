@@ -48,7 +48,7 @@ export async function writeOutboxPayload(
   owner: PayloadOwner,
   attachments: DurableComposerDraftAttachment[],
 ): Promise<PayloadResult<PayloadReference>> {
-  const bytes = attachments.reduce((total, attachment) => total + attachment.blob.size, 0);
+  const bytes = attachments.reduce((total, attachment) => total + (attachment.blob?.size ?? 0), 0);
   if (bytes > MAX_PAYLOAD_BYTES) {
     return { status: "failed", reason: "capacity" };
   }
@@ -128,20 +128,27 @@ export async function readOutboxPayload(
     }
     const attachments: DurableComposerDraftAttachment[] = [];
     for (const entry of value.attachments) {
+      const uploadId =
+        isRecord(entry) && typeof entry.uploadId === "string" && entry.uploadId.trim()
+          ? entry.uploadId.trim()
+          : undefined;
       if (
         !isRecord(entry) ||
-        !(entry.blob instanceof Blob) ||
+        !(uploadId || entry.blob instanceof Blob) ||
         typeof entry.mimeType !== "string" ||
         (entry.origin !== undefined && entry.origin !== "paste" && entry.origin !== "file") ||
         (entry.fileName !== undefined && typeof entry.fileName !== "string") ||
-        (entry.sizeBytes !== undefined && entry.sizeBytes !== entry.blob.size)
+        (!uploadId &&
+          entry.sizeBytes !== undefined &&
+          entry.sizeBytes !== (entry.blob as Blob).size)
       ) {
         return { status: "failed", reason: "missing" };
       }
       const selectionAnnotation = readChatSelectionAnnotation(entry.selectionAnnotation);
       attachments.push({
-        blob: entry.blob,
+        ...(entry.blob instanceof Blob ? { blob: entry.blob } : {}),
         mimeType: entry.mimeType,
+        ...(uploadId ? { uploadId } : {}),
         ...(entry.origin ? { origin: entry.origin } : {}),
         ...(selectionAnnotation ? { selectionAnnotation } : {}),
         ...(typeof entry.fileName === "string" ? { fileName: entry.fileName } : {}),
@@ -149,7 +156,8 @@ export async function readOutboxPayload(
       });
     }
     if (
-      value.bytes !== attachments.reduce((total, attachment) => total + attachment.blob.size, 0)
+      value.bytes !==
+      attachments.reduce((total, attachment) => total + (attachment.blob?.size ?? 0), 0)
     ) {
       return { status: "failed", reason: "missing" };
     }

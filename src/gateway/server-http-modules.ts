@@ -14,6 +14,9 @@ export const getEmbeddingsHttpModule = createLazyRuntimeModule(
 export const getManagedMediaAttachmentsModule = createLazyRuntimeModule(
   () => import("./managed-image-attachments.js"),
 );
+export const getChatAttachmentUploadsModule = createLazyRuntimeModule(
+  () => import("./chat-attachment-uploads.js"),
+);
 export const getArtifactDownloadsModule = createLazyRuntimeModule(
   () => import("./artifact-downloads.js"),
 );

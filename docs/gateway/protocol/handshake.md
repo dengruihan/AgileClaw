@@ -104,10 +104,10 @@ or the Control UI is disabled. It contains no credentials and grants no access.
 the decoded-size ceilings chat attachments face on `chat.send`, `sessions.send`,
 and session-creation initial turns:
 
-| Field           | Meaning                                                                                             |
-| --------------- | --------------------------------------------------------------------------------------------------- |
-| `maxBytes`      | Largest decoded size accepted for a single attachment (`agents.defaults.mediaMaxMb`, default 20 MB) |
-| `maxImageBytes` | Largest decoded size accepted for a single image: `min(maxBytes, 6 MB agent-hydration cap)`         |
+| Field           | Meaning                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------------------- |
+| `maxBytes`      | Largest decoded size accepted for a single attachment (`agents.defaults.mediaMaxMb`, default 1024 MB) |
+| `maxImageBytes` | Largest decoded size accepted for a single image: `min(maxBytes, 6 MB agent-hydration cap)`           |
 
 Validating before send:
 
@@ -115,8 +115,14 @@ Validating before send:
    `maxBytes` for everything else.
 2. Serialize the whole request and check its encoded size against
    `policy.maxPayload`. `policy.attachments` is a per-attachment ceiling, never a
-   promise the frame fits: attachments travel as base64, so a 20 MB file is about
-   26.7 MB on the wire and exceeds the default 25 MiB frame limit on its own.
+   promise the frame fits: inline attachments travel as base64, so a 20 MB file is
+   about 26.7 MB on the wire and exceeds the default 25 MiB frame limit on its own.
+   A file above what one frame can carry is not lost: upload it out of band
+   (`POST /api/chat/attachments/upload` with `action=begin|part|commit`, part
+   bodies capped at 16 MiB) and send it as
+   `{ type, mimeType, fileName, uploadId }` without `content`. The upload ID is
+   single-use, expires after six hours if unsent, and stays bound to the
+   authenticated owner plus the `sessionKey`/`agentId` it was admitted for.
 3. Treat the server as authoritative for everything else. Accepted MIME types and
    per-message handling are deliberately not advertised because they depend on
    the entrypoint, the resolved model, and payload sniffing. The gateway can

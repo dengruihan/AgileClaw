@@ -39,7 +39,7 @@ describe("app message content handoff", () => {
     });
     const sent = buildChatApiAttachments(attachments)!;
     expect(sent[0]?.fileName).toBe("Part dimensions");
-    expect(Buffer.from(sent[0]!.content, "base64").toString()).toBe(
+    expect(Buffer.from(sent[0]!.content!, "base64").toString()).toBe(
       "Selected part dimensions: 12 × 8 mm",
     );
     const container = document.createElement("div");
@@ -67,6 +67,6 @@ describe("app message content handoff", () => {
     expect(turn.text).toBe("");
     expect(attachments[0]?.fileName).toBe("Hex bolt");
     const sent = buildChatApiAttachments(attachments)!;
-    expect(JSON.parse(Buffer.from(sent[0]!.content, "base64").toString())).toEqual(resource);
+    expect(JSON.parse(Buffer.from(sent[0]!.content!, "base64").toString())).toEqual(resource);
   });
 });

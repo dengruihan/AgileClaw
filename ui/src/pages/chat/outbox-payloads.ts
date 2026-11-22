@@ -140,7 +140,8 @@ async function preparePayload(
           ...(attachment.selectionAnnotation
             ? { selectionAnnotation: attachment.selectionAnnotation }
             : {}),
-          dataUrl: await readBlobAsDataUrl(attachment.blob),
+          ...(attachment.uploadId ? { uploadId: attachment.uploadId } : {}),
+          ...(attachment.blob ? { dataUrl: await readBlobAsDataUrl(attachment.blob) } : {}),
         })),
       );
       if (!isCurrent()) {

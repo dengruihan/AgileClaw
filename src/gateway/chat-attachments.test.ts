@@ -1034,4 +1034,56 @@ describe("attachment validation", () => {
       fromSpy.mockRestore();
     }
   });
+
+  it("adopts a direct upload without decoding or re-saving its bytes", async () => {
+    const staged = {
+      id: "staged-report",
+      path: "/tmp/openclaw-test-media/inbound/staged-report.pdf",
+      size: 900,
+      contentType: "application/pdf",
+    };
+    const resolveStagedUpload = vi.fn(() => staged);
+    const parsed = await parseMessageWithAttachments(
+      "see file",
+      [{ type: "file", mimeType: "application/pdf", fileName: "big.pdf", uploadId: "upload-1" }],
+      { resolveStagedUpload },
+    );
+
+    expect(resolveStagedUpload).toHaveBeenCalledWith("upload-1");
+    expect(saveMediaBufferMock).not.toHaveBeenCalled();
+    expect(parsed.message).toContain("media://inbound/staged-report");
+    expect(parsed.offloadedRefs[0]).toMatchObject({
+      id: "staged-report",
+      mimeType: "application/pdf",
+      sizeBytes: 900,
+      label: "big.pdf",
+    });
+    await cleanupOffloadedRefs(parsed.offloadedRefs);
+  });
+
+  it("rejects a direct upload on an entrypoint without a staging owner", async () => {
+    await expect(
+      parseMessageWithAttachments("x", [
+        { type: "file", mimeType: "application/pdf", fileName: "big.pdf", uploadId: "upload-1" },
+      ]),
+    ).rejects.toThrow(/direct uploads are not supported/);
+    expect(saveMediaBufferMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps the image hydration cap for direct uploads", async () => {
+    await expect(
+      parseMessageWithAttachments(
+        "x",
+        [{ type: "image", mimeType: "image/png", fileName: "huge.png", uploadId: "upload-2" }],
+        {
+          resolveStagedUpload: () => ({
+            id: "staged-huge",
+            path: "/tmp/openclaw-test-media/inbound/staged-huge.png",
+            size: MAX_IMAGE_BYTES + 1,
+            contentType: "image/png",
+          }),
+        },
+      ),
+    ).rejects.toThrow(/image exceeds size limit/);
+  });
 });

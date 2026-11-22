@@ -49,17 +49,24 @@ export type ChatAttachment = {
   origin?: "paste" | "file";
   fileName?: string;
   sizeBytes?: number;
+  /**
+   * Committed direct upload on the Gateway. Large files never become a data URL:
+   * the browser cannot build the matching base64 string, so the send references
+   * these bytes by upload ID instead.
+   */
+  uploadId?: string;
   /** UI-local context that must remain coupled to its annotated screenshot. */
   browserAnnotation?: BrowserAnnotationAttachment;
   selectionAnnotation?: ChatSelectionAnnotation;
 };
 
 // Shared payload contract: draft and outbox storage must not import each other's runtime.
+// Direct uploads persist their reference instead of a local copy of the bytes.
 export type DurableComposerDraftAttachment = Omit<
   ChatAttachment,
   "id" | "dataUrl" | "previewUrl"
 > & {
-  blob: Blob;
+  blob?: Blob;
 };
 
 export type DurableComposerDraftScope = {

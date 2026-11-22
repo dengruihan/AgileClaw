@@ -15,6 +15,11 @@ import type { UserTurnTranscriptRecorder } from "../../sessions/user-turn-transc
 import type { SkillSnapshot } from "../../skills/types.js";
 import { resolveChatAttachmentMaxBytes } from "../chat-attachment-policy.js";
 import {
+  ChatAttachmentUploadError,
+  chatAttachmentUploadOwnerKey,
+  consumeStagedChatAttachment,
+} from "../chat-attachment-upload-store.js";
+import {
   discardPreparedInboundMedia,
   MediaOffloadError,
   type OffloadedRef,
@@ -274,13 +279,38 @@ export async function prepareChatSendAttachments(params: {
             });
             return imageSupport.value;
           };
+          const parseMaxBytes = resolveChatAttachmentMaxBytes(cfg);
+          const uploadOwnerKey = chatAttachmentUploadOwnerKey({
+            authenticatedUserProfile: client?.authenticatedUserProfile,
+            authenticatedUserId: client?.authenticatedUserId,
+          });
+          // Direct uploads stay bound to this client, session, and agent; the
+          // reference is consumed once or the send fails explicitly.
+          const stagedUploadScope = {
+            ...(uploadOwnerKey ? { ownerKey: uploadOwnerKey } : {}),
+            sessionKey,
+            ...(agentId ? { agentId } : {}),
+          };
           const parsed = await parseMessageWithAttachments(inboundMessage, normalizedAttachments, {
-            maxBytes: resolveChatAttachmentMaxBytes(cfg),
+            maxBytes: parseMaxBytes,
             log: context.logGateway,
             supportsImages: imageSupport.value ?? resolveSupportsImages,
             acceptNonImage: true,
             signal: activeRunAbort.controller.signal,
             assertCurrent: assertInputCurrent,
+            resolveStagedUpload: (uploadId) => {
+              try {
+                return consumeStagedChatAttachment(uploadId, stagedUploadScope, {
+                  maxBytes: parseMaxBytes,
+                });
+              } catch (error) {
+                // Keep the wire error readable: the class name adds nothing here.
+                if (error instanceof ChatAttachmentUploadError) {
+                  throw new Error(error.message, { cause: error });
+                }
+                throw error;
+              }
+            },
           });
           // The parser owns MIME classification. An unresolved capability means no image was seen,
           // so post-processing must not trigger catalog discovery for a non-image attachment.

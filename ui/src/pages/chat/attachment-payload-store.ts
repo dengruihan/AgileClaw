@@ -35,6 +35,19 @@ export function registerChatAttachmentPayload(params: {
   return params.attachment;
 }
 
+/**
+ * Direct uploads keep the local File for previews only. No data URL exists for
+ * them because the browser cannot build a base64 string of that size.
+ */
+export function registerStagedChatAttachmentPayload(params: {
+  attachment: ChatAttachment;
+  file: File;
+}): ChatAttachment {
+  releaseChatAttachmentPayload(params.attachment.id);
+  payloads.set(params.attachment.id, { blob: params.file });
+  return params.attachment;
+}
+
 export function getChatAttachmentDataUrl(attachment: ChatAttachment): string | null {
   return attachment.dataUrl ?? payloads.get(attachment.id)?.dataUrl ?? null;
 }
