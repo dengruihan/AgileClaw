@@ -10,6 +10,7 @@ import type {
 } from "./session-accessor.sqlite-contract.js";
 import { findSessionTranscriptHeader, isIndexedSessionEntry } from "./session-entry-codec.js";
 import { normalizeSessionContextEntryBoundaries } from "./session-entry-navigation.js";
+import type { SideConversationSnapshotProjection } from "./side-conversation-snapshot.js";
 import { createSessionTranscriptHeader } from "./transcript-header.js";
 import {
   isSessionTranscriptLeafControl,
@@ -32,7 +33,7 @@ export type ParentForkSourceTranscript = {
   preserveLeafControl: boolean;
 };
 
-const DEFAULT_PARENT_FORK_MAX_TOKENS = 100_000;
+export const DEFAULT_PARENT_FORK_MAX_TOKENS = 100_000;
 
 export function planParentForkDecision(
   parentEntry: SessionEntry,
@@ -65,7 +66,7 @@ export function planParentForkDecision(
 }
 
 export function estimateParentForkPromptTokens(
-  source: ParentForkSourceTranscript | null,
+  source: Pick<ParentForkSourceTranscript, "branchEntries"> | null,
 ): number | undefined {
   if (!source) {
     return undefined;
@@ -307,10 +308,14 @@ export function buildForkedChildTranscriptEvents(params: {
   parentSessionFile: string;
   source: ParentForkSourceTranscript;
   targetSessionId: string;
+  /** Frozen side-conversation projection; replaces the raw branch copy when set. */
+  sideConversationSnapshot?: SideConversationSnapshotProjection;
 }): TranscriptEvent[] {
+  const copiedEntries = params.sideConversationSnapshot?.events ?? params.source.branchEntries;
   const keepHistory =
+    params.sideConversationSnapshot !== undefined ||
     params.source.preserveLeafControl ||
-    params.source.branchEntries.some(
+    copiedEntries.some(
       (entry) =>
         isRecord(entry) &&
         entry.type === "message" &&
@@ -330,41 +335,42 @@ export function buildForkedChildTranscriptEvents(params: {
   }
 
   const pathEntryIds = new Set(
-    params.source.branchEntries.flatMap((entry) =>
+    copiedEntries.flatMap((entry) =>
       isRecord(entry) && typeof entry.id === "string" ? [entry.id] : [],
     ),
   );
-  const lastPathEntry = params.source.branchEntries.at(-1);
+  const lastPathEntry = copiedEntries.at(-1);
   const lastPathEntryId =
     isRecord(lastPathEntry) && typeof lastPathEntry.id === "string" ? lastPathEntry.id : null;
   let parentId = lastPathEntryId;
-  const labelEntries = params.source.labelsToWrite.map(({ targetId, label, timestamp }) => {
-    const entry = {
-      type: "label",
-      id: generateEntryId(pathEntryIds),
-      parentId,
-      timestamp,
-      targetId,
-      label,
-    };
-    parentId = entry.id;
-    return entry;
-  });
-  const leafEntry = params.source.preserveLeafControl
-    ? {
-        type: "leaf",
-        id: generateEntryId(pathEntryIds),
-        parentId: labelEntries.at(-1)?.id ?? lastPathEntryId,
-        timestamp: new Date().toISOString(),
-        targetId: params.source.leafId,
-        appendParentId: params.source.appendParentId,
-        ...(params.source.appendMode ? { appendMode: params.source.appendMode } : {}),
-      }
-    : null;
-  return [
-    header,
-    ...params.source.branchEntries,
-    ...labelEntries,
-    ...(leafEntry ? [leafEntry] : []),
-  ];
+  // A frozen snapshot is byte-stable and model-only: labels target rows the
+  // snapshot may have dropped, and generated ids would break reproduction.
+  const labelEntries =
+    params.sideConversationSnapshot === undefined
+      ? params.source.labelsToWrite.map(({ targetId, label, timestamp }) => {
+          const entry = {
+            type: "label",
+            id: generateEntryId(pathEntryIds),
+            parentId,
+            timestamp,
+            targetId,
+            label,
+          };
+          parentId = entry.id;
+          return entry;
+        })
+      : [];
+  const leafEntry =
+    params.sideConversationSnapshot === undefined && params.source.preserveLeafControl
+      ? {
+          type: "leaf",
+          id: generateEntryId(pathEntryIds),
+          parentId: labelEntries.at(-1)?.id ?? lastPathEntryId,
+          timestamp: new Date().toISOString(),
+          targetId: params.source.leafId,
+          appendParentId: params.source.appendParentId,
+          ...(params.source.appendMode ? { appendMode: params.source.appendMode } : {}),
+        }
+      : null;
+  return [header, ...copiedEntries, ...labelEntries, ...(leafEntry ? [leafEntry] : [])];
 }

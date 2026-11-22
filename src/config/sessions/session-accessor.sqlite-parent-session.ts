@@ -26,6 +26,7 @@ import {
 import { prepareSessionIdentityPublication } from "./session-accessor.sqlite-identity.js";
 import {
   buildForkedChildTranscriptEvents,
+  DEFAULT_PARENT_FORK_MAX_TOKENS,
   estimateParentForkPromptTokens,
   planParentForkDecision,
   resolveParentForkSourceTranscript,
@@ -44,16 +45,33 @@ import {
 import { appendTranscriptEventsInTransaction } from "./session-accessor.sqlite-transcript-store.js";
 import { preserveSqliteSameKeySessionRolloverLineage } from "./session-entry-lineage.js";
 import { prepareSessionTranscriptHydration } from "./session-transcript-hydration.js";
+import {
+  projectSideConversationSnapshot,
+  type SideConversationForkTranscriptParams,
+  type SideConversationForkTranscriptResult,
+} from "./side-conversation-snapshot.js";
 import { normalizeStoreSessionKey } from "./store-entry.js";
 import type { InternalSessionEntry, SessionEntry } from "./types.js";
 import { mergeSessionEntry } from "./types.js";
 
 // Parent-session fork owner: decision, transcript copy, and child entry commit.
 
-/** Prepare one source snapshot; the creation owner commits its copy with the child entry. */
-export async function prepareSessionForkTranscript(params: ForkSessionFromParentTranscriptParams) {
+type ParentForkSnapshotRead =
+  | { status: "missing-parent" }
+  | { status: "failed" }
+  | {
+      status: "prepared";
+      parentSessionFile: string;
+      sessionId: string;
+      source: ParentForkSourceTranscript;
+    };
+
+/** Read the parent's complete transcript once; every fork flavor copies this snapshot. */
+async function readParentForkSnapshot(
+  params: ForkSessionFromParentTranscriptParams,
+): Promise<ParentForkSnapshotRead> {
   if (!params.parentEntry.sessionId) {
-    return { status: "missing-parent" as const };
+    return { status: "missing-parent" };
   }
   params.commitGuard?.();
   const resolved = await prepareSqliteScope({
@@ -83,24 +101,98 @@ export async function prepareSessionForkTranscript(params: ForkSessionFromParent
   }
   const source = resolveParentForkSourceTranscript(snapshot.snapshot.events, params.forkFrom);
   if (!source) {
-    return { status: "failed" as const };
+    return { status: "failed" };
   }
-  const decision = resolveParentForkLimitDecision(params, source);
+  return {
+    status: "prepared",
+    parentSessionFile: formatLegacySqliteSessionMarkerForScope({ ...resolved, ...sourceScope }),
+    sessionId: params.targetSessionId ?? randomUUID(),
+    source,
+  };
+}
+
+/** Prepare one source snapshot; the creation owner commits its copy with the child entry. */
+export async function prepareSessionForkTranscript(params: ForkSessionFromParentTranscriptParams) {
+  const prepared = await readParentForkSnapshot(params);
+  if (prepared.status !== "prepared") {
+    return prepared;
+  }
+  const decision = resolveParentForkLimitDecision(params, prepared.source);
   if (decision) {
     return { status: "too-large" as const, decision };
   }
-  const sessionId = params.targetSessionId ?? randomUUID();
   return {
     status: "prepared" as const,
     transcript: {
-      sessionId,
+      sessionId: prepared.sessionId,
       sessionFile: params.sessionKey,
     },
     events: buildForkedChildTranscriptEvents({
-      parentSessionFile: formatLegacySqliteSessionMarkerForScope({ ...resolved, ...sourceScope }),
-      source,
-      targetSessionId: sessionId,
+      parentSessionFile: prepared.parentSessionFile,
+      source: prepared.source,
+      targetSessionId: prepared.sessionId,
     }),
+  };
+}
+
+/**
+ * Prepare the frozen transcript for a side conversation.
+ *
+ * The projection runs over the same consistency snapshot as a parent fork, so the
+ * child never observes a later parent append. The existing 100k safety cap applies
+ * to the projected snapshot; exceeding it is an explicit error, never a truncation.
+ */
+export async function prepareSideConversationForkTranscript(
+  params: SideConversationForkTranscriptParams,
+): Promise<SideConversationForkTranscriptResult> {
+  const prepared = await readParentForkSnapshot(params);
+  if (prepared.status !== "prepared") {
+    return { status: prepared.status };
+  }
+  const sourceSessionId = params.parentEntry.sessionId;
+  if (!sourceSessionId) {
+    return { status: "missing-parent" };
+  }
+  const projection = projectSideConversationSnapshot({
+    branchEntries: prepared.source.branchEntries,
+    sourceSessionKey: params.parentSessionKey,
+    sourceSessionId,
+    sourceLeafEntryId: prepared.source.leafId,
+    ...(params.projectionVersion !== undefined
+      ? { projectionVersion: params.projectionVersion }
+      : {}),
+  });
+  const maxTokens =
+    typeof params.maxTokens === "number" &&
+    Number.isFinite(params.maxTokens) &&
+    params.maxTokens > 0
+      ? Math.floor(params.maxTokens)
+      : DEFAULT_PARENT_FORK_MAX_TOKENS;
+  const snapshotTokens = estimateParentForkPromptTokens({ branchEntries: projection.events }) ?? 0;
+  if (snapshotTokens > maxTokens) {
+    return {
+      status: "snapshot-too-large",
+      maxTokens,
+      snapshotTokens,
+      message:
+        `Side conversation snapshot is too large (${snapshotTokens}/${maxTokens} tokens). ` +
+        "Start the side conversation from a later point in the parent session or raise the snapshot limit; " +
+        "the snapshot is never truncated silently.",
+    };
+  }
+  return {
+    status: "prepared",
+    transcript: {
+      sessionId: prepared.sessionId,
+      sessionFile: params.sessionKey,
+    },
+    events: buildForkedChildTranscriptEvents({
+      parentSessionFile: prepared.parentSessionFile,
+      source: prepared.source,
+      targetSessionId: prepared.sessionId,
+      sideConversationSnapshot: projection,
+    }),
+    snapshot: projection.facts,
   };
 }
 
