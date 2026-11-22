@@ -1,0 +1,383 @@
+/**
+ * Manual merge of one side-conversation branch into its parent checkout.
+ *
+ * The parent checkout stays untouched unless every precheck passes: the child
+ * branch must be committed, the parent checkout clean and on a branch, and
+ * `git merge-tree` must find no conflict. Conflicts are detected before any
+ * working-tree write; the real merge then runs against the exact commits that
+ * were inspected, and a failed merge is aborted back to the inspected HEAD.
+ */
+import { existsSync } from "node:fs";
+import { err, ok, type Result } from "@openclaw/normalization-core/result";
+import { runGit } from "./git.js";
+
+export type SideConversationMergeFailureCode =
+  | "parent-dirty"
+  | "child-dirty"
+  | "parent-detached"
+  | "merge-in-progress"
+  | "child-branch-missing"
+  | "conflict"
+  | "source-changed"
+  | "unsupported-git"
+  | "merge-failed";
+
+export type SideConversationMergeFailure = {
+  code: SideConversationMergeFailureCode;
+  message: string;
+  /** Bounded list of conflicting or dirty paths for the caller to display. */
+  paths?: string[];
+};
+
+export type SideConversationMergeOutcome = {
+  /** Commit now reachable from the parent branch (the merge commit or child HEAD). */
+  commit: string;
+  alreadyMerged: boolean;
+};
+
+const MAX_REPORTED_PATHS = 10;
+
+function failure(
+  code: SideConversationMergeFailureCode,
+  message: string,
+  paths?: string[],
+): SideConversationMergeFailure {
+  return { code, message, ...(paths?.length ? { paths: paths.slice(0, MAX_REPORTED_PATHS) } : {}) };
+}
+
+function boundedPaths(lines: readonly string[]): string[] {
+  return lines
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, MAX_REPORTED_PATHS);
+}
+
+async function dirtyPaths(
+  checkoutPath: string,
+): Promise<Result<string[], SideConversationMergeFailure>> {
+  const status = await runGit(checkoutPath, [
+    "status",
+    "--porcelain=v1",
+    "--untracked-files=normal",
+  ]);
+  if (status.termination !== "exit" || status.code !== 0) {
+    return err(
+      failure("merge-failed", `could not inspect ${checkoutPath}: ${status.stderr.trim()}`),
+    );
+  }
+  return ok(boundedPaths(status.stdout.split("\n")));
+}
+
+/** A checkout caught mid-merge cannot accept another merge or be aborted by us. */
+async function mergeInProgress(checkoutPath: string): Promise<boolean> {
+  const mergeHead = await runGit(checkoutPath, ["rev-parse", "--verify", "--quiet", "MERGE_HEAD"]);
+  return mergeHead.termination === "exit" && mergeHead.code === 0;
+}
+
+async function commitAt(
+  checkoutPath: string,
+  revision: string,
+  missing: SideConversationMergeFailureCode,
+  message: string,
+): Promise<Result<string, SideConversationMergeFailure>> {
+  const resolved = await runGit(checkoutPath, [
+    "rev-parse",
+    "--verify",
+    "--end-of-options",
+    `${revision}^{commit}`,
+  ]);
+  if (resolved.termination !== "exit" || resolved.code !== 0) {
+    return err(failure(missing, message));
+  }
+  return ok(resolved.stdout.trim());
+}
+
+async function isAncestor(
+  checkoutPath: string,
+  ancestor: string,
+  descendant: string,
+): Promise<Result<boolean, SideConversationMergeFailure>> {
+  const result = await runGit(checkoutPath, ["merge-base", "--is-ancestor", ancestor, descendant]);
+  if (result.termination !== "exit") {
+    return err(failure("merge-failed", `git merge-base failed: ${result.stderr.trim()}`));
+  }
+  if (result.code === 0) {
+    return ok(true);
+  }
+  if (result.code === 1) {
+    return ok(false);
+  }
+  return err(failure("merge-failed", `git merge-base failed: ${result.stderr.trim()}`));
+}
+
+type MergeTreeInspection =
+  | { status: "clean" }
+  | { status: "conflict"; paths: string[] }
+  | { status: "unsupported" };
+
+/** Parse conflicted paths from `merge-tree --write-tree` stage rows. */
+function parseMergeTreeConflicts(stdout: string): string[] {
+  const paths = new Set<string>();
+  for (const line of stdout.split("\n")) {
+    const match = /^[0-7]{6} [0-9a-f]+ [123]\t(.+)$/u.exec(line);
+    if (match?.[1]) {
+      paths.add(match[1]);
+    }
+  }
+  return [...paths];
+}
+
+async function inspectMergeTree(
+  parentCheckoutPath: string,
+  parentHead: string,
+  childHead: string,
+): Promise<Result<MergeTreeInspection, SideConversationMergeFailure>> {
+  const result = await runGit(parentCheckoutPath, [
+    "merge-tree",
+    "--write-tree",
+    "--no-messages",
+    parentHead,
+    childHead,
+  ]);
+  if (result.termination !== "exit") {
+    return err(failure("merge-failed", `git merge-tree failed: ${result.stderr.trim()}`));
+  }
+  if (result.code === 0) {
+    return ok({ status: "clean" });
+  }
+  if (result.code === 1) {
+    return ok({ status: "conflict", paths: parseMergeTreeConflicts(result.stdout) });
+  }
+  // Git older than 2.38 has no `--write-tree`; refuse instead of merging blind.
+  const stderr = result.stderr.trim();
+  if (/unknown option|usage:/iu.test(stderr)) {
+    return ok({ status: "unsupported" });
+  }
+  return err(
+    failure(
+      "merge-failed",
+      `git merge-tree could not inspect the merge: ${stderr || "unknown Git error"}`,
+    ),
+  );
+}
+
+export async function mergeSideConversationBranch(params: {
+  parentCheckoutPath: string;
+  childBranch: string;
+  /** Present when the child checkout still exists; a missing checkout only skips its dirty check. */
+  childCheckoutPath?: string;
+  message: string;
+  signal?: AbortSignal;
+}): Promise<Result<SideConversationMergeOutcome, SideConversationMergeFailure>> {
+  const signal = params.signal;
+  const gitOptions = { signal };
+  const parentCheckoutPath = params.parentCheckoutPath;
+
+  signal?.throwIfAborted();
+  if (!existsSync(parentCheckoutPath)) {
+    return err(
+      failure("merge-failed", `parent checkout ${parentCheckoutPath} is missing; restore it first`),
+    );
+  }
+  const parentHead = await commitAt(
+    parentCheckoutPath,
+    "HEAD",
+    "merge-failed",
+    "parent checkout has no committed HEAD",
+  );
+  if (!parentHead.ok) {
+    return parentHead;
+  }
+  const parentBranch = await runGit(parentCheckoutPath, [
+    "symbolic-ref",
+    "--quiet",
+    "--short",
+    "HEAD",
+  ]);
+  if (parentBranch.termination !== "exit" || parentBranch.code !== 0) {
+    return err(
+      failure(
+        "parent-detached",
+        "parent checkout is on a detached HEAD; check out a branch before merging this side conversation",
+      ),
+    );
+  }
+  if (await mergeInProgress(parentCheckoutPath)) {
+    return err(
+      failure(
+        "merge-in-progress",
+        "parent checkout already has a merge in progress; finish or abort it before merging",
+      ),
+    );
+  }
+  const childHead = await commitAt(
+    parentCheckoutPath,
+    params.childBranch,
+    "child-branch-missing",
+    `side conversation branch ${params.childBranch} is missing; the branch may have been deleted`,
+  );
+  if (!childHead.ok) {
+    return childHead;
+  }
+  const parentDirty = await dirtyPaths(parentCheckoutPath);
+  if (!parentDirty.ok) {
+    return parentDirty;
+  }
+  if (parentDirty.value.length > 0) {
+    return err(
+      failure(
+        "parent-dirty",
+        "parent checkout has uncommitted changes; commit or stash them before merging this side conversation",
+        parentDirty.value,
+      ),
+    );
+  }
+  const childCheckoutPath = params.childCheckoutPath;
+  if (childCheckoutPath && existsSync(childCheckoutPath)) {
+    if (await mergeInProgress(childCheckoutPath)) {
+      return err(
+        failure(
+          "merge-in-progress",
+          "side conversation checkout has a merge in progress; finish or abort it before merging",
+        ),
+      );
+    }
+    const childDirty = await dirtyPaths(childCheckoutPath);
+    if (!childDirty.ok) {
+      return childDirty;
+    }
+    if (childDirty.value.length > 0) {
+      return err(
+        failure(
+          "child-dirty",
+          "side conversation has uncommitted changes; commit them before merging",
+          childDirty.value,
+        ),
+      );
+    }
+  }
+
+  const already = await isAncestor(parentCheckoutPath, childHead.value, parentHead.value);
+  if (!already.ok) {
+    return already;
+  }
+  if (already.value) {
+    return ok({ commit: childHead.value, alreadyMerged: true });
+  }
+
+  const inspected = await inspectMergeTree(parentCheckoutPath, parentHead.value, childHead.value);
+  if (!inspected.ok) {
+    return inspected;
+  }
+  if (inspected.value.status === "unsupported") {
+    return err(
+      failure(
+        "unsupported-git",
+        "this Git version cannot preflight merges without touching the working tree; upgrade to Git 2.38 or newer",
+      ),
+    );
+  }
+  if (inspected.value.status === "conflict") {
+    return err(
+      failure(
+        "conflict",
+        "side conversation conflicts with the parent checkout; nothing was merged",
+        inspected.value.paths,
+      ),
+    );
+  }
+
+  // The inspected commits must still be current; a moved branch needs a new preflight.
+  const currentParent = await runGit(
+    parentCheckoutPath,
+    ["rev-parse", "--verify", "HEAD^{commit}"],
+    gitOptions,
+  );
+  const currentChild = await runGit(
+    parentCheckoutPath,
+    ["rev-parse", "--verify", "--end-of-options", `${params.childBranch}^{commit}`],
+    gitOptions,
+  );
+  if (
+    currentParent.termination !== "exit" ||
+    currentParent.code !== 0 ||
+    currentParent.stdout.trim() !== parentHead.value ||
+    currentChild.termination !== "exit" ||
+    currentChild.code !== 0 ||
+    currentChild.stdout.trim() !== childHead.value
+  ) {
+    return err(
+      failure(
+        "source-changed",
+        "side conversation or parent branch moved during the merge preflight; retry the merge",
+      ),
+    );
+  }
+
+  const merged = await runGit(
+    parentCheckoutPath,
+    ["merge", "--no-ff", "-m", params.message, childHead.value],
+    gitOptions,
+  );
+  if (merged.termination !== "exit" || merged.code !== 0) {
+    const mergeHeadPresent = await mergeInProgress(parentCheckoutPath);
+    let aborted = true;
+    if (mergeHeadPresent) {
+      const abort = await runGit(parentCheckoutPath, ["merge", "--abort"], gitOptions);
+      aborted = abort.termination === "exit" && abort.code === 0;
+    }
+    const restored = aborted
+      ? await commitAt(parentCheckoutPath, "HEAD", "merge-failed", "")
+      : undefined;
+    const detail = merged.stderr.trim() || "unknown Git error";
+    if (!aborted || !restored?.ok) {
+      return err(
+        failure(
+          "merge-failed",
+          `merge failed and the parent checkout could not be restored automatically: ${detail}. Inspect the parent checkout before retrying.`,
+        ),
+      );
+    }
+    return err(
+      failure("merge-failed", `merge failed; the parent checkout was left unchanged: ${detail}`),
+    );
+  }
+
+  const head = await commitAt(
+    parentCheckoutPath,
+    "HEAD",
+    "merge-failed",
+    "merge reported success without a commit",
+  );
+  if (!head.ok) {
+    return head;
+  }
+  const parentReachable = await isAncestor(parentCheckoutPath, parentHead.value, head.value);
+  const childReachable = await isAncestor(parentCheckoutPath, childHead.value, head.value);
+  if (
+    !parentReachable.ok ||
+    !childReachable.ok ||
+    !parentReachable.value ||
+    !childReachable.value
+  ) {
+    return err(
+      failure(
+        "merge-failed",
+        "merge commit does not contain both branches; inspect the parent checkout before retrying",
+      ),
+    );
+  }
+  return ok({ commit: head.value, alreadyMerged: false });
+}
+
+/** Short, display-safe subject line for the merge commit created by this owner. */
+export function buildSideConversationMergeMessage(params: {
+  label?: string;
+  sessionKey: string;
+}): string {
+  const label = params.label?.trim();
+  return `Merge side conversation ${label && label.length > 0 ? label : params.sessionKey}`.slice(
+    0,
+    200,
+  );
+}

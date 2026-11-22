@@ -7,7 +7,11 @@ import {
   SideConversationsCloseParamsSchema,
   SideConversationsCreateParamsSchema,
   SideConversationsCreateResultSchema,
+  SideConversationsDeleteParamsSchema,
+  SideConversationsDeleteResultSchema,
   SideConversationsListParamsSchema,
+  SideConversationsMergeParamsSchema,
+  SideConversationsMergeResultSchema,
   SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH,
   SIDE_CONVERSATION_MAX_LISTED,
   SIDE_CONVERSATION_MAX_PER_PARENT,
@@ -26,6 +30,13 @@ const summary = {
   state: "open",
   createdAt: 1,
   updatedAt: 1,
+  isolation: { filesystem: "worktree", externalState: "shared" },
+  worktree: {
+    id: "wt-1",
+    branch: "openclaw/side-1",
+    path: "/tmp/worktrees/wt-1",
+    baseRef: "a".repeat(40),
+  },
 };
 
 describe("side conversation protocol schemas", () => {
@@ -154,6 +165,87 @@ describe("side conversation protocol schemas", () => {
         cleanupPending: [{ intentId: "intent-1" }],
       }),
     ).toBe(false);
+  });
+
+  it("reports worktree isolation and skip reasons without claiming external isolation", () => {
+    expect(
+      Value.Check(SideConversationsCreateResultSchema, {
+        ok: true,
+        created: true,
+        conversation: {
+          ...summary,
+          isolation: { filesystem: "shared", externalState: "shared" },
+          worktree: undefined,
+          worktreeSkipped: "not-git",
+        },
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SideConversationsCreateResultSchema, {
+        ok: true,
+        created: true,
+        conversation: { ...summary, worktreeSkipped: "pretend-isolated" },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SideConversationsCreateResultSchema, {
+        ok: true,
+        created: true,
+        conversation: {
+          ...summary,
+          isolation: { filesystem: "worktree", externalState: "isolated" },
+        },
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SideConversationsCreateResultSchema, {
+        ok: true,
+        created: true,
+        conversation: { ...summary, isolation: undefined },
+      }),
+    ).toBe(false);
+  });
+
+  it("bounds merge, abandon, and explicit delete inputs and results", () => {
+    for (const params of [
+      { parentSessionKey, sessionKey: childSessionKey },
+      { parentSessionKey, sessionKey: childSessionKey, agentId: "main" },
+    ]) {
+      expect(Value.Check(SideConversationsMergeParamsSchema, params)).toBe(true);
+      expect(Value.Check(SideConversationsDeleteParamsSchema, params)).toBe(true);
+    }
+    expect(Value.Check(SideConversationsMergeParamsSchema, { parentSessionKey })).toBe(false);
+    expect(
+      Value.Check(SideConversationsDeleteParamsSchema, {
+        parentSessionKey,
+        sessionKey: childSessionKey,
+        force: true,
+      }),
+    ).toBe(false);
+    expect(
+      Value.Check(SideConversationsMergeResultSchema, {
+        ok: true,
+        conversation: { ...summary, state: "merged" },
+        mergeCommit: "b".repeat(40),
+        alreadyMerged: false,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SideConversationsMergeResultSchema, {
+        ok: true,
+        conversation: { ...summary, state: "merged" },
+        alreadyMerged: true,
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SideConversationsDeleteResultSchema, {
+        ok: true,
+        sessionKey: childSessionKey,
+        deleted: true,
+        worktreePreserved: { branch: "openclaw/side-1", path: "/tmp/wt-1", reason: "busy" },
+        cleanupPending: [{ key: childSessionKey, code: "CHILD_ACTIVE", message: "active" }],
+      }),
+    ).toBe(true);
   });
 
   it("lists hidden side rows only on request", () => {

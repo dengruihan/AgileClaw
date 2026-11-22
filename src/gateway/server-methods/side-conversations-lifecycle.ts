@@ -18,28 +18,24 @@ import {
   type SideConversationState,
   type SideConversationSummary,
 } from "../../../packages/gateway-protocol/src/index.js";
-import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
+import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
 import {
   buildSideConversationSessionKey,
   finalizeSideConversationIntent,
   listSideConversationRegistrations,
   listSideConversationCleanupPending,
   readSideConversationChildEntry,
-  recordSideConversationState,
   reserveSideConversationIntent,
 } from "../../config/sessions/side-conversation-registry.js";
 import type { SideConversationSnapshotFacts } from "../../config/sessions/side-conversation-snapshot.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
-import { createSubsystemLogger } from "../../logging/subsystem.js";
-import { isIncognitoSessionKey } from "../../routing/session-key.js";
 import { resolveFrozenParentSessionSelection } from "../session-create-model-selection.js";
 import { createGatewaySession } from "../session-create-service.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
-import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
 import { isSessionVisibilityAllowed } from "../session-sharing-policy.js";
-import { resolveGatewaySessionStoreTargetInWorker } from "../session-utils-store-worker.js";
+import { prepareSideConversationWorktreeCreation } from "../session-worktree-preparation.side-conversation.js";
 import { prepareSessionLifecycleDrain } from "./sessions-lifecycle-drain.js";
 import {
   clearIntentReservation,
@@ -51,78 +47,18 @@ import {
   resolveSideConversationState,
   type SideConversationResult,
 } from "./side-conversations-replay.js";
+import {
+  SideConversationBusyError,
+  busyErrorShape,
+  changedErrorShape,
+  commitSideConversationState,
+  mirrorSideConversationState,
+  resolveSideConversationChildTarget,
+  resolveSideConversationParent,
+  sideConversationLog as log,
+  summarizeSideConversation,
+} from "./side-conversations-target.js";
 import type { GatewayClient, GatewayRequestContext } from "./types.js";
-
-const log = createSubsystemLogger("gateway/side-conversations");
-
-/** The child acquired authoritative work while the close was committing. */
-class SideConversationCloseBusyError extends Error {}
-
-/** The captured child incarnation/marker moved before the close commit. */
-class SideConversationCloseChangedError extends Error {}
-
-type ParentTarget = {
-  canonicalKey: string;
-  entry: InternalSessionEntry;
-  storePath: string;
-  agentId: string;
-  defaultAgentId?: string;
-};
-
-/** Resolve one durable parent row and its private registry owner. */
-export async function resolveSideConversationParent(params: {
-  cfg: OpenClawConfig;
-  parentSessionKey: string;
-  agentId?: string;
-  assertCurrent?: () => void;
-}): Promise<SideConversationResult<ParentTarget>> {
-  const requested = resolveRequestedSessionAgentId(
-    params.cfg,
-    params.parentSessionKey,
-    params.agentId,
-  );
-  if (!requested.ok) {
-    return requested;
-  }
-  const target = await resolveGatewaySessionStoreTargetInWorker({
-    cfg: params.cfg,
-    key: params.parentSessionKey,
-    agentId: requested.agentId,
-    ...(params.assertCurrent ? { assertActive: params.assertCurrent } : {}),
-  });
-  const entry = loadSessionEntry({
-    agentId: target.agentId,
-    sessionKey: target.canonicalKey,
-    storePath: target.storePath,
-  });
-  if (!entry?.sessionId) {
-    return {
-      ok: false,
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        `unknown parent session: ${params.parentSessionKey}`,
-      ),
-    };
-  }
-  if (entry.incognito === true || isIncognitoSessionKey(target.canonicalKey)) {
-    return {
-      ok: false,
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        "side conversations require a durable parent session",
-      ),
-    };
-  }
-  return {
-    ok: true,
-    value: {
-      canonicalKey: target.canonicalKey,
-      entry,
-      storePath: target.storePath,
-      agentId: target.agentId,
-    },
-  };
-}
 
 export async function createPersistentSideConversation(params: {
   cfg: OpenClawConfig;
@@ -314,6 +250,19 @@ export async function createPersistentSideConversation(params: {
     ...(defaultVisibility ? { defaultVisibility } : {}),
     parentSessionKey: target.canonicalKey,
     fork: true,
+    // Every side conversation starts with its own checkout. `deferWorktree` is
+    // intentionally false: the worktree is materialized here, before the first
+    // turn, so no run ever starts in the parent's checkout.
+    prepareLifecycle: async (lifecycleTarget) =>
+      await prepareSideConversationWorktreeCreation({
+        cfg: params.cfg,
+        target: lifecycleTarget,
+        parentSessionKey: target.canonicalKey,
+        parentEntry: target.entry,
+        agentId: target.agentId,
+        ...(params.label ? { label: params.label } : {}),
+        commitGuard: params.assertCurrent,
+      }),
     activeParentFork: {
       requesterSessionKey: target.canonicalKey,
       assertCurrent: params.assertCurrent,
@@ -438,6 +387,7 @@ export async function createPersistentSideConversation(params: {
         sessionKey: childKey,
         intentId: params.intentId,
         entry: committed ?? (created.entry as InternalSessionEntry),
+        parentEntry: target.entry,
         registration,
       }),
     },
@@ -503,6 +453,7 @@ export async function listPersistentSideConversations(params: {
         sessionKey: registration.sessionKey,
         intentId,
         entry: child,
+        parentEntry: target.entry,
         registration,
       }),
     );
@@ -528,56 +479,29 @@ async function transitionSideConversation(params: {
   nextState: "open" | "closed";
   assertCurrent: () => void;
 }): Promise<SideConversationResult<SideConversationSummary>> {
-  const parent = await resolveSideConversationParent({
+  const resolved = await resolveSideConversationChildTarget({
     cfg: params.cfg,
-    parentSessionKey: params.parentSessionKey,
     ...(params.agentId ? { agentId: params.agentId } : {}),
+    parentSessionKey: params.parentSessionKey,
+    sessionKey: params.sessionKey,
     assertCurrent: params.assertCurrent,
   });
-  if (!parent.ok) {
-    return parent;
+  if (!resolved.ok) {
+    return resolved;
   }
-  const target = parent.value;
+  const { target, registration, child, marker } = resolved.value;
   const sessionKey = params.sessionKey.trim();
-  const registration = findRegistrationBySessionKey(target.entry, sessionKey)?.[1];
-  const child = readSideConversationChildEntry({
-    agentId: target.agentId,
-    storePath: target.storePath,
-    sessionKey,
-  });
-  const marker = child?.sideConversation;
-  if (
-    !child?.sessionId ||
-    !marker ||
-    marker.parentSessionKey !== target.canonicalKey ||
-    (registration && registration.sessionKey !== sessionKey)
-  ) {
-    return {
-      ok: false,
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        `unknown side conversation under ${target.canonicalKey}: ${sessionKey}`,
-      ),
-    };
-  }
   const state = marker.state;
   if (state === params.nextState) {
     return {
       ok: true,
-      value: projectSideConversationSummary({
+      value: summarizeSideConversation({
         cfg: params.cfg,
-        agentId: target.agentId,
-        parentSessionKey: target.canonicalKey,
-        sessionKey,
-        intentId: marker.intentId,
         entry: child,
-        registration: registration ?? {
-          sessionKey,
-          ordinal: marker.ordinal,
-          state,
-          createdAt: marker.createdAt,
-          updatedAt: marker.updatedAt,
-        },
+        intentId: marker.intentId,
+        ...(registration ? { registration } : {}),
+        sessionKey,
+        target,
       }),
     };
   }
@@ -631,102 +555,53 @@ async function transitionSideConversation(params: {
   const now = Date.now();
   let patched: InternalSessionEntry | null;
   try {
-    patched = await patchSessionEntryCore(
-      { agentId: target.agentId, sessionKey, storePath: target.storePath },
-      (current: InternalSessionEntry) => {
-        const currentMarker = current.sideConversation;
-        if (
-          current.sessionId !== child.sessionId ||
-          !currentMarker ||
-          currentMarker.parentSessionKey !== target.canonicalKey ||
-          currentMarker.intentId !== marker.intentId ||
-          currentMarker.state !== state
-        ) {
-          throw new SideConversationCloseChangedError();
-        }
-        return {
-          ...current,
-          sideConversation: {
-            ...currentMarker,
-            state: params.nextState,
-            updatedAt: now,
-            ...(params.nextState === "closed" ? { closedAt: now } : { closedAt: undefined }),
-          },
-        };
-      },
-      {
-        replaceEntry: true,
-        skipMaintenance: true,
-        ...(drain
-          ? {
-              // Caller authority and the drain's canonical work facts are
-              // checked synchronously inside the commit transaction, not after.
-              assertCommitAllowed: () => {
-                params.assertCurrent();
-                if (drain!.hasAuthoritativeWork()) {
-                  throw new SideConversationCloseBusyError();
-                }
-              },
-            }
-          : {}),
-      },
-    );
+    patched = await commitSideConversationState({
+      agentId: target.agentId,
+      child,
+      marker,
+      nextState: params.nextState,
+      now,
+      sessionKey,
+      storePath: target.storePath,
+      ...(drain
+        ? {
+            // Caller authority and the drain's canonical work facts are
+            // checked synchronously inside the commit transaction, not after.
+            assertCommitAllowed: () => {
+              params.assertCurrent();
+              if (drain!.hasAuthoritativeWork()) {
+                throw new SideConversationBusyError();
+              }
+            },
+          }
+        : {}),
+    });
   } catch (error) {
-    if (error instanceof SideConversationCloseBusyError) {
-      return {
-        ok: false,
-        error: errorShape(
-          ErrorCodes.UNAVAILABLE,
-          `Side conversation ${sessionKey} is still active; retry the close.`,
-          { retryable: true },
-        ),
-      };
-    }
-    if (error instanceof SideConversationCloseChangedError) {
-      return {
-        ok: false,
-        error: errorShape(
-          ErrorCodes.INVALID_REQUEST,
-          `Side conversation ${sessionKey} changed before the update. Retry.`,
-        ),
-      };
+    if (error instanceof SideConversationBusyError) {
+      return { ok: false, error: busyErrorShape(sessionKey, "close") };
     }
     throw error;
   } finally {
     drain?.release();
   }
   if (!patched) {
-    return {
-      ok: false,
-      error: errorShape(
-        ErrorCodes.INVALID_REQUEST,
-        `Side conversation ${sessionKey} changed before the update. Retry.`,
-      ),
-    };
+    return { ok: false, error: changedErrorShape(sessionKey) };
   }
-  try {
-    await recordSideConversationState({
-      agentId: target.agentId,
-      cfg: params.cfg,
-      intentId: marker.intentId,
-      now,
-      parentSessionKey: target.canonicalKey,
-      state: params.nextState,
-    });
-  } catch (error) {
-    log.warn(
-      `side conversation registry mirror failed for ${sessionKey}: ${formatErrorMessage(error)}`,
-    );
-  }
+  await mirrorSideConversationState({
+    agentId: target.agentId,
+    cfg: params.cfg,
+    intentId: marker.intentId,
+    now,
+    parentSessionKey: target.canonicalKey,
+    sessionKey,
+    state: params.nextState,
+  });
   return {
     ok: true,
-    value: projectSideConversationSummary({
+    value: summarizeSideConversation({
       cfg: params.cfg,
-      agentId: target.agentId,
-      parentSessionKey: target.canonicalKey,
-      sessionKey,
-      intentId: marker.intentId,
       entry: patched,
+      intentId: marker.intentId,
       registration: registration ?? {
         sessionKey,
         ordinal: marker.ordinal,
@@ -734,6 +609,8 @@ async function transitionSideConversation(params: {
         createdAt: marker.createdAt,
         updatedAt: now,
       },
+      sessionKey,
+      target,
     }),
   };
 }

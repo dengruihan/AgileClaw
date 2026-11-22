@@ -36,6 +36,7 @@ import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
 import { createSubsystemLogger } from "../../logging/subsystem.js";
+import { resolveSideConversationWorktreeState } from "../../sessions/side-conversation-worktree.js";
 
 export type SideConversationResult<T> = { ok: true; value: T } | { ok: false; error: ErrorShape };
 
@@ -61,9 +62,16 @@ export function projectSideConversationSummary(params: {
   sessionKey: string;
   intentId: string;
   entry: InternalSessionEntry | undefined;
+  parentEntry: InternalSessionEntry | undefined;
   registration: SideConversationRegistryEntry;
 }): SideConversationSummary {
   const marker = params.entry?.sideConversation;
+  const worktreeState = resolveSideConversationWorktreeState({
+    cfg: params.cfg,
+    agentId: params.agentId,
+    entry: params.entry,
+    parentEntry: params.parentEntry,
+  });
   const selected = params.entry
     ? resolveSessionModelRef(params.cfg, params.entry, params.agentId)
     : undefined;
@@ -83,6 +91,13 @@ export function projectSideConversationSummary(params: {
     ...(closedAt !== undefined ? { closedAt } : {}),
     ...(title ? { title } : {}),
     ...(selected?.model ? { modelProvider: selected.provider, model: selected.model } : {}),
+    isolation: {
+      filesystem: worktreeState.kind === "worktree" ? "worktree" : "shared",
+      externalState: "shared",
+    },
+    ...(worktreeState.kind === "worktree"
+      ? { worktree: worktreeState.facts }
+      : { worktreeSkipped: worktreeState.reason }),
     ...(snapshot
       ? {
           snapshot: {
@@ -317,6 +332,7 @@ export async function reconcileCommittedSideConversation(params: {
         sessionKey: params.sessionKey,
         intentId: params.intentId,
         entry: params.child,
+        parentEntry,
         registration: resolvedRegistration,
       }),
     },

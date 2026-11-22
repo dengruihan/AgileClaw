@@ -112,16 +112,16 @@ type AcceptedWorktreeSource = NonNullable<
   PreparedGatewaySessionLifecycle["pendingWorktree"]
 >["source"];
 
-type SpawnParentWorktreeSource = {
+export type SpawnParentWorktreeSource = {
   workspace: string;
   source?: AcceptedWorktreeSource;
   withCurrent: WorktreeSourceStage;
   withRollback?: <T>(run: (assertCurrent: () => void) => Promise<T>) => Promise<T>;
 };
 
-class SessionWorktreeSourceChangedError extends Error {}
+export class SessionWorktreeSourceChangedError extends Error {}
 
-async function resolveSpawnParentWorktreeSource(
+export async function resolveSpawnParentWorktreeSource(
   parentSessionKey: string,
   agentId: string,
   options: { signal?: AbortSignal } = {},
@@ -498,7 +498,6 @@ export async function prepareSessionWorktree(params: {
     );
   }
 }
-
 /** Select and prepare worktree intent while the existing session lifecycle owns the target. */
 export async function prepareSessionWorktreeCreation(params: {
   cfg: OpenClawConfig;
