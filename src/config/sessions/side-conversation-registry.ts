@@ -17,9 +17,11 @@ import type { OpenClawConfig } from "../types.openclaw.js";
 import { loadSessionEntry, updateResolvedSessionEntry } from "./session-accessor.entry.js";
 import type { SideConversationSnapshotFacts } from "./side-conversation-snapshot.js";
 import type {
+  SideConversationCleanupPending,
   SideConversationMarker,
   SideConversationParentRegistry,
   SideConversationRegistryEntry,
+  SideConversationRegistryState,
   SideConversationState,
 } from "./side-conversation-types.js";
 import type { InternalSessionEntry } from "./types.js";
@@ -29,11 +31,12 @@ export { SIDE_CONVERSATION_MAX_PER_PARENT };
 
 const SIDE_CONVERSATION_KEY_PREFIX = "side-";
 
-const SIDE_CONVERSATION_STATES = new Set<SideConversationState>([
+const SIDE_CONVERSATION_STATES = new Set<SideConversationRegistryState>([
   "open",
   "closed",
   "merged",
   "abandoned",
+  "deleting",
 ]);
 
 function isRegistryEntry(value: unknown): value is SideConversationRegistryEntry {
@@ -45,7 +48,7 @@ function isRegistryEntry(value: unknown): value is SideConversationRegistryEntry
     Number.isInteger(value.ordinal) &&
     value.ordinal >= 1 &&
     typeof value.state === "string" &&
-    SIDE_CONVERSATION_STATES.has(value.state as SideConversationState) &&
+    SIDE_CONVERSATION_STATES.has(value.state as SideConversationRegistryState) &&
     typeof value.createdAt === "number" &&
     typeof value.updatedAt === "number"
   );
@@ -138,7 +141,13 @@ export function readSideConversationRegistry(
   return { version: 1, nextOrdinal: stored.nextOrdinal, conversations };
 }
 
-/** Count registered conversations; abandoned intents stop counting as side conversations. */
+/**
+ * Count live registered conversations.
+ *
+ * Abandoned intents and delete tombstones never count: a membership whose row is
+ * already gone must not inflate the parent's read-only count while cleanup is
+ * still pending.
+ */
 export function resolveSideConversationCount(entry: RegistryOwnerEntry | undefined): number {
   const registry = entry?.sideConversations;
   if (!registry) {
@@ -146,11 +155,21 @@ export function resolveSideConversationCount(entry: RegistryOwnerEntry | undefin
   }
   let count = 0;
   for (const conversation of Object.values(registry.conversations)) {
-    if (conversation.state !== "abandoned") {
+    if (conversation.state !== "abandoned" && conversation.state !== "deleting") {
       count += 1;
     }
   }
   return count;
+}
+
+/** Tombstones whose child rows were deleted but whose membership cleanup is pending. */
+export function listSideConversationCleanupPending(
+  entry: RegistryOwnerEntry | undefined,
+): SideConversationCleanupPending[] {
+  const registry = readSideConversationRegistry(entry);
+  return Object.entries(registry.conversations).flatMap(([intentId, conversation]) =>
+    conversation.state === "deleting" ? [{ intentId, sessionKey: conversation.sessionKey }] : [],
+  );
 }
 
 export function findSideConversationByIntent(
@@ -236,7 +255,7 @@ export async function reserveSideConversationIntent(params: {
         return;
       }
       const activeCount = Object.values(registry.conversations).filter(
-        (conversation) => conversation.state !== "abandoned",
+        (conversation) => conversation.state !== "abandoned" && conversation.state !== "deleting",
       ).length;
       if (activeCount >= SIDE_CONVERSATION_MAX_PER_PARENT) {
         outcome = { status: "limit-reached" };
@@ -282,6 +301,8 @@ export async function finalizeSideConversationIntent(params: {
       }
       entry.sideConversations = setConversation(registry, params.intentId, {
         ...existing,
+        // A finalized child is live again: retries clear any delete tombstone.
+        state: "open",
         ...(params.sessionId ? { sessionId: params.sessionId } : {}),
         ...(params.snapshot ? { snapshot: params.snapshot } : {}),
         updatedAt: params.now,
@@ -313,6 +334,66 @@ export async function recordSideConversationState(params: {
         state: params.state,
         updatedAt: params.now,
         ...(params.state === "closed" ? { closedAt: params.now } : {}),
+      });
+    },
+  );
+  return updated.found;
+}
+
+/**
+ * Persist a delete tombstone before the row deletion starts.
+ *
+ * The membership stops counting immediately; a failed row delete can restore the
+ * previous state, while a cleanup failure after the delete stays discoverable.
+ */
+export async function markSideConversationDeleting(params: {
+  agentId: string;
+  cfg: OpenClawConfig;
+  intentId: string;
+  now: number;
+  parentSessionKey: string;
+}): Promise<SideConversationRegistryState | undefined> {
+  let previous: SideConversationRegistryState | undefined;
+  const updated = await updateResolvedSessionEntry(
+    { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
+    (entry) => {
+      const registry = readSideConversationRegistry(entry);
+      const existing = ownConversation(registry, params.intentId);
+      if (!existing) {
+        return;
+      }
+      previous = existing.state;
+      entry.sideConversations = setConversation(registry, params.intentId, {
+        ...existing,
+        state: "deleting",
+        updatedAt: params.now,
+      });
+    },
+  );
+  return updated.found ? previous : undefined;
+}
+
+/** Restore a tombstone when the row deletion failed and the row still exists. */
+export async function restoreSideConversationState(params: {
+  agentId: string;
+  cfg: OpenClawConfig;
+  intentId: string;
+  now: number;
+  parentSessionKey: string;
+  state: SideConversationRegistryState;
+}): Promise<boolean> {
+  const updated = await updateResolvedSessionEntry(
+    { agentId: params.agentId, cfg: params.cfg, sessionKey: params.parentSessionKey },
+    (entry) => {
+      const registry = readSideConversationRegistry(entry);
+      const existing = ownConversation(registry, params.intentId);
+      if (!existing) {
+        return;
+      }
+      entry.sideConversations = setConversation(registry, params.intentId, {
+        ...existing,
+        state: params.state,
+        updatedAt: params.now,
       });
     },
   );

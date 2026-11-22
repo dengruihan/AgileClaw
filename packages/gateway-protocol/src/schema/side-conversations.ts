@@ -60,6 +60,12 @@ export const SideConversationRowMarkerSchema = closedObject({
   closedAt: Type.Optional(Type.Number({ minimum: 0 })),
 });
 
+/** Registry membership whose row is gone but whose cleanup is still pending. */
+export const SideConversationCleanupPendingSchema = closedObject({
+  intentId: NonEmptyString,
+  sessionKey: NonEmptyString,
+});
+
 /** One side-conversation child left unprocessed by a partial parent action. */
 export const SideConversationRemainderSchema = closedObject({
   key: NonEmptyString,
@@ -120,6 +126,10 @@ export const SideConversationsListResultSchema = closedObject({
   sideConversations: Type.Array(SideConversationSummarySchema, {
     maxItems: SIDE_CONVERSATION_MAX_LISTED,
   }),
+  /** Retryable membership cleanup left after a child row was deleted. */
+  cleanupPending: Type.Optional(
+    Type.Array(SideConversationCleanupPendingSchema, { maxItems: SIDE_CONVERSATION_MAX_LISTED }),
+  ),
 });
 
 export const SideConversationsCloseParamsSchema = closedObject({
@@ -135,6 +145,7 @@ export const SideConversationsTransitionResultSchema = closedObject({
   conversation: SideConversationSummarySchema,
 });
 
+export type SideConversationCleanupPending = Static<typeof SideConversationCleanupPendingSchema>;
 export type SideConversationRemainder = Static<typeof SideConversationRemainderSchema>;
 export type SideConversationState = Static<typeof SideConversationStateSchema>;
 export type SideConversationSnapshotFacts = Static<typeof SideConversationSnapshotFactsSchema>;

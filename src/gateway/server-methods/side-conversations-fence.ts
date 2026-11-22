@@ -21,9 +21,11 @@ import { deleteSessionEntryLifecycle } from "../../config/sessions.js";
 import { patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import {
   listSideConversationRegistrations,
+  markSideConversationDeleting,
   readSideConversationChildEntry,
   recordSideConversationState,
   removeSideConversationIntent,
+  restoreSideConversationState,
 } from "../../config/sessions/side-conversation-registry.js";
 import type { SideConversationRegistryEntry } from "../../config/sessions/side-conversation-types.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
@@ -69,6 +71,13 @@ type RegisteredChild = {
 class SideConversationChildActiveError extends Error {
   constructor(readonly sessionKey: string) {
     super(`Side conversation ${sessionKey} became active`);
+  }
+}
+
+/** The captured child incarnation/revision moved before the durable write. */
+class SideConversationChildChangedError extends Error {
+  constructor(readonly sessionKey: string) {
+    super(`Side conversation ${sessionKey} changed before the durable write`);
   }
 }
 
@@ -195,6 +204,8 @@ export type SideConversationChildFenceResult = {
   deletedKeys: string[];
   preserved: PreservedSessionWorktree[];
   remaining: SideConversationRemainder[];
+  /** Post-delete cleanup whose row is already gone (retryable). */
+  cleanupPending: SideConversationRemainder[];
 };
 
 function remainder(key: string, code: string, message: string): SideConversationRemainder {
@@ -251,6 +262,7 @@ export async function deleteSideConversationChildrenInParentFence(params: {
         ok: true,
         deletedKeys: [],
         preserved: [],
+        cleanupPending: [],
         remaining: [
           remainder(
             child.registration.sessionKey,
@@ -274,19 +286,61 @@ export async function deleteSideConversationChildrenInParentFence(params: {
       ),
       deletedKeys: [],
       preserved: [],
+      cleanupPending: [],
       remaining: skippedRemainders(children, 0),
     };
   }
   const deletedKeys: string[] = [];
   const preserved: PreservedSessionWorktree[] = [];
+  const cleanupPending: SideConversationRemainder[] = [];
   try {
     for (const [index, child] of children.entries()) {
       const sessionKey = child.registration.sessionKey;
       const guard = childWriteGuard({ ...params, child });
+      let previousState: string | undefined;
+      const restoreTombstone = async () => {
+        if (previousState === undefined) {
+          return;
+        }
+        await restoreSideConversationState({
+          agentId: params.agentId,
+          cfg: params.cfg,
+          intentId: child.intentId,
+          now: Date.now(),
+          parentSessionKey: params.parentSessionKey,
+          state:
+            previousState === "deleting"
+              ? "open"
+              : (previousState as "open" | "closed" | "merged" | "abandoned"),
+        }).catch((error: unknown) => {
+          log.warn(
+            `side conversation tombstone restore failed for ${sessionKey}: ${formatErrorMessage(error)}`,
+          );
+        });
+      };
       try {
         // The admission was closed before this write; an already accepted run
         // still fails the authoritative guard below.
         guard();
+        previousState = await markSideConversationDeleting({
+          agentId: params.agentId,
+          cfg: params.cfg,
+          intentId: child.intentId,
+          now: Date.now(),
+          parentSessionKey: params.parentSessionKey,
+        });
+        if (previousState === undefined) {
+          return {
+            ok: true,
+            deletedKeys,
+            preserved,
+            cleanupPending,
+            remaining: [
+              remainder(sessionKey, "CHILD_DELETE_FAILED", "membership reservation is missing"),
+              ...skippedRemainders(children, index + 1),
+            ],
+          };
+        }
         const result = await deleteSessionEntryLifecycle({
           agentId: params.agentId,
           archiveTranscript: params.deleteTranscript,
@@ -299,44 +353,67 @@ export async function deleteSideConversationChildrenInParentFence(params: {
           target: { canonicalKey: sessionKey, storeKeys: [sessionKey] },
         });
         if (!result.deleted) {
+          await restoreTombstone();
           return {
             ok: true,
             deletedKeys,
             preserved,
+            cleanupPending,
             remaining: [
               remainder(sessionKey, "CHILD_CHANGED", "child changed before deletion"),
               ...skippedRemainders(children, index + 1),
             ],
           };
         }
-        handleSessionStateSessionDeleted(sessionKey, params.agentId);
-        const childPreserved = await removeSessionWorktree({
-          id: child.entry.worktree?.id,
-          sessionKey,
-          reason: "session-delete",
-          commitGuard: guard,
-        });
-        if (isValidPreservedWorktree(childPreserved)) {
-          preserved.push(childPreserved);
-        } else if (childPreserved) {
-          log.warn(`side conversation worktree preserved without a valid location: ${sessionKey}`);
-        }
+        // Durable delete committed: record it before any cleanup that may throw.
         deletedKeys.push(sessionKey);
-        await removeSideConversationIntent({
-          agentId: params.agentId,
-          cfg: params.cfg,
-          intentId: child.intentId,
-          parentSessionKey: params.parentSessionKey,
-        }).catch((error: unknown) => {
-          log.warn(
-            `side conversation registry cleanup failed for ${sessionKey}: ${formatErrorMessage(error)}`,
+        try {
+          handleSessionStateSessionDeleted(sessionKey, params.agentId);
+        } catch (error) {
+          cleanupPending.push(
+            remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
           );
-        });
+        }
+        try {
+          const childPreserved = await removeSessionWorktree({
+            id: child.entry.worktree?.id,
+            sessionKey,
+            reason: "session-delete",
+            commitGuard: guard,
+          });
+          if (isValidPreservedWorktree(childPreserved)) {
+            preserved.push(childPreserved);
+          } else if (childPreserved) {
+            log.warn(
+              `side conversation worktree preserved without a valid location: ${sessionKey}`,
+            );
+          }
+        } catch (error) {
+          cleanupPending.push(
+            remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
+          );
+        }
+        try {
+          await removeSideConversationIntent({
+            agentId: params.agentId,
+            cfg: params.cfg,
+            intentId: child.intentId,
+            parentSessionKey: params.parentSessionKey,
+          });
+        } catch (error) {
+          // The delete tombstone stays: count/list already exclude it, and the
+          // partial result carries the retryable cleanup fact.
+          cleanupPending.push(
+            remainder(sessionKey, "REGISTRY_CLEANUP_PENDING", formatErrorMessage(error)),
+          );
+        }
       } catch (error) {
+        await restoreTombstone();
         return {
           ok: true,
           deletedKeys,
           preserved,
+          cleanupPending,
           remaining: [
             remainder(
               sessionKey,
@@ -357,7 +434,7 @@ export async function deleteSideConversationChildrenInParentFence(params: {
       release();
     }
   }
-  return { ok: true, deletedKeys, preserved, remaining: [] };
+  return { ok: true, deletedKeys, preserved, cleanupPending, remaining: [] };
 }
 
 export type SideConversationArchiveFenceResult = {
@@ -464,7 +541,9 @@ export async function archiveSideConversationChildrenInParentFence(params: {
           sessionKey,
           error instanceof SideConversationChildActiveError
             ? "CHILD_ACTIVE"
-            : "CHILD_ARCHIVE_ERROR",
+            : error instanceof SideConversationChildChangedError
+              ? "CHILD_CHANGED"
+              : "CHILD_ARCHIVE_ERROR",
           formatErrorMessage(error),
         ),
       );
@@ -515,7 +594,9 @@ export async function archiveSideConversationChildrenInParentFence(params: {
             currentEntry.sideConversation?.parentSessionId !==
               entry.sideConversation?.parentSessionId
           ) {
-            return null;
+            // patchSessionEntryCore returns the write base for a null updater, so
+            // a null here would be reported as a successful archive.
+            throw new SideConversationChildChangedError(sessionKey);
           }
           return {
             ...currentEntry,
@@ -537,7 +618,9 @@ export async function archiveSideConversationChildrenInParentFence(params: {
           sessionKey,
           error instanceof SideConversationChildActiveError
             ? "CHILD_ACTIVE"
-            : "CHILD_ARCHIVE_ERROR",
+            : error instanceof SideConversationChildChangedError
+              ? "CHILD_CHANGED"
+              : "CHILD_ARCHIVE_ERROR",
           formatErrorMessage(error),
         ),
       );

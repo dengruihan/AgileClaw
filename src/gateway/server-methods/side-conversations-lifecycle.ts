@@ -23,6 +23,7 @@ import {
   buildSideConversationSessionKey,
   finalizeSideConversationIntent,
   listSideConversationRegistrations,
+  listSideConversationCleanupPending,
   readSideConversationChildEntry,
   recordSideConversationState,
   reserveSideConversationIntent,
@@ -171,6 +172,27 @@ export async function createPersistentSideConversation(params: {
     storePath: target.storePath,
     sessionKey: existingRegistration?.sessionKey ?? deterministicKey,
   });
+  if (existingRegistration?.state === "deleting") {
+    if (existingChild) {
+      // A failed delete left the tombstone and the row: retry the parent action
+      // instead of resurrecting a membership that is being deleted.
+      return {
+        ok: false,
+        error: errorShape(
+          ErrorCodes.UNAVAILABLE,
+          `Side conversation ${existingRegistration.sessionKey} is pending cleanup; retry the parent delete.`,
+          { retryable: true },
+        ),
+      };
+    }
+    // The row is gone; finish the retryable membership cleanup before creating.
+    await clearIntentReservation({
+      agentId: target.agentId,
+      cfg: params.cfg,
+      intentId: params.intentId,
+      parentSessionKey: target.canonicalKey,
+    });
+  }
   const matchesExisting = matchesSideConversationChild({
     entry: existingChild,
     intentId: params.intentId,
@@ -426,6 +448,7 @@ export async function listPersistentSideConversations(params: {
   SideConversationResult<{
     parentSessionKey: string;
     sideConversations: SideConversationSummary[];
+    cleanupPending?: Array<{ intentId: string; sessionKey: string }>;
   }>
 > {
   const parent = await resolveSideConversationParent({
@@ -440,6 +463,10 @@ export async function listPersistentSideConversations(params: {
   const target = parent.value;
   const sideConversations: SideConversationSummary[] = [];
   for (const [intentId, registration] of listSideConversationRegistrations(target.entry)) {
+    if (registration.state === "deleting") {
+      // The row was deleted; only the retryable membership cleanup remains.
+      continue;
+    }
     const child = readSideConversationChildEntry({
       agentId: target.agentId,
       storePath: target.storePath,
@@ -474,7 +501,15 @@ export async function listPersistentSideConversations(params: {
       }),
     );
   }
-  return { ok: true, value: { parentSessionKey: target.canonicalKey, sideConversations } };
+  const cleanupPending = listSideConversationCleanupPending(target.entry);
+  return {
+    ok: true,
+    value: {
+      parentSessionKey: target.canonicalKey,
+      sideConversations,
+      ...(cleanupPending.length > 0 ? { cleanupPending } : {}),
+    },
+  };
 }
 
 /** Close only quiesces the hidden child; transcript, branch, and worktree stay intact. */

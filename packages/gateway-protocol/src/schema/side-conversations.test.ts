@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { SessionsDeleteResultSchema } from "./sessions-delete.js";
 import { SessionsListParamsSchema } from "./sessions-list.js";
 import {
+  SideConversationsListResultSchema,
   SideConversationsCloseParamsSchema,
   SideConversationsCreateParamsSchema,
   SideConversationsCreateResultSchema,
@@ -120,6 +121,9 @@ describe("side conversation protocol schemas", () => {
         remainingSideConversations: [
           { key: "agent:main:dashboard:side-later", code: "CHILD_ACTIVE", message: "active" },
         ],
+        cleanupPending: [
+          { key: childSessionKey, code: "REGISTRY_CLEANUP_PENDING", message: "pending" },
+        ],
       }),
     ).toBe(true);
     expect(
@@ -129,6 +133,25 @@ describe("side conversation protocol schemas", () => {
         deleted: false,
         archived: [],
         remainingSideConversations: [{ key: childSessionKey, code: 3, message: "bad" }],
+      }),
+    ).toBe(false);
+  });
+
+  it("exposes retryable cleanup tombstones from the list owner", () => {
+    expect(
+      Value.Check(SideConversationsListResultSchema, {
+        ok: true,
+        parentSessionKey,
+        sideConversations: [summary],
+        cleanupPending: [{ intentId: "intent-1", sessionKey: childSessionKey }],
+      }),
+    ).toBe(true);
+    expect(
+      Value.Check(SideConversationsListResultSchema, {
+        ok: true,
+        parentSessionKey,
+        sideConversations: [],
+        cleanupPending: [{ intentId: "intent-1" }],
       }),
     ).toBe(false);
   });

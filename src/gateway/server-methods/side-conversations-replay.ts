@@ -45,7 +45,12 @@ export function resolveSideConversationState(
   marker: SideConversationMarker | undefined,
   registration: SideConversationRegistryEntry,
 ): SideConversationState {
-  return marker?.state ?? registration.state;
+  if (marker) {
+    return marker.state;
+  }
+  // Delete tombstones are never projected as live rows; they are listed as
+  // cleanupPending instead.
+  return registration.state === "deleting" ? "closed" : registration.state;
 }
 
 /** Project one row into the bounded wire summary; never exposes private registry facts. */

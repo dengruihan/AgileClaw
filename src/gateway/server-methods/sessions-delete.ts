@@ -74,6 +74,7 @@ type PartialSideDelete = {
   partialSide: {
     deletedKeys: string[];
     remaining: SideConversationRemainder[];
+    cleanupPending: SideConversationRemainder[];
     preserved: PreservedSessionWorktree[];
   };
 };
@@ -206,6 +207,8 @@ export async function deleteGatewaySession({
   let drain: SessionLifecycleDrain | undefined;
   let worktreePreserved: PreservedSessionWorktree | undefined;
   let preservedChildWorktrees: PreservedSessionWorktree[] = [];
+  let childCleanupPending: SideConversationRemainder[] = [];
+  let deletedChildKeys: string[] = [];
   const deleteCurrent = async () => {
     try {
       const current = assertCurrent();
@@ -307,11 +310,14 @@ export async function deleteGatewaySession({
               partialSide: {
                 deletedKeys: sideChildren.deletedKeys,
                 remaining: sideChildren.remaining,
+                cleanupPending: sideChildren.cleanupPending,
                 preserved: sideChildren.preserved,
               },
             } satisfies PartialSideDelete;
           }
           preservedChildWorktrees = sideChildren.preserved;
+          childCleanupPending = sideChildren.cleanupPending;
+          deletedChildKeys = sideChildren.deletedKeys;
           const mutationCleanupError = await cleanupSessionBeforeMutation({
             cfg,
             key,
@@ -451,6 +457,7 @@ export async function deleteGatewaySession({
       partial: true,
       ...(partial.deletedKeys.length > 0 ? { deletedKeys: partial.deletedKeys } : {}),
       remainingSideConversations: partial.remaining,
+      ...(partial.cleanupPending.length > 0 ? { cleanupPending: partial.cleanupPending } : {}),
       ...(partial.preserved.length > 0
         ? {
             worktreePreserved: partial.preserved[0],
@@ -479,6 +486,8 @@ export async function deleteGatewaySession({
     archived: deletion.archivedTranscripts.map((entry) => entry.archivedPath),
     ...(preservedWorktrees[0] ? { worktreePreserved: preservedWorktrees[0] } : {}),
     ...(preservedWorktrees.length > 0 ? { preservedWorktrees } : {}),
+    ...(deletedChildKeys.length > 0 ? { deletedKeys: deletedChildKeys } : {}),
+    ...(childCleanupPending.length > 0 ? { cleanupPending: childCleanupPending } : {}),
   };
   onDeleted?.(response);
   if (deletion.deleted) {

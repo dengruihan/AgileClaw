@@ -10,6 +10,9 @@ import type { SideConversationSnapshotFacts } from "./side-conversation-snapshot
 
 export type SideConversationState = "open" | "closed" | "merged" | "abandoned";
 
+/** Registry-only membership state: the child row is being (or was) deleted. */
+export type SideConversationRegistryState = SideConversationState | "deleting";
+
 /** Public marker persisted on the hidden child row. */
 export type SideConversationMarker = {
   parentSessionKey: string;
@@ -29,7 +32,7 @@ export type SideConversationRegistryEntry = {
   sessionId?: string;
   ordinal: number;
   /** Last state written by the creation or transition owner; the child marker wins on read. */
-  state: SideConversationState;
+  state: SideConversationRegistryState;
   createdAt: number;
   updatedAt: number;
   closedAt?: number;
@@ -37,6 +40,12 @@ export type SideConversationRegistryEntry = {
 };
 
 /** Private parent registry stored in the parent's SessionEntry JSON. */
+/** Durable cleanup work left after a child row was deleted. */
+export type SideConversationCleanupPending = {
+  intentId: string;
+  sessionKey: string;
+};
+
 export type SideConversationParentRegistry = {
   version: 1;
   /** Next ordinal to hand out; monotonic across restarts. */

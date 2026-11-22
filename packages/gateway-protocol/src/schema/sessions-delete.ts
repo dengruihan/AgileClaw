@@ -59,6 +59,8 @@ export const SessionsDeleteResultSchema = closedObject({
   deletedKeys: Type.Optional(Type.Array(NonEmptyString)),
   /** Hidden children not processed, with the blocking reason; parent stays intact. */
   remainingSideConversations: Type.Optional(Type.Array(SideConversationRemainderSchema)),
+  /** Cleanup left after a child row was already deleted (retryable). */
+  cleanupPending: Type.Optional(Type.Array(SideConversationRemainderSchema)),
 });
 
 export type SessionsDeleteParams = Static<typeof SessionsDeleteParamsSchema>;
