@@ -137,6 +137,46 @@ async function waitForMutation(
   return false;
 }
 
+async function installMergeBaseFaultWrapper(
+  root: string,
+  failOnCall: number,
+): Promise<{ restore: () => void }> {
+  const binDir = path.join(root, "merge-base-fault-bin");
+  await fs.mkdir(binDir, { recursive: true });
+  const realGit = (await execFileAsync("sh", ["-c", "command -v git"])).stdout.trim();
+  if (!realGit.startsWith("/")) {
+    throw new Error("expected an absolute git path");
+  }
+  const counter = path.join(root, "merge-base-count");
+  const script = [
+    "#!/bin/sh",
+    "is_ancestor=0",
+    'for arg in "$@"; do',
+    '  if [ "$arg" = "--is-ancestor" ]; then is_ancestor=1; fi',
+    "done",
+    'if [ "$is_ancestor" = "1" ]; then',
+    "  count=0",
+    `  if [ -f "${counter}" ]; then count=$(cat "${counter}"); fi`,
+    "  count=$((count + 1))",
+    `  printf '%s' "$count" > "${counter}"`,
+    `  if [ "$count" = "${failOnCall}" ]; then`,
+    '    echo "injected merge-base inspection failure" >&2',
+    "    exit 2",
+    "  fi",
+    "fi",
+    `exec "${realGit}" "$@"`,
+    "",
+  ].join("\n");
+  await fs.writeFile(path.join(binDir, "git"), script, { mode: 0o755 });
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  return {
+    restore: () => {
+      process.env.PATH = previousPath;
+    },
+  };
+}
+
 async function createMergedFixture(intentId: string) {
   const root = tempDirs.make("openclaw-side-merge-outcome-");
   const workspace = await initializeRepository(root, "workspace");
@@ -446,5 +486,61 @@ test(
     expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
     expect(retried.payload?.conversation.state).toBe("merged");
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(retried.payload?.mergeCommit);
+  },
+);
+
+test(
+  "an inconclusive ancestry inspection refuses abandon and keeps the landed merge reconcilable",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath, sessionKey } =
+      await createMergedFixture("intent-inspection-fault");
+    mockState.failNextPatch = true;
+    const wrapperRoot = tempDirs.make("openclaw-side-inspection-fault-");
+    // Merge preflight and post-merge validation use calls 1-3; call 4 is the
+    // abandon inspection that must fail closed.
+    const wrapper = await installMergeBaseFaultWrapper(wrapperRoot, 4);
+    let landed: string | undefined;
+    try {
+      const failed = await directSessionReq(
+        "sideConversations.merge",
+        { parentSessionKey: parentKey, sessionKey },
+        { client },
+      );
+      expect(failed.ok).toBe(false);
+      landed = mergeCommitDetail(failed.error);
+      expect(landed).toBeTruthy();
+      expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+
+      const abandoned = await directSessionReq(
+        "sideConversations.abandon",
+        { parentSessionKey: parentKey, sessionKey },
+        { client },
+      );
+      expect(abandoned.ok).toBe(false);
+      expect(abandoned.error?.retryable).toBe(true);
+      expect(abandoned.error?.message).toContain("could not verify");
+      // Bounded error: no checkout path or raw Git stderr leaks.
+      expect(abandoned.error?.message).not.toContain(workspace);
+      expect(abandoned.error?.message).not.toContain("injected merge-base");
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+      expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+    } finally {
+      wrapper.restore();
+    }
+
+    const retried = await directSessionReq<{
+      alreadyMerged: boolean;
+      mergeCommit?: string;
+      conversation: { state: string };
+    }>("sideConversations.merge", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
+    expect(retried.payload).toMatchObject({
+      alreadyMerged: true,
+      mergeCommit: landed,
+      conversation: { state: "merged" },
+    });
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
   },
 );

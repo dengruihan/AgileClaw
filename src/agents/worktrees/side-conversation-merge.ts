@@ -115,11 +115,16 @@ async function isAncestor(
  * direct parent. This is the landing commit of an earlier attempt, so a retry
  * can report the original merge instead of a fresh (nonexistent) one.
  */
+type LandingLookup =
+  | { status: "found"; commit: string }
+  | { status: "none" }
+  | { status: "unknown" };
+
 async function findLandedMergeCommit(
   checkoutPath: string,
   childHead: string,
   parentHead: string,
-): Promise<string | undefined> {
+): Promise<LandingLookup> {
   const result = await runGit(checkoutPath, [
     "rev-list",
     "--parents",
@@ -127,7 +132,7 @@ async function findLandedMergeCommit(
     `${childHead}..${parentHead}`,
   ]);
   if (result.termination !== "exit" || result.code !== 0) {
-    return undefined;
+    return { status: "unknown" };
   }
   let landed: string | undefined;
   // rev-list is newest first; the last direct-parent match is the original landing merge.
@@ -137,7 +142,7 @@ async function findLandedMergeCommit(
       landed = commit;
     }
   }
-  return landed;
+  return landed ? { status: "found", commit: landed } : { status: "none" };
 }
 
 /**
@@ -177,56 +182,94 @@ export async function resolveLandedSideConversationMerge(params: {
     childHead.value,
     parentHead.value,
   );
-  return landed ?? childHead.value;
+  return landed.status === "found" ? landed.commit : childHead.value;
+}
+
+export type SideConversationLandingState =
+  | { status: "landed"; mergeCommit: string }
+  | { status: "not-landed" }
+  /** The repository could not answer; callers must not treat this as "not landed". */
+  | { status: "unknown" };
+
+/** A genuinely absent branch has no accepted write; an execution failure does not. */
+async function branchExists(
+  checkoutPath: string,
+  branch: string,
+): Promise<"exists" | "missing" | "unknown"> {
+  const result = await runGit(checkoutPath, [
+    "show-ref",
+    "--verify",
+    "--quiet",
+    `refs/heads/${branch}`,
+  ]);
+  if (result.termination !== "exit") {
+    return "unknown";
+  }
+  if (result.code === 0) {
+    return "exists";
+  }
+  return result.code === 1 ? "missing" : "unknown";
 }
 
 /**
- * Read-only landing check used before a state-only abandon.
+ * Read-only tri-state landing inspection used before a state-only abandon.
  *
  * A child that never committed sits exactly on the parent HEAD; that is not an
  * accepted merge write and must not block an abandon. A landing merge commit
  * naming the child, or a child commit strictly contained in the parent branch,
- * is an accepted write whose merge retry must record it first.
+ * is an accepted write whose merge retry must record it first. Every repository
+ * or ancestry execution failure is `unknown`, never `not-landed`, so a transient
+ * read error can never bury an accepted merge behind an abandon.
  */
 export async function inspectSideConversationLanded(params: {
   parentCheckoutPath: string;
   childBranch: string;
-}): Promise<{ landed: boolean; mergeCommit?: string }> {
-  const parentHead = await commitAt(
-    params.parentCheckoutPath,
-    "HEAD",
-    "merge-failed",
-    "parent checkout has no committed HEAD",
-  );
-  if (!parentHead.ok) {
-    return { landed: false };
+}): Promise<SideConversationLandingState> {
+  const parentHead = await runGit(params.parentCheckoutPath, [
+    "rev-parse",
+    "--verify",
+    "HEAD^{commit}",
+  ]);
+  if (parentHead.termination !== "exit" || parentHead.code !== 0) {
+    return { status: "unknown" };
   }
-  const childHead = await commitAt(
-    params.parentCheckoutPath,
-    params.childBranch,
-    "child-branch-missing",
-    "side conversation branch is missing",
-  );
-  if (!childHead.ok) {
-    return { landed: false };
+  const branch = await branchExists(params.parentCheckoutPath, params.childBranch);
+  if (branch === "missing") {
+    return { status: "not-landed" };
   }
-  const already = await isAncestor(params.parentCheckoutPath, childHead.value, parentHead.value);
-  if (!already.ok || !already.value) {
-    return { landed: false };
+  if (branch === "unknown") {
+    return { status: "unknown" };
   }
-  const landing = await findLandedMergeCommit(
-    params.parentCheckoutPath,
-    childHead.value,
-    parentHead.value,
-  );
-  if (landing) {
-    return { landed: true, mergeCommit: landing };
+  const childHead = await runGit(params.parentCheckoutPath, [
+    "rev-parse",
+    "--verify",
+    "--end-of-options",
+    `${params.childBranch}^{commit}`,
+  ]);
+  if (childHead.termination !== "exit" || childHead.code !== 0) {
+    return { status: "unknown" };
+  }
+  const parent = parentHead.stdout.trim();
+  const child = childHead.stdout.trim();
+  const already = await isAncestor(params.parentCheckoutPath, child, parent);
+  if (!already.ok) {
+    return { status: "unknown" };
+  }
+  if (!already.value) {
+    return { status: "not-landed" };
   }
   // Same commit on both sides: the child never committed beyond its base.
-  if (childHead.value === parentHead.value) {
-    return { landed: false };
+  if (child === parent) {
+    return { status: "not-landed" };
   }
-  return { landed: true, mergeCommit: childHead.value };
+  const landing = await findLandedMergeCommit(params.parentCheckoutPath, child, parent);
+  if (landing.status === "unknown") {
+    return { status: "unknown" };
+  }
+  return {
+    status: "landed",
+    mergeCommit: landing.status === "found" ? landing.commit : child,
+  };
 }
 
 type MergeTreeInspection =
@@ -386,7 +429,10 @@ export async function mergeSideConversationBranch(params: {
       childHead.value,
       parentHead.value,
     );
-    return ok({ commit: landed ?? childHead.value, alreadyMerged: true });
+    return ok({
+      commit: landed.status === "found" ? landed.commit : childHead.value,
+      alreadyMerged: true,
+    });
   }
 
   const inspected = await inspectMergeTree(parentCheckoutPath, parentHead.value, childHead.value);

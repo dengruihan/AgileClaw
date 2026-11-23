@@ -7,6 +7,7 @@
  * that retires the child's checkout, through the snapshot-protected removal
  * owner shared with the parent fence.
  */
+import { existsSync } from "node:fs";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import {
   ErrorCodes,
@@ -20,6 +21,7 @@ import {
   mergeSideConversationBranch,
   inspectSideConversationLanded,
   resolveLandedSideConversationMerge,
+  type SideConversationLandingState,
   type SideConversationMergeFailure,
 } from "../../agents/worktrees/side-conversation-merge.js";
 import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
@@ -380,24 +382,37 @@ async function resolveLandedAbandonMerge(params: {
   cfg: OpenClawConfig;
   child: InternalSessionEntry;
   target: ParentTarget;
-}): Promise<string | undefined> {
+}): Promise<SideConversationLandingState> {
   const childCheckout = resolveSideConversationChildCheckout(params.child);
   if (!childCheckout.branch) {
-    return undefined;
+    return { status: "not-landed" };
   }
   const parentCheckout = resolveSideConversationParentCheckout({
     cfg: params.cfg,
     agentId: params.target.agentId,
     parentEntry: params.target.entry,
   });
-  if (!parentCheckout) {
-    return undefined;
+  // An absent checkout or branch cannot hold a merge this owner created.
+  if (!parentCheckout || !existsSync(parentCheckout.path)) {
+    return { status: "not-landed" };
   }
-  const inspection = await inspectSideConversationLanded({
-    parentCheckoutPath: parentCheckout.path,
-    childBranch: childCheckout.branch,
-  }).catch(() => undefined);
-  return inspection?.landed ? inspection.mergeCommit : undefined;
+  try {
+    return await inspectSideConversationLanded({
+      parentCheckoutPath: parentCheckout.path,
+      childBranch: childCheckout.branch,
+    });
+  } catch {
+    return { status: "unknown" };
+  }
+}
+
+/** An inconclusive inspection keeps the marker unchanged and the request retryable. */
+function landingUnknownError(sessionKey: string): ErrorShape {
+  return errorShape(
+    ErrorCodes.UNAVAILABLE,
+    `Side conversation ${sessionKey} could not verify whether its branch already merged; retry the abandon once the workspace repository is readable. The conversation was not changed.`,
+    { retryable: true },
+  );
 }
 
 /** The landed write must be recorded by a merge retry; abandon stays refused. */
@@ -487,13 +502,16 @@ async function abandonSideConversationInLane(params: {
   // open. Abandoning then would make the advertised merge retry impossible, so
   // reconcile through the canonical merge owner (read-only, no checkout moves)
   // before any state write.
-  const landed = await resolveLandedAbandonMerge({
+  const landing = await resolveLandedAbandonMerge({
     cfg: params.cfg,
     child,
     target,
   });
-  if (landed) {
-    return { ok: false, error: landedAbandonError(sessionKey, landed) };
+  if (landing.status === "landed") {
+    return { ok: false, error: landedAbandonError(sessionKey, landing.mergeCommit) };
+  }
+  if (landing.status === "unknown") {
+    return { ok: false, error: landingUnknownError(sessionKey) };
   }
   const assertIdle = () =>
     assertSideConversationIdle({
