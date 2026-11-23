@@ -85,7 +85,13 @@ function childKeys(params: { entry: InternalSessionEntry; sessionKey: string }):
   return [params.sessionKey, ...(params.entry.sessionId ? [params.entry.sessionId] : [])];
 }
 
-/** Read the registered children of one parent; no scan of unrelated rows. */
+/**
+ * Read the registered children of one parent; no scan of unrelated rows.
+ *
+ * Abandoned registrations are included because parent cleanup is their only
+ * remaining retirement path: once the parent row is gone, no RPC can resolve the
+ * hidden child again. Abandon itself stays a state-only operation.
+ */
 export function readRegisteredSideConversationChildren(params: {
   agentId: string;
   parentEntry: InternalSessionEntry;
@@ -94,9 +100,6 @@ export function readRegisteredSideConversationChildren(params: {
 }): RegisteredChild[] {
   const children: RegisteredChild[] = [];
   for (const [intentId, registration] of listSideConversationRegistrations(params.parentEntry)) {
-    if (registration.state === "abandoned") {
-      continue;
-    }
     const entry = readSideConversationChildEntry({
       agentId: params.agentId,
       storePath: params.storePath,
@@ -642,15 +645,19 @@ export async function archiveSideConversationChildrenInParentFence(params: {
             // a null here would be reported as a successful archive.
             throw new SideConversationChildChangedError(sessionKey);
           }
+          const marker = currentEntry.sideConversation!;
+          // Archive retires the checkout, not the abandon decision: an abandoned
+          // child keeps its terminal state and only gains the archive facts.
+          const archivedState = marker.state === "abandoned" ? "abandoned" : "closed";
           return {
             ...currentEntry,
             archivedAt: now,
             archiveReason: "manual" as const,
             sideConversation: {
-              ...currentEntry.sideConversation!,
-              state: "closed" as const,
+              ...marker,
+              state: archivedState,
               updatedAt: now,
-              closedAt: currentEntry.sideConversation!.closedAt ?? now,
+              ...(archivedState === "closed" ? { closedAt: marker.closedAt ?? now } : {}),
             },
           };
         },
@@ -681,7 +688,7 @@ export async function archiveSideConversationChildrenInParentFence(params: {
         intentId: child.intentId,
         now,
         parentSessionKey: params.parentSessionKey,
-        state: "closed",
+        state: committed.sideConversation?.state === "abandoned" ? "abandoned" : "closed",
       });
     } catch (error) {
       log.warn(

@@ -74,6 +74,75 @@ function readEntry(storePath: string, sessionKey: string) {
   return loadSessionEntry({ agentId: "main", sessionKey, storePath });
 }
 
+async function waitForPath(target: string, timeoutMs = 10_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      await fs.access(target);
+      return;
+    } catch {
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 25);
+      });
+    }
+  }
+  throw new Error(`timed out waiting for ${target}`);
+}
+
+/**
+ * Real Git wrapper that pauses only `git merge --no-ff` until released.
+ *
+ * Every other Git command passes straight through, so the production merge
+ * owner still performs a real merge; only the side effect is held open.
+ */
+async function installPausingGitWrapper(root: string): Promise<{
+  marker: string;
+  releasePath: string;
+  restore: () => void;
+}> {
+  const binDir = path.join(root, "paused-git-bin");
+  await fs.mkdir(binDir, { recursive: true });
+  const realGit = (await execFileAsync("sh", ["-c", "command -v git"])).stdout.trim();
+  if (!realGit.startsWith("/")) {
+    throw new Error("expected an absolute git path");
+  }
+  const marker = path.join(root, "merge-paused");
+  const releasePath = path.join(root, "merge-release");
+  const script = [
+    "#!/bin/sh",
+    'for arg in "$@"; do',
+    '  if [ "$arg" = "--no-ff" ]; then',
+    `    : > "${marker}"`,
+    `    while [ ! -f "${releasePath}" ]; do sleep 0.02; done`,
+    "  fi",
+    "done",
+    `exec "${realGit}" "$@"`,
+    "",
+  ].join("\n");
+  await fs.writeFile(path.join(binDir, "git"), script, { mode: 0o755 });
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ""}`;
+  return {
+    marker,
+    releasePath,
+    restore: () => {
+      process.env.PATH = previousPath;
+    },
+  };
+}
+
+function isPending(result: Promise<unknown>): Promise<boolean> {
+  return Promise.race([
+    result.then(
+      () => false,
+      () => false,
+    ),
+    new Promise<boolean>((resolve) => {
+      setTimeout(() => resolve(true), 400);
+    }),
+  ]);
+}
+
 async function createGitFixture() {
   const root = tempDirs.make("openclaw-side-worktree-");
   const workspace = await initializeRepository(root, "workspace");
@@ -685,5 +754,141 @@ test(
     expect(reopened.ok).toBe(false);
     expect(reopened.error?.message).toContain("stays closed");
     expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("closed");
+  },
+);
+
+test.each(["delete", "archive"] as const)(
+  "parent %s during a paused merge serializes after the landed merge",
+  { timeout: 90_000 },
+  async (action) => {
+    const { workspace, storePath } = await createGitFixture();
+    const parent = readEntry(storePath, parentKey)!;
+    const { sessionKey } = await createSide(`intent-paused-${action}`);
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "feature.txt"), "paused merge feature\n");
+    await git(record.path, "add", "feature.txt");
+    await git(record.path, "commit", "-m", "paused merge feature");
+
+    const wrapperRoot = tempDirs.make(`openclaw-side-paused-${action}-`);
+    const wrapper = await installPausingGitWrapper(wrapperRoot);
+    const order: string[] = [];
+    try {
+      const mergePromise = directSessionReq<{ mergeCommit?: string }>(
+        "sideConversations.merge",
+        { parentSessionKey: parentKey, sessionKey },
+        { client },
+      ).then((result) => {
+        order.push("merge");
+        return result;
+      });
+      await waitForPath(wrapper.marker);
+
+      const deletePromise =
+        action === "delete"
+          ? directSessionReq("sessions.delete", { key: parentKey }, { client })
+          : directSessionReq(
+              "sessions.patch",
+              { key: parentKey, archived: true, expectedSessionId: parent.sessionId },
+              { client },
+            );
+      const ownerAction = deletePromise.then((result) => {
+        order.push(action);
+        return result;
+      });
+      // The owner action must not complete while the merge lane is held.
+      await expect(isPending(ownerAction)).resolves.toBe(true);
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+
+      await fs.writeFile(wrapper.releasePath, "release");
+      const merged = await mergePromise;
+      const ownerResult = await ownerAction;
+      expect(merged.ok, JSON.stringify(merged.error)).toBe(true);
+      expect(ownerResult.ok, JSON.stringify(ownerResult.error)).toBe(true);
+      // The merge resolved first; no rows were deleted before it landed.
+      expect(order).toEqual(["merge", action]);
+
+      expect(await git(workspace, "rev-parse", "HEAD")).toBe(merged.payload?.mergeCommit);
+      expect(await fs.readFile(path.join(workspace, "feature.txt"), "utf8")).toContain(
+        "paused merge feature",
+      );
+      if (action === "delete") {
+        expect(readEntry(storePath, parentKey)).toBeUndefined();
+        expect(readEntry(storePath, sessionKey)).toBeUndefined();
+      } else {
+        expect(readEntry(storePath, parentKey)?.archivedAt).toBeTruthy();
+        expect(readEntry(storePath, sessionKey)?.archivedAt).toBeTruthy();
+      }
+    } finally {
+      wrapper.restore();
+    }
+  },
+);
+
+test(
+  "parent delete retires an abandoned child through its removal snapshot",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const { sessionKey } = await createSide("intent-abandoned-parent-delete");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "draft.txt"), "abandoned draft\n");
+    const abandoned = await directSessionReq<{ conversation: { state: string } }>(
+      "sideConversations.abandon",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(abandoned.ok, JSON.stringify(abandoned.error)).toBe(true);
+    expect(abandoned.payload?.conversation.state).toBe("abandoned");
+    // Abandon alone keeps the branch, checkout, and edits.
+    expect(managedWorktrees.findLiveById(record.id)?.path).toBe(record.path);
+    expect(await fs.readFile(path.join(record.path, "draft.txt"), "utf8")).toBe(
+      "abandoned draft\n",
+    );
+
+    const deleted = await directSessionReq("sessions.delete", { key: parentKey }, { client });
+    expect(deleted.ok, JSON.stringify(deleted.error)).toBe(true);
+    expect(readEntry(storePath, parentKey)).toBeUndefined();
+    expect(readEntry(storePath, sessionKey)).toBeUndefined();
+    const retired = getRegistryWorktree(process.env, record.id)!;
+    expect(retired.removedAt).toBeDefined();
+    expect(retired.snapshotRef).toBeTruthy();
+    expect(await git(workspace, "cat-file", "-p", `${retired.snapshotRef}:draft.txt`)).toContain(
+      "abandoned draft",
+    );
+  },
+);
+
+test(
+  "parent archive retires an abandoned child and keeps its abandoned state",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const parent = readEntry(storePath, parentKey)!;
+    const { sessionKey } = await createSide("intent-abandoned-parent-archive");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "draft.txt"), "abandoned archive draft\n");
+    const abandoned = await directSessionReq(
+      "sideConversations.abandon",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(abandoned.ok, JSON.stringify(abandoned.error)).toBe(true);
+
+    const archived = await directSessionReq(
+      "sessions.patch",
+      { key: parentKey, archived: true, expectedSessionId: parent.sessionId },
+      { client },
+    );
+    expect(archived.ok, JSON.stringify(archived.error)).toBe(true);
+    const child = readEntry(storePath, sessionKey)!;
+    expect(child.archivedAt).toBeTruthy();
+    // Archive retires the checkout; it does not rewrite the abandon decision.
+    expect(child.sideConversation?.state).toBe("abandoned");
+    const retired = getRegistryWorktree(process.env, record.id)!;
+    expect(retired.removedAt).toBeDefined();
+    expect(retired.snapshotRef).toBeTruthy();
+    expect(await git(workspace, "cat-file", "-p", `${retired.snapshotRef}:draft.txt`)).toContain(
+      "abandoned archive draft",
+    );
   },
 );
