@@ -323,6 +323,7 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       sideConversations: this.sideConversationsView(),
       sideConversationDraft: this.sideConversationDraft,
       sideConversationAttachments: this.sideConversationAttachments,
+      sideConversationSubmitting: this.sideConversationSubmitting(),
       sideConversationAttachmentReads: this.sideConversationAttachmentReads,
       sideConversationFocusRequest: this.sessionCompanionFocusRequest,
       sideConversationPresented: companionPresented,

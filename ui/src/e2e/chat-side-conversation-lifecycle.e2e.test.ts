@@ -21,7 +21,6 @@ const suite = createControlUiE2eSuite({ name: "side conversation lifecycle" });
 const PARENT_KEY = "agent:main:run";
 const CHILD_KEY = "agent:main:dashboard:side-11111111111111111111111111111111";
 const OTHER_CHILD_KEY = "agent:main:dashboard:side-22222222222222222222222222222222";
-const SIDE_KEY_RE = /^agent:main:dashboard:side-[0-9a-f]{32}$/;
 
 function conversation(overrides: Partial<SideConversationSummary> = {}): SideConversationSummary {
   return {
@@ -241,7 +240,155 @@ suite.define(() => {
       await expect(rows.nth(1)).toContainText("Release notes");
       await expect(rows.nth(1)).toContainText("Closed");
       await expect(rows.nth(1)).toContainText("Not a Git workspace");
-      expect(SIDE_KEY_RE.test(OTHER_CHILD_KEY)).toBe(true);
+    });
+  });
+
+  it("shows a merge failure in the child status strip while the rail is closed", async () => {
+    const artifactDir = createControlUiE2eArtifactDir("side-conversation-merge-error");
+    await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
+      const gateway = await installMockGateway(page, {
+        ...scenario([conversation()]),
+        methodResponses: {
+          "sideConversations.merge": {
+            __mockError: {
+              code: "INVALID_REQUEST",
+              message: "Merge conflict in app.ts; nothing was merged.",
+            },
+          },
+        },
+      });
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, CHILD_KEY));
+      const status = page.locator(".chat-side-conversation-status");
+      await expect(status).toHaveAttribute("data-side-conversation-state", "open");
+      // The rail is closed, so the strip is the only feedback surface.
+      await expect(page.locator("openclaw-chat-session-rail")).toHaveCount(0);
+
+      await status.getByRole("button", { name: "Merge into parent", exact: true }).click();
+      const confirm = await waitForConfirmModal(page);
+      await confirm.getByRole("button", { name: "Merge into parent", exact: true }).click();
+      const merge = await gateway.waitForRequest("sideConversations.merge");
+      expect(merge.params).toMatchObject({ parentSessionKey: PARENT_KEY, sessionKey: CHILD_KEY });
+
+      const notice = status.getByRole("alert");
+      await expect(notice).toBeVisible();
+      await expect(notice).toContainText("Merge conflict in app.ts; nothing was merged.");
+      await expect(status).toHaveAttribute("data-side-conversation-state", "open");
+      await expect(
+        status.getByRole("button", { name: "Merge into parent", exact: true }),
+      ).toBeEnabled();
+      await page.screenshot({ path: path.join(artifactDir, "merge-error-strip.png") });
+    });
+  });
+
+  it("keeps the parent rail and child status strips in sync across panes", async () => {
+    await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
+      const gateway = await installMockGateway(
+        page,
+        scenario(
+          [
+            conversation(),
+            conversation({
+              sessionKey: OTHER_CHILD_KEY,
+              intentId: "intent-2",
+              ordinal: 2,
+              state: "closed",
+              closedAt: 200,
+              updatedAt: 200,
+              title: "Release notes",
+              worktree: undefined,
+              worktreeSkipped: "not-git",
+            }),
+          ],
+          { handoffCount: 1 },
+        ),
+      );
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, PARENT_KEY));
+      const parentPane = page.locator("openclaw-chat-pane").first();
+      const parentComposer = parentPane.locator(".agent-chat__composer-shell textarea");
+      const rail = await openSideRail(page);
+      await rail.locator(".chat-session-rail__conversation").first().waitFor();
+      const rowFor = (title: string) =>
+        rail.locator(".chat-session-rail__conversation").filter({ hasText: title });
+      const stripFor = (ordinal: number) =>
+        page.locator(".chat-side-conversation-status").filter({ hasText: `Side chat ${ordinal}` });
+
+      // Open both child panes from the parent rail.
+      await rowFor("Side chat 1").locator(".chat-session-rail__conversation-main").click();
+      await expect(page.locator("openclaw-chat-pane")).toHaveCount(2);
+      await rowFor("Release notes").locator(".chat-session-rail__conversation-main").click();
+      await expect(page.locator("openclaw-chat-pane")).toHaveCount(3);
+      await expect(stripFor(1)).toHaveAttribute("data-side-conversation-state", "open");
+      await expect(stripFor(2)).toHaveAttribute("data-side-conversation-state", "closed");
+
+      // Chip reopen in the parent updates the other pane's strip and the rail row.
+      await parentComposer.click();
+      const reopens = (await gateway.getRequests("sideConversations.reopen")).length;
+      await page
+        .locator(".chat-side-conversation-handoff")
+        .first()
+        .getByRole("button", { name: "Cancel", exact: true })
+        .click();
+      await gateway.waitForRequest("sideConversations.reopen", { after: reopens });
+      await expect(stripFor(2)).toHaveAttribute("data-side-conversation-state", "open");
+      await expect(rowFor("Release notes").locator(".chat-session-rail__state")).toHaveText("Open");
+
+      // Parent rail close reaches the closed child's strip.
+      await rowFor("Release notes").getByRole("button", { name: "Close", exact: true }).click();
+      await gateway.waitForRequest("sideConversations.close");
+      await expect(stripFor(2)).toHaveAttribute("data-side-conversation-state", "closed");
+
+      // The child strip transitions, and the parent rail row follows.
+      const reopensAfterClose = (await gateway.getRequests("sideConversations.reopen")).length;
+      await stripFor(2).getByRole("button", { name: "Reopen side chat", exact: true }).click();
+      await gateway.waitForRequest("sideConversations.reopen", { after: reopensAfterClose });
+      await expect(rowFor("Release notes").locator(".chat-session-rail__state")).toHaveText("Open");
+
+      // Parent rail merge reaches the merged child's strip.
+      await parentComposer.click();
+      await rowFor("Side chat 1").getByRole("button", { name: "Merge", exact: true }).click();
+      const mergeConfirm = await waitForConfirmModal(page);
+      await mergeConfirm.getByRole("button", { name: "Merge into parent", exact: true }).click();
+      await gateway.waitForRequest("sideConversations.merge");
+      await expect(stripFor(1)).toHaveAttribute("data-side-conversation-state", "merged");
+
+      // Parent rail abandon reaches the abandoned child's strip.
+      await rowFor("Release notes").getByRole("button", { name: "Abandon", exact: true }).click();
+      const abandonConfirm = await waitForConfirmModal(page);
+      await abandonConfirm.getByRole("button", { name: "Abandon side chat", exact: true }).click();
+      await gateway.waitForRequest("sideConversations.abandon");
+      await expect(stripFor(2)).toHaveAttribute("data-side-conversation-state", "abandoned");
+    });
+  });
+
+  it("creates one child when the rail submit fires again during creation", async () => {
+    await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
+      const gateway = await installMockGateway(page, scenario([conversation()]));
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, PARENT_KEY));
+      await openChatSidePanelType(page, "Side chat");
+      const rail = page.locator("openclaw-chat-session-rail");
+      const input = rail.getByRole("textbox", { name: "Ask in side chat", exact: true });
+      await input.fill("Only once?");
+      const creates = (await gateway.getRequests("sideConversations.create")).length;
+      await gateway.deferNext("sideConversations.create");
+
+      await input.press("Enter");
+      await gateway.waitForRequest("sideConversations.create", { after: creates });
+      // Creation owns a worktree and stays pending; a second Enter and the Ask
+      // button must not start another child or send the question twice.
+      await input.press("Enter");
+      await rail.getByRole("button", { name: "Ask", exact: true }).click({ force: true });
+      expect((await gateway.getRequests("sideConversations.create")).length).toBe(creates + 1);
+      await expect(rail.locator(".chat-send-btn")).toBeDisabled();
+
+      await gateway.resolveDeferred("sideConversations.create", {
+        ok: true,
+        created: true,
+        conversation: conversation(),
+      });
+      const send = await gateway.waitForRequest("chat.send");
+      expect((send.params as { message?: unknown }).message).toBe("Only once?");
+      expect((await gateway.getRequests("chat.send")).length).toBe(1);
+      await expect(page.locator("openclaw-chat-pane")).toHaveCount(2);
     });
   });
 });

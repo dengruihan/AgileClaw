@@ -23,6 +23,7 @@ import {
   sessionRailQuestion,
   renderSessionRailComposer,
 } from "./chat-session-rail-composer.ts";
+import { sideConversationNoticeText } from "./chat-side-conversation-notice.ts";
 
 function checksSummary(pullRequest: ControlUiSessionPullRequest): string | null {
   const checks = pullRequest.checks;
@@ -39,9 +40,6 @@ function checksSummary(pullRequest: ControlUiSessionPullRequest): string | null 
 }
 
 const SESSION_RAIL_STARTER_KEYS = ["changed", "stopped", "remaining"] as const;
-
-/** Notice values that are bounded outcomes, not raw Gateway errors. */
-const NOTICE_KEYS = new Set(["merged", "already-merged", "merged-no-commit"]);
 
 function conversationWorktreeLabel(conversation: SideConversationSummary): string {
   if (conversation.worktree) {
@@ -72,7 +70,6 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
   @property({ attribute: false }) onDraftChange?: (draft: string) => void;
   @property({ attribute: false })
   onAttachmentsChange?: ChatAttachmentControlsProps["onAttachmentsChange"];
-  @property({ attribute: false }) onRefresh?: () => void;
   @property({ attribute: false }) onOpenConversation?: (
     conversation: SideConversationSummary,
   ) => void;
@@ -88,6 +85,7 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
   attachmentLimits?: ChatAttachmentControlsProps["attachmentLimits"];
   @property({ attribute: false })
   uploadConfig?: ChatAttachmentControlsProps["uploadConfig"];
+  @property({ type: Boolean }) submitting = false;
   @property({ type: Boolean }) presented = false;
   @property({ attribute: false }) focusRequest?: () => boolean;
 
@@ -120,7 +118,13 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
 
   private submit() {
     const question = sessionRailQuestion({ draft: this.draft, attachments: this.attachments });
-    if (question && this.connected && !this.attachmentReads?.pendingReads && this.onSubmit) {
+    if (
+      question &&
+      this.connected &&
+      !this.submitting &&
+      !this.attachmentReads?.pendingReads &&
+      this.onSubmit
+    ) {
       this.onSubmit(question);
     }
   }
@@ -163,7 +167,7 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
             <button
               class="chip chat-session-rail__starter"
               type="button"
-              ?disabled=${!this.connected}
+              ?disabled=${!this.connected || this.submitting}
               @click=${() => this.onSubmit?.(question)}
             >
               ${icons.spark}<span>${question}</span>
@@ -175,12 +179,8 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
   }
 
   private noticeText(notice: string | undefined) {
-    if (!notice) {
-      return nothing;
-    }
-    return html`<p class="chat-session-rail__notice" role="status">
-      ${NOTICE_KEYS.has(notice) ? t(`chat.rail.notice.${notice}`) : notice}
-    </p>`;
+    const text = sideConversationNoticeText(notice);
+    return text ? html`<p class="chat-session-rail__notice" role="status">${text}</p>` : nothing;
   }
 
   private renderConversation(conversation: SideConversationSummary) {
@@ -380,7 +380,7 @@ export class ChatSessionRailElement extends OpenClawLightDomElement {
         ${renderSessionRailComposer({
           state: { draft: this.draft, attachments: this.attachments },
           connected: this.connected,
-          pending: pending > 0,
+          pending: pending > 0 || this.submitting,
           sendShortcut: this.sendShortcut,
           composer: this.composer,
           attachmentProps,

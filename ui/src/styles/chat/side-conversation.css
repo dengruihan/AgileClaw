@@ -47,6 +47,15 @@
   margin-left: auto;
 }
 
+.chat-side-conversation-status__notice {
+  flex: 1 1 100%;
+  margin: 0;
+  color: var(--danger);
+  font-size: 11px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 /* Parent composer chip for the next-message handoff. */
 .chat-side-conversation-handoff {
   display: flex;

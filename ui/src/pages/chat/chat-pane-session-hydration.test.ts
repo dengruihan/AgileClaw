@@ -188,7 +188,7 @@ describe("chat pane session hydration", () => {
 
     const methods = request.mock.calls.map(([method]) => method);
     expect(methods).toContain("session.discussion.info");
-    expect(methods).toContain("session.discussion.info");
+    expect(methods).toContain(SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD);
   });
 
   it.each([

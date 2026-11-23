@@ -7,6 +7,8 @@ import type { SideConversationSummary } from "../../../lib/chat/side-conversatio
 export type SideConversationStatusProps = {
   marker: SideConversationRowMarker;
   summary: SideConversationSummary | undefined;
+  /** Merge/lifecycle outcome for this child; rendered as an alert in the strip. */
+  notice?: string;
   modelLabel: string | undefined;
   modelInherited: boolean;
   connected: boolean;
@@ -124,6 +126,11 @@ export function renderSideConversationStatus(
             : nothing
         }
       </span>
+      ${
+        props.notice
+          ? html`<p class="chat-side-conversation-status__notice" role="alert">${props.notice}</p>`
+          : nothing
+      }
     </div>
   `;
 }

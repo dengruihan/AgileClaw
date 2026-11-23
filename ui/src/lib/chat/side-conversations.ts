@@ -42,8 +42,8 @@ export function isSideConversationSessionKey(sessionKey: string | null | undefin
 }
 
 /**
- * Caller-owned idempotency key. A retry of the same click reuses the same key
- * so the Gateway returns the child it already created instead of a duplicate.
+ * Caller-owned idempotency key for one user action. Control UI creates a fresh
+ * key per submit; its in-flight guard, not a key retry, prevents a second child.
  */
 export function sideConversationIntentId(): string {
   return `ui-${generateUUID()}`;

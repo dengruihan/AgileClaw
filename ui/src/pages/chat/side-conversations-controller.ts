@@ -57,16 +57,30 @@ function emptyEntry(): ParentEntry {
 }
 
 /**
- * Pane-owned view of one parent's side conversations.
+ * Shared view of a Gateway connection's side conversations, keyed by parent.
  *
- * The Gateway owns membership and lifecycle; this controller only caches the
- * last list response for the connection it came from. A late response from a
- * prior client or parent never replaces a newer view.
+ * Every pane holding the same client reads and notifies one registry, so a
+ * transition started in the parent rail updates the child's status strip (and
+ * the reverse) without waiting for a row-count change. The Gateway owns
+ * membership and lifecycle; a late response from a prior client or parent never
+ * replaces a newer view.
  */
 export class ChatSideConversations {
   private readonly entries = new Map<string, ParentEntry>();
+  private readonly listeners = new Set<() => void>();
 
-  constructor(private readonly notify: () => void = () => {}) {}
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  private notify(): void {
+    for (const listener of Array.from(this.listeners)) {
+      listener();
+    }
+  }
 
   view(
     parentSessionKey: string | null | undefined,
@@ -290,6 +304,18 @@ export class ChatSideConversations {
       this.notify();
     }
   }
+}
+
+const registries = new WeakMap<GatewayBrowserClient, ChatSideConversations>();
+
+/** One registry per Gateway connection; a reconnect yields a fresh client. */
+export function sideConversationsFor(client: GatewayBrowserClient): ChatSideConversations {
+  let registry = registries.get(client);
+  if (!registry) {
+    registry = new ChatSideConversations();
+    registries.set(client, registry);
+  }
+  return registry;
 }
 
 export type SideConversationTargetParams = {

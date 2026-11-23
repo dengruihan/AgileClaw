@@ -95,6 +95,7 @@ type SidebarPanelDefinitionParams = {
   sideConversationDraft: string;
   sideConversationAttachments: ChatAttachment[];
   sideConversationAttachmentReads: ChatAttachmentReadLifecycle;
+  sideConversationSubmitting: boolean;
   sideConversationPresented: PresentationValue;
   sideConversationFocusRequest: (() => boolean) | undefined;
   onSideConversationSubmit: (question: string) => void;
@@ -233,12 +234,12 @@ export function sidebarPanelDefinitions(
         .draft=${params.sideConversationDraft}
         .attachments=${params.sideConversationAttachments}
         .attachmentReads=${params.sideConversationAttachmentReads}
+        .submitting=${params.sideConversationSubmitting}
         .connected=${state?.connected === true}
         .sendShortcut=${state?.settings.chatSendShortcut ?? "enter"}
         .onSubmit=${params.onSideConversationSubmit}
         .onDraftChange=${params.onSideConversationDraftChange}
         .onAttachmentsChange=${params.onSideConversationAttachmentsChange}
-        .onRefresh=${params.onRefreshSideConversations}
         .onOpenConversation=${params.onOpenSideConversation}
         .onCloseConversation=${params.onCloseSideConversation}
         .onReopenConversation=${params.onReopenSideConversation}

@@ -153,24 +153,6 @@ suite.define(() => {
       await expect(page.locator("openclaw-chat-pane")).toHaveCount(2);
       await expect.poll(() => page.url()).toContain(childKey.split(":").slice(2).join("/"));
       await expect(page.locator(".chat-side-conversation-status")).toContainText("Side chat 1");
-      console.log(
-        "REFRESH DIAG:",
-        JSON.stringify(
-          await page.evaluate(() =>
-            [...document.querySelectorAll("openclaw-chat-pane")].map((pane) => ({
-              key: (pane as unknown as { sessionKey?: string }).sessionKey,
-              active: (pane as unknown as { active?: boolean }).active,
-              presented: (pane as unknown as { presented?: boolean }).presented,
-              currentSessionId: (pane as unknown as { state?: { currentSessionId?: string } }).state
-                ?.currentSessionId,
-              loading: (pane as unknown as { state?: { chatLoading?: boolean } }).state
-                ?.chatLoading,
-              htmlLen: pane.innerHTML.length,
-              text: (pane.textContent ?? "").replace(/\s+/g, " ").slice(0, 160),
-            })),
-          ),
-        ),
-      );
       await expect(
         page.locator("openclaw-chat-pane").nth(0).locator(".agent-chat__composer-shell textarea"),
       ).toBeVisible();

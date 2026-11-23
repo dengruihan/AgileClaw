@@ -4,7 +4,7 @@ import type {
   SideConversationsListResult,
 } from "../../../../packages/gateway-protocol/src/index.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import { ChatSideConversations } from "./side-conversations-controller.ts";
+import { ChatSideConversations, sideConversationsFor } from "./side-conversations-controller.ts";
 
 function conversation(
   overrides: Partial<SideConversationSummary> & { sessionKey: string },
@@ -31,9 +31,40 @@ function client(handler: (method: string, params?: unknown) => Promise<unknown>)
 }
 
 describe("ChatSideConversations", () => {
+  it("shares one registry per Gateway client and notifies every subscriber", async () => {
+    const gateway = client(async (method) => {
+      if (method === "sideConversations.list") {
+        return listResult([conversation({ sessionKey: "child" })]);
+      }
+      return { ok: true, conversation: conversation({ sessionKey: "child", state: "closed" }) };
+    });
+    const shared = sideConversationsFor(gateway);
+    expect(sideConversationsFor(gateway)).toBe(shared);
+    expect(sideConversationsFor(client(async () => ({})))).not.toBe(shared);
+    const listener = vi.fn();
+    const unsubscribe = shared.subscribe(listener);
+    await shared.load("agent:main:run", gateway, "main");
+    listener.mockClear();
+    await shared.close({
+      parentSessionKey: "agent:main:run",
+      sessionKey: "child",
+      client: gateway,
+      agentId: "main",
+    });
+    expect(listener).toHaveBeenCalled();
+    unsubscribe();
+    listener.mockClear();
+    await shared.close({
+      parentSessionKey: "agent:main:run",
+      sessionKey: "child",
+      client: gateway,
+      agentId: "main",
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it("loads one parent's registry and ignores an older response", async () => {
-    const notify = vi.fn();
-    const controller = new ChatSideConversations(notify);
+    const controller = new ChatSideConversations();
     let resolveFirst: (value: SideConversationsListResult) => void = () => {};
     const first = new Promise<SideConversationsListResult>((resolve) => {
       resolveFirst = resolve;
