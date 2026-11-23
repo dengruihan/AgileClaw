@@ -46,7 +46,6 @@ export function makeContextParams(
       lifecycle: { closePreludeStarted: false },
       getAttachedGatewayMethodRegistry: vi.fn(() => ({}) as never),
       gatewayTls: { enabled: false },
-      sessionCompanion: {} as never,
       sessionObserver: { removeConnection: vi.fn() } as never,
       mentionInbox: undefined,
       transportBridge: {

@@ -355,7 +355,6 @@ export function createGatewayAuthenticatedRequestDispatcher(params: {
         // Ordinary mutations survive reconnects; an explicit reload wait instead
         // belongs to its requester so disconnect can release its admission fence.
         const cancelOnDisconnect =
-          req.method === "sessions.companion.ask" ||
           (req.method === "plugins.reload" &&
             asOptionalRecord(req.params)?.waitForDrain === true) ||
           (req.method === "node.invoke" &&

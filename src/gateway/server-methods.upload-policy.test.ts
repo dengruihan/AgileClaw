@@ -10,14 +10,9 @@ import { captureGatewayClientUploadCommitGuard } from "./upload-policy.js";
 
 const attachment = { type: "image", mimeType: "image/png", content: "cGljdHVyZQ==" };
 const uploads: Array<[string, Record<string, unknown>]> = [
-  ...[
-    "chat.send",
-    "agent",
-    "sessions.create",
-    "sessions.send",
-    "sessions.steer",
-    "sessions.companion.ask",
-  ].map((method): [string, Record<string, unknown>] => [method, { attachments: [attachment] }]),
+  ...["chat.send", "agent", "sessions.create", "sessions.send", "sessions.steer"].map(
+    (method): [string, Record<string, unknown>] => [method, { attachments: [attachment] }],
+  ),
   ["terminal.upload", { name: "report.txt", contentBase64: "aGVsbG8=" }],
   ["users.setAvatar", { avatarBase64: "cGljdHVyZQ==" }],
   ["agents.create", { avatar: "data:image/png;base64,cGljdHVyZQ==" }],

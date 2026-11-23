@@ -3087,17 +3087,6 @@ async function createChatPickerScenario(
           },
         ],
       },
-      "sessions.companion.ask": {
-        cases: [
-          {
-            match: { sessionKey: OBSERVER_DEMO_SESSION_KEY },
-            response: {
-              answer: "It is rerunning the focused test to check whether the latest fix is stable.",
-              ts: baseTime + 2_000,
-            },
-          },
-        ],
-      },
       // Saturated-main fixture so the debug page and overlay render queued and
       // group-budget states, not just idle lanes.
       "diagnostics.lanes": {

@@ -18,7 +18,6 @@ import {
   createSessionObserverAudience,
   createSessionObserverAudienceLifecycle,
 } from "./session-observer-audience.js";
-import { createSessionObserverCompanionSnapshotReader } from "./session-observer-companion.js";
 import { createSessionObserverCompletion } from "./session-observer-completion.js";
 import type { SessionObserverEvent, SessionObserverService } from "./session-observer-contract.js";
 import { createSessionObserverLifecycle } from "./session-observer-lifecycle.js";
@@ -98,11 +97,6 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
     },
   });
   const { states, dormantRuns, revisionFloors, supersededRuns, disabledRuns } = lifecycle;
-  const getCompanionSnapshot = createSessionObserverCompanionSnapshotReader({
-    getConfig: deps.getConfig,
-    readSession,
-    states,
-  });
   const audience = createSessionObserverAudience({
     subscribers: deps.subscribers,
     sessionEventSubscribers: deps.sessionEventSubscribers,
@@ -678,7 +672,6 @@ export function createSessionObserver(deps: SessionObserverDeps): SessionObserve
         audienceLifecycle.reconcileAll();
       }
     },
-    getCompanionSnapshot,
     dispose() {
       disposed = true;
       pendingTerminalErrors.forEach((_timer, runId) => clearPendingTerminalError(runId));

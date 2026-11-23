@@ -346,13 +346,6 @@ describe("authenticated WebSocket request trace dispatch", () => {
       mode: GATEWAY_CLIENT_MODES.CLI,
       cancel: true,
     },
-    {
-      label: "session companion ask",
-      method: "sessions.companion.ask",
-      id: GATEWAY_CLIENT_IDS.CONTROL_UI,
-      mode: GATEWAY_CLIENT_MODES.UI,
-      cancel: true,
-    },
   ])("preserves pending $label disconnect policy", async (testCase) => {
     const socket = new EventEmitter();
     let disconnected = false;

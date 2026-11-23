@@ -323,9 +323,6 @@ export const validateSessionsFilesAssetsParams = compile(S.SessionsFilesAssetsPa
 export const validateSessionsFilesSetParams = compile(S.SessionsFilesSetParamsSchema);
 export const validateSessionsFilesRevealParams = compile(S.SessionsFilesRevealParamsSchema);
 export const validateSessionsDiffParams = compile(S.SessionsDiffParamsSchema);
-export const validateSessionsCompanionAskParams = compile(S.SessionsCompanionAskParamsSchema);
-export const validateSessionsCompanionStateParams = compile(S.SessionsCompanionStateParamsSchema);
-export const validateSessionsCompanionResetParams = compile(S.SessionsCompanionResetParamsSchema);
 export const validateSessionsActivitySummaryEnsureParams = compile(
   S.SessionsActivitySummaryEnsureParamsSchema,
 );

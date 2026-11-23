@@ -226,7 +226,7 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
     const desktopAvailable = isDesktopPanelAvailable(this.context.gateway.snapshot);
     const companionPresented = slotPresentation("companion");
     // Capture the opening before the lazy rail can yield to newer input intent.
-    this.syncSessionCompanionPresentation(companionPresented.isPresented());
+    this.syncSideChatPresentation(companionPresented.isPresented());
     const browserPresented = {
       owner: this,
       isPresented: () =>
@@ -325,7 +325,7 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       sideConversationAttachments: this.sideConversationAttachments,
       sideConversationSubmitting: this.sideConversationSubmitting(),
       sideConversationAttachmentReads: this.sideConversationAttachmentReads,
-      sideConversationFocusRequest: this.sessionCompanionFocusRequest,
+      sideConversationFocusRequest: this.sideChatFocusRequest,
       sideConversationPresented: companionPresented,
       onSideConversationSubmit: (question) => void this.submitSideConversationQuestion(question),
       onSideConversationDraftChange: this.onSideConversationDraftChange,

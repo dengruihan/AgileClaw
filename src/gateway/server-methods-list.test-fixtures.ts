@@ -47,7 +47,9 @@ sessions.list sessions.subscribe sessions.messages.subscribe sessions.messages.u
 sessions.viewers.set sessions.preview sessions.describe sessions.branches.list
 sessions.branches.switch sessions.rewind sessions.fork sessions.create sessions.recover
 sessions.send sessions.abort sessions.patch sessions.goal.update sessions.goal.clear
-sessions.pluginPatch sessions.cleanup sessions.reset sessions.delete sessions.compact
+sessions.pluginPatch sessions.cleanup sessions.reset sessions.delete
+sideConversations.create sideConversations.list sideConversations.close sideConversations.reopen
+sideConversations.merge sideConversations.abandon sideConversations.delete sessions.compact
 sessions.groups.list sessions.groups.defaults sessions.groups.put sessions.groups.rename
 sessions.groups.update sessions.groups.delete last-heartbeat set-heartbeats wake node.pair.list
 node.pair.approve node.pair.reject node.pair.remove device.pair.list device.pair.approve
@@ -75,7 +77,7 @@ board.prompt.authorize board.data.read board.action sessions.observer.visibility
 session.visibility.set session.members.list session.members.add session.members.remove
 session.suggestions.add session.suggestions.list session.suggestions.resolve
 session.reactions.set session.reactions.list session.typing
-sessions.companion.ask sessions.companion.state sessions.companion.reset memory.search
+memory.search
 skills.proposals.events.list skills.proposals.evaluate hooks.status
 audit.run.inspect sessions.patchMany update.hold sessions.catalog.startTerminal
 worker.desktop.observe projects.list projects.register projects.remove worker.desktop.launch

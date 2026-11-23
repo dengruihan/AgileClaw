@@ -792,48 +792,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
   ),
   pageWatch("ui/src/e2e/chat-session-activity.e2e.test.ts", ["chat"]),
   pageWatch(
-    "ui/src/e2e/chat-session-companion-clear.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/pages/chat/chat-pane.ts",
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-      "ui/src/pages/chat/components/chat-session-rail.ts",
-    ],
-  ),
-  pageWatch(
-    "ui/src/e2e/chat-session-companion-composer.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-      "ui/src/pages/chat/components/chat-session-rail.ts",
-    ],
-  ),
-  pageWatch(
-    "ui/src/e2e/chat-session-companion-focus.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/components/modal-dialog.ts",
-      "ui/src/components/session-menu.ts",
-      "ui/src/lib/sessions/session-capability.ts",
-      "ui/src/pages/chat/chat-pane.ts",
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-      "ui/src/pages/chat/components/chat-session-rail.ts",
-    ],
-  ),
-  pageWatch(
-    "ui/src/e2e/chat-session-companion-manual-open-focus.e2e.test.ts",
-    ["chat", "config"],
-    ["ui/src/pages/chat/chat-pane.ts", "ui/src/pages/chat/components/chat-header-session-menu.ts"],
-  ),
-  pageWatch(
-    "ui/src/e2e/chat-session-companion-retry.e2e.test.ts",
-    ["chat"],
-    [
-      "ui/src/pages/chat/components/chat-header-session-menu.ts",
-      "ui/src/pages/chat/components/chat-session-rail.ts",
-    ],
-  ),
-  pageWatch(
     "ui/src/e2e/chat-session-diff.e2e.test.ts",
     ["chat"],
     [

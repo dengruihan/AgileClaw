@@ -77,7 +77,11 @@ function observeRequests() {
   return { events, finished: finished.promise };
 }
 
-function createRequest(handler: GatewayRequestHandler, method = "health") {
+function createRequest(
+  handler: GatewayRequestHandler,
+  method = "health",
+  params: Record<string, unknown> = {},
+) {
   const observed = observeRequests();
   const socket = new EventEmitter();
   const client = createOperatorWsClient({ socket });
@@ -89,7 +93,7 @@ function createRequest(handler: GatewayRequestHandler, method = "health") {
     socket,
     dispatch: () =>
       harness.dispatcher.dispatch(
-        { type: "req", id: "private-request-id", method, params: {} },
+        { type: "req", id: "private-request-id", method, params },
         client,
       ),
   };
@@ -564,12 +568,16 @@ describe("authenticated Gateway RPC diagnostics", () => {
 
   it("reports request-owned cancellation separately from transport delivery failure", async () => {
     const entered = createDeferredCore();
-    const fixture = createRequest(async ({ signal }) => {
-      const cancelled = createDeferredCore();
-      signal?.addEventListener("abort", () => cancelled.resolve(), { once: true });
-      entered.resolve();
-      await cancelled.promise;
-    }, "sessions.companion.ask");
+    const fixture = createRequest(
+      async ({ signal }) => {
+        const cancelled = createDeferredCore();
+        signal?.addEventListener("abort", () => cancelled.resolve(), { once: true });
+        entered.resolve();
+        await cancelled.promise;
+      },
+      "plugins.reload",
+      { waitForDrain: true },
+    );
     const dispatch = fixture.dispatch();
     try {
       await entered.promise;

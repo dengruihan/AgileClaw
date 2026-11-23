@@ -62,8 +62,6 @@ import { resolveVisibleActiveSessionRunState } from "./server-methods/session-ac
 import { resolveSessionScopeRoot } from "./server-methods/session-device-scope.js";
 import { createSessionActivitySummaries } from "./session-activity-summaries.js";
 import { broadcastSessionActivitySummary } from "./session-activity-summary-events.js";
-import { defaultSessionCompanionContextReader } from "./session-companion-context.js";
-import { createSessionCompanion } from "./session-companion.js";
 import { createSessionLifecyclePersistenceOwner } from "./session-lifecycle-persistence-owner.js";
 import { sessionObserverScopeKey } from "./session-observer-model.js";
 import { createSessionObserver } from "./session-observer.js";
@@ -171,17 +169,10 @@ export function startGatewayEventSubscriptions(params: {
     sessionEventSubscribers: params.sessionEventSubscribers,
     broadcastToConnIds: params.broadcastToConnIds,
   });
-  const sessionCompanion = createSessionCompanion({
-    scheduler: params.scheduler,
-    contextReader: defaultSessionCompanionContextReader,
-    getConfig: getRuntimeConfig,
-    sessionObserver,
-  });
   let sessionBackgroundStop: Promise<void> | undefined;
   // Auxiliary model calls can inherit request work; cancel before that work drains.
   const stopSessionBackgroundWork = (): void => {
     if (!sessionBackgroundStop) {
-      sessionCompanion.dispose();
       sessionObserver.dispose();
       sessionBackgroundStop = sessionActivitySummaries.dispose();
       void sessionBackgroundStop.catch((error: unknown) => {
@@ -678,7 +669,6 @@ export function startGatewayEventSubscriptions(params: {
     channelAdmissionAudit,
     reconcileAuditPolicy,
     sessionActivitySummaries,
-    sessionCompanion,
     sessionObserver,
     agentUnsub,
     heartbeatUnsub,

@@ -299,45 +299,6 @@ describe("authenticated WebSocket request cancellation", () => {
     expect(completed).toBe(true);
   });
 
-  it("cancels a session companion ask when its authenticated socket closes", async () => {
-    const socket = new EventEmitter();
-    const { client, dispatcher } = createDispatcher(socket, {
-      id: GATEWAY_CLIENT_IDS.CONTROL_UI,
-      mode: GATEWAY_CLIENT_MODES.UI,
-    });
-    const invoked = createDeferredCore();
-    const abortObserved = createDeferredCore();
-    let observedSignal: AbortSignal | undefined;
-    handleGatewayRequest.mockImplementation(async (options: GatewayRequestOptions) => {
-      observedSignal = options.signal;
-      options.signal?.addEventListener("abort", () => abortObserved.resolve(), { once: true });
-      invoked.resolve();
-      await abortObserved.promise;
-    });
-
-    const dispatch = dispatcher.dispatch(
-      {
-        type: "req",
-        id: "session-companion",
-        method: "sessions.companion.ask",
-        params: { sessionKey: "agent:main:main", question: "What changed?" },
-      },
-      client,
-    );
-    try {
-      // Wait for the handler to own its abort listener before closing the socket.
-      await invoked.promise;
-      expect(socket.listenerCount("close")).toBe(1);
-      socket.emit("close", 1000, Buffer.alloc(0));
-      await abortObserved.promise;
-      expect(observedSignal?.aborted).toBe(true);
-    } finally {
-      socket.emit("close", 1000, Buffer.alloc(0));
-      await dispatch;
-    }
-    expect(socket.listenerCount("close")).toBe(0);
-  });
-
   it.each([
     {
       label: "control UI",

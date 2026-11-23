@@ -357,9 +357,6 @@ function handleSessionsChangedEvent(
   );
   const source = asNullableRecord(payload);
   const resetsSession = source?.reason === "reset" || source?.phase === "reset";
-  if (event && (resetsSession || source?.reason === "new")) {
-    state.retireSessionCompanion?.(event.key, event.agentId);
-  }
   const resetsSelectedSession = matchesChat && resetsSession;
   if (matchesChat && (resetsSession || source?.reason === "new")) {
     const initial = state.chatSubmissions?.readInitial(state.sessionKey, state.client ?? null);

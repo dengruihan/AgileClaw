@@ -52,7 +52,6 @@ function createReconnectRequest(startup: ChatHistoryResult | Promise<ChatHistory
     "sessions.messages.subscribe": (params: { key: string }) => ({ key: params.key }),
     "question.list": { questions: [] },
     "taskSuggestions.list": { suggestions: [] },
-    "sessions.companion.state": { exchanges: [] },
   });
 }
 

@@ -64,26 +64,27 @@ use a direct one-shot provider call instead.
 
 ## What it does not do
 
-`/btw` does not create a durable session, continue the unfinished main task,
-or persist question/answer data to transcript history. Detached BTW results do
-not survive a reload. Control UI Side chat can rehydrate its in-memory
-thread after a reload, but the thread is cleared by a session reset, Gateway
-restart, idle expiry, or the rail's clear button.
+`/btw` does not continue the unfinished main task. Detached BTW results do not
+survive a reload and are not written to the main transcript. Control UI Side
+chat is a real hidden child session: `/btw` and `/side` open it as a side pane,
+it keeps its own transcript and model selection, and it survives a reload until
+you close, merge, or abandon it.
 
 ## Delivery model
 
 Normal assistant chat uses the Gateway `chat` event. Detached BTW uses a
 separate `chat.side_result` event so clients cannot mistake it for regular
-conversation history. The Control UI does not consume that event; it calls the
-`sessions.companion.*` RPCs and renders their bounded exchange state in the rail.
+conversation history. The Control UI does not consume that event; it opens a
+hidden child session through `sideConversations.*`, sends the question with
+`chat.send`, and renders the child's own transcript in the side pane.
 
 ## Surface behavior
 
-| Surface           | Behavior                                                                                                                                                                                                                                     |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TUI               | Rendered inline in the chat log, visibly distinct from a normal reply, dismissible with `Enter` or `Esc`.                                                                                                                                    |
-| External channels | Delivered as a clearly labeled one-off reply (Telegram, WhatsApp, Discord have no local ephemeral overlay).                                                                                                                                  |
-| Control UI / web  | Routes `/btw` and `/side` to the expanded Side chat. The read-only thread is keyed by session, rehydrates from Gateway memory, and preserves a failed question for Retry. It can be cleared with the trash button. `Esc` collapses the rail. |
+| Surface           | Behavior                                                                                                                                                                                               |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TUI               | Rendered inline in the chat log, visibly distinct from a normal reply, dismissible with `Enter` or `Esc`.                                                                                              |
+| External channels | Delivered as a clearly labeled one-off reply (Telegram, WhatsApp, Discord have no local ephemeral overlay).                                                                                            |
+| Control UI / web  | Routes `/btw` and `/side` to an expanded Side chat child session. Closing the child leaves a handoff for the next user turn; merging or abandoning it settles the side work. `Esc` collapses the pane. |
 
 ## Selection popup (Control UI)
 

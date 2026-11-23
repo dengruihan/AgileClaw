@@ -148,7 +148,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
     this.nativeDraftCleanup = null;
     if (!this.state || !this.active || !this.presented) {
       // Returning to this pane must not revive a command's deferred focus intent.
-      this.sessionCompanionFocusGeneration += 1;
+      this.sideChatFocusGeneration += 1;
       return;
     }
     this.nativeDraftCleanup = this.context.nativeChatDrafts.subscribe((draft) => {
@@ -162,11 +162,11 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
   }
 
   private readonly handlePaneInput = () => {
-    this.sessionCompanionFocusGeneration += 1;
+    this.sideChatFocusGeneration += 1;
   };
 
   protected readonly handlePaneFocus = () => {
-    this.sessionCompanionFocusGeneration += 1;
+    this.sideChatFocusGeneration += 1;
     chatInputOwnerForContext(this.context).claim(this.inputRegion);
     this.onFocusPane?.(this.paneId);
   };
@@ -338,8 +338,6 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
     };
     pageState.refreshSessionPullRequests = (options) => this.refreshSessionPullRequests(options);
     pageState.openSideConversation = (question) => this.openSideConversation(pageState, question);
-    pageState.retireSessionCompanion = (key, agentId) =>
-      this.sessionCompanionThreads.retire(key, agentId);
     this.state = pageState;
     if (this.sessionKey) {
       const initialSessionKey = this.setPaneSessionKey(this.sessionKey);
@@ -649,7 +647,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
   override disconnectedCallback() {
     disposeChatReveal(this.paneId);
     this.activeSessionResources.sync(null);
-    this.syncSessionCompanionPresentation(false);
+    this.syncSideChatPresentation(false);
     this.composerPresentation?.dispose();
     this.composerPresentation = undefined;
     if (this.state) {

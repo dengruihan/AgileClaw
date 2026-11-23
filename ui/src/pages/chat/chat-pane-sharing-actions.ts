@@ -17,7 +17,6 @@ import {
 import { showToast } from "../../lib/toast.ts";
 import type { ChatPaneConnectionScope } from "./chat-pane-shared.ts";
 import { ChatPaneSidePanels } from "./chat-pane-side-panels.ts";
-import { resetSessionCompanion } from "./chat-session-companion.ts";
 import { resolveChatAgentId } from "./chat-state-route.ts";
 import {
   canManageChatSessionSharing,
@@ -27,26 +26,6 @@ import {
 const SESSION_MEMBERS_LIST_METHOD = "session.members.listEvidence";
 
 export abstract class ChatPaneSharingActions extends ChatPaneSidePanels {
-  protected readonly clearSessionCompanion = async () => {
-    const scope = this.captureConnectionScope();
-    const key = scope?.state.sessionKey;
-    if (!scope || !key) {
-      return;
-    }
-    const agentId = resolveChatAgentId(scope.state);
-    await this.sessionCompanionThreads
-      .reset(key, (sessionKey) => resetSessionCompanion(scope.client, sessionKey, agentId), agentId)
-      .catch((error: unknown) => {
-        if (
-          this.presented &&
-          this.isConnectionScopeCurrent(scope) &&
-          scope.state.sessionKey === key
-        ) {
-          this.publishHeaderError(error);
-        }
-      });
-  };
-
   protected setSessionSharingState(cacheKey: string, state: ChatSessionSharingState): void {
     this.sessionSharingStates = new Map(this.sessionSharingStates).set(cacheKey, state);
   }

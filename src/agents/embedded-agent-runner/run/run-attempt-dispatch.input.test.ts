@@ -1,12 +1,19 @@
 import fs from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
-import { SessionCompanionAskError } from "../../../gateway/session-companion-errors.js";
-import { assertSessionCompanionImageInput } from "../../../gateway/session-companion-policy.js";
 import type { Model } from "../../../llm/types.js";
 import { makeProviderModelFixture } from "../../test-helpers/provider-model-fixture.js";
 import { prepareAndDispatchEmbeddedRunAttempt } from "./run-attempt-dispatch.js";
 
 afterEach(() => vi.restoreAllMocks());
+
+/** Stand-in for a caller-owned image-input admission guard. */
+class UnsupportedModelInputError extends Error {}
+
+function assertImageInput(model: Pick<Model, "input">): void {
+  if (!model.input?.includes("image")) {
+    throw new UnsupportedModelInputError("The prepared model cannot read images.");
+  }
+}
 
 function fixture(supportsImages = false, assertModelInput?: (model: Pick<Model, "input">) => void) {
   const model = makeProviderModelFixture({
@@ -38,7 +45,7 @@ function fixture(supportsImages = false, assertModelInput?: (model: Pick<Model, 
 it.each([false, true])(
   "admits the actual prepared model before dispatch (image support: %s)",
   async (supportsImages) => {
-    const guard = vi.fn(assertSessionCompanionImageInput);
+    const guard = vi.fn(assertImageInput);
     const { input, snapshot, model } = fixture(supportsImages, guard);
     const afterAdmission = new Error(
       "Admission complete; stop before workspace and backend effects",
@@ -51,7 +58,7 @@ it.each([false, true])(
       expect(guard.mock.invocationCallOrder[0]).toBeLessThan(mkdir.mock.invocationCallOrder[0]!);
     } else {
       await expect(prepareAndDispatchEmbeddedRunAttempt(input)).rejects.toBeInstanceOf(
-        SessionCompanionAskError,
+        UnsupportedModelInputError,
       );
       expect(mkdir).not.toHaveBeenCalled();
     }
