@@ -1,4 +1,5 @@
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
+import { formatErrorMessage } from "../../../infra/errors.js";
 import type { ImageContent } from "../../../llm/types.js";
 import type { createTrajectoryRuntimeRecorder } from "../../../trajectory/runtime.js";
 import type { Agent, AgentMessage } from "../../runtime/index.js";
@@ -11,6 +12,7 @@ import {
 import type { AgentSession } from "../../sessions/index.js";
 import { withSessionManagerWrite } from "../../sessions/session-manager-write-admission.js";
 import { ackPendingAgentSteeringItems } from "../../subagents/registry/subagent-registry.js";
+import { log } from "../logger.js";
 import {
   declarePromptHistoryRewrite,
   recordAggregateTruncation,
@@ -102,6 +104,12 @@ export async function submitEmbeddedAttemptPrompt(input: {
     | undefined;
   /** Observes only the first admitted foreground dispatch, not preflight/compaction. */
   onPrimaryModelRequest?: (tools: NonNullable<Parameters<StreamFn>[1]["tools"]>) => void;
+  /**
+   * Runs once after the first admitted foreground provider request is actually
+   * dispatched (the stream call returned), never for preflight or compaction.
+   * Failures are logged: accepted sends must not become ambiguous results.
+   */
+  onPrimaryModelDispatched?: () => Promise<void> | void;
   onSteeringAcknowledged: () => void;
   persistToolResultProjections: () => Promise<void>;
   prependContext?: string;
@@ -135,6 +143,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
       : undefined;
 
   let primaryRequestObserved = false;
+  let primaryRequestDispatched = false;
   const installProviderPromptHistoryTransform = (): (() => void) => {
     const baseStreamFn = activeSession.agent.streamFn;
     const basePrepareNextTurn = activeSession.agent.prepareNextTurnWithContext;
@@ -266,6 +275,21 @@ export async function submitEmbeddedAttemptPrompt(input: {
         primaryRequestObserved = true;
         input.onPrimaryModelRequest?.(requestContext.tools ?? []);
       }
+      // The provider request is dispatched only when this call returns. Prompt
+      // assembly may claim model-only context, but its delivery receipt commits
+      // here so a pre-send failure leaves it pending for the next user message.
+      const dispatchProviderRequest = async (request: Parameters<StreamFn>[1]) => {
+        const stream = await baseStreamFn(model, request, options);
+        if (foregroundRequest && !primaryRequestDispatched) {
+          primaryRequestDispatched = true;
+          try {
+            await input.onPrimaryModelDispatched?.();
+          } catch (error) {
+            log.warn(`primary model dispatch observer failed: ${formatErrorMessage(error)}`);
+          }
+        }
+        return stream;
+      };
       // Real next model-call boundary: atomically install background material
       // after settled tool results, durable in the transcript, visible to this
       // dispatch and to the live loop context from the next turn on.
@@ -296,7 +320,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "authority-revoked",
             );
-            return await baseStreamFn(model, requestContext, options);
+            return await dispatchProviderRequest(requestContext);
           }
           const assertCurrent = () => {
             options?.signal?.throwIfAborted();
@@ -322,7 +346,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "installation-failed-or-revoked",
             );
-            return await baseStreamFn(model, requestContext, options);
+            return await dispatchProviderRequest(requestContext);
           }
           // Re-assert after the install await: revoked material stays recorded in
           // the transcript but never joins the request or the live loop context.
@@ -333,8 +357,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "authority-revoked-after-install",
             );
-            const stream = await baseStreamFn(model, requestContext, options);
-            return stream;
+            return await dispatchProviderRequest(requestContext);
           }
           markAttemptTurnContextCarriers(input.turnContextRunId, admitted, "installed");
           submittedCarriers = admitted;
@@ -367,7 +390,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
       }
       let stream;
       try {
-        stream = await baseStreamFn(model, requestContext, options);
+        stream = await dispatchProviderRequest(requestContext);
       } catch (error) {
         markAttemptTurnContextCarriers(
           input.turnContextRunId,

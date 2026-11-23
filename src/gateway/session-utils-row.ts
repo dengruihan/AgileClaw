@@ -38,6 +38,7 @@ import {
 import { projectPluginSessionExtensionsSync } from "../plugins/host-hook-state.js";
 import type { PluginMetadataSnapshot } from "../plugins/plugin-metadata-snapshot.types.js";
 import { resolveActiveSessionAgentStatus } from "../sessions/session-agent-status.js";
+import { resolveSideConversationHandoffCount } from "../sessions/side-conversation-handoff-queue.js";
 import { deriveSessionUnread } from "../shared/session-unread.js";
 import type { SessionRepositoryWorkspaceRecord } from "../state/session-repository-workspaces.types.js";
 import { resolveActiveFallbackState } from "../status/fallback-notice-state.js";
@@ -579,6 +580,8 @@ export function materializeSessionRow(input: ReturnType<typeof readSessionRowInp
     // Side-conversation children stay hidden; the parent exposes only the count.
     sideConversation: entry?.sideConversation,
     sideConversationCount: entry ? resolveSideConversationCount(entry) : undefined,
+    // Pending handoffs only; a delivered reminder never keeps the chip alive.
+    handoffCount: entry ? resolveSideConversationHandoffCount(entry) || undefined : undefined,
     responseUsage: entry?.responseUsage,
     effectiveResponseUsage: resolveEffectiveResponseUsage(
       entry?.responseUsage,

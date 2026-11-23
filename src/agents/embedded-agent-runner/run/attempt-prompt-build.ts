@@ -14,6 +14,7 @@ import {
 } from "../../../infra/heartbeat-summary.js";
 import type { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { buildInterSessionPromptContext } from "../../../sessions/input-provenance.js";
+import { claimSideConversationHandoffPrompt } from "../../../sessions/side-conversation-handoff.js";
 import { joinPresentTextSegments } from "../../../shared/text/join-segments.js";
 import { resolveAdmittedRunActiveAssertion } from "../../admitted-run-context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
@@ -165,6 +166,22 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
         hookRunner: input.hookRunner,
       });
 
+  // A closed side conversation's reminder belongs only to the parent's own next
+  // external user message. The claim is run-scoped (identical retries) and its
+  // delivery is committed by the dispatch seam, never while assembling.
+  const handoffClaim = preserveExactPrompt
+    ? undefined
+    : await claimSideConversationHandoffPrompt({
+        runId: attempt.runId,
+        sessionKey: attempt.sessionKey,
+        sessionTarget: attempt.sessionTarget,
+        trigger: attempt.trigger,
+        ...(attempt.internalEvents?.length ? { hasInternalEvents: true } : {}),
+        ...(attempt.operation ? { operation: attempt.operation } : {}),
+        ...(attempt.inputProvenance ? { inputProvenance: attempt.inputProvenance } : {}),
+        ...(attempt.skipPreparedUserTurnMessage ? { skipPreparedUserTurnMessage: true } : {}),
+      });
+
   let leasedSteering: EmbeddedAttemptSteeringLease | undefined;
   let leasedSteeringPrompt: string | undefined;
   if (attempt.sessionKey && !preserveExactPrompt) {
@@ -311,6 +328,7 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
   const promptBuildPrependContext = joinHookContext(
     hookResult?.prependContext,
     authorizedHookResult?.prependContext,
+    handoffClaim?.prependContext,
   );
   const promptBuildAppendContext = joinHookContext(
     hookResult?.appendContext,
@@ -435,6 +453,7 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
     promptBuildAppendContext,
     effectiveTranscriptPrompt,
     originContext,
+    ...(handoffClaim ? { handoffDispatch: handoffClaim.dispatch } : {}),
     transcriptLeafId,
     heartbeatSummary,
     leasedSteering,

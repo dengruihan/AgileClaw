@@ -627,6 +627,51 @@ export type SessionProfileInvolvement = {
   lastMention?: { generation: string; sequence: number; timestamp: number };
 };
 
+/** Bounded Git facts captured when a side conversation closes with changes. */
+export type SideConversationHandoffFacts = {
+  /** Child branch, when the child owned one at close. */
+  branch?: string;
+  /** Child checkout path, while that checkout was still live. */
+  path?: string;
+  /** Base the child branch was started from, when recorded. */
+  baseRef?: string;
+  /** Abbreviated child HEAD commit, when resolvable. */
+  headCommit?: string;
+  /** Uncommitted/untracked files at close, capped for the reminder. */
+  changedFiles?: number;
+  /** Child-branch commits not reachable from the parent base at close. */
+  commitsAhead?: number;
+};
+
+/** One closed side conversation awaiting its single next-parent-message reminder. */
+export type SideConversationHandoffNotice = {
+  /** Monotonic per-parent order; identifies the exact queued notice. */
+  sequence: number;
+  sessionKey: string;
+  intentId: string;
+  ordinal: number;
+  title?: string;
+  closedAt: number;
+  worktree?: SideConversationHandoffFacts;
+};
+
+/**
+ * Private parent-owned handoff queue for closed side conversations.
+ *
+ * The owner is `src/sessions/side-conversation-handoff.ts`: close appends one
+ * bounded notice, the next real external user turn drains it once, and reopen
+ * cancels the still-pending notices. Only the pending count is projected.
+ */
+export type SideConversationHandoffQueue = {
+  version: 1;
+  /** Next monotonic sequence; kept when the queue empties so ids never repeat. */
+  nextSequence: number;
+  /** Pending notices, oldest first, bounded by the owner's cap. */
+  pending: SideConversationHandoffNotice[];
+  /** Notices evicted by the pending cap; surfaced once, never replayed. */
+  droppedCount?: number;
+};
+
 export type InternalSessionEntryCore = SessionEntryCore & {
   /** Personal discovery state, never participation, attribution, or sharing authority. */
   profileInvolvement?: { key: string; profiles: Record<string, SessionProfileInvolvement> };
@@ -664,6 +709,8 @@ export type InternalSessionEntryCore = SessionEntryCore & {
    * parent. Only `sideConversationCount` is projected publicly.
    */
   sideConversations?: import("./side-conversation-types.js").SideConversationParentRegistry;
+  /** Private pending next-user-message handoffs for closed side conversations. */
+  sideConversationHandoffs?: SideConversationHandoffQueue;
 };
 
 export interface InternalSessionEntry extends InternalSessionEntryCore {}

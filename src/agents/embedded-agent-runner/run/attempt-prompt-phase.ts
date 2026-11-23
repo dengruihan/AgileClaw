@@ -468,6 +468,9 @@ export async function runEmbeddedAttemptPromptPhase(
             trace: runTrace,
           });
         },
+        ...(promptAssembly.handoffDispatch
+          ? { onPrimaryModelDispatched: promptAssembly.handoffDispatch }
+          : {}),
         onSteeringAcknowledged: () => {
           leasedSteering = undefined;
         },
