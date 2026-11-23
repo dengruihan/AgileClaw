@@ -72,6 +72,7 @@ import { renderChatSelectionAnnotations } from "./components/chat-selection-anno
 import { createChatSelectionAttachment } from "./components/chat-selection-attachment.ts";
 import { showChatAnnotationEditor } from "./components/chat-selection-popup.ts";
 import { renderChatSessionSuggestions } from "./components/chat-session-suggestions.ts";
+import { renderSideConversationHandoffChip } from "./components/chat-side-conversation-handoff-chip.ts";
 import { renderChatSwarmProgress } from "./components/chat-swarm-progress.ts";
 import {
   renderChatTaskSuggestionTray,
@@ -112,7 +113,13 @@ export type ChatProps = Omit<
   Omit<ChatComposerProps, "notices" | "footerContent" | "disabled" | "onOpenImage"> &
   ChatTaskSuggestionTrayProps &
   ChatPlacementStartupNoticeProps & {
-    onCompanionStageAttachment?: (attachment: ChatAttachment, sourceSessionKey: string) => boolean;
+    onSideConversationSelection?: (attachment: ChatAttachment, sourceSessionKey: string) => boolean;
+    sideConversationHandoff?: {
+      count: number;
+      connected: boolean;
+      pending: boolean;
+      onCancel: () => void;
+    };
     transcript: ChatTranscriptController;
     asyncQuestionStorage?:
       | import("../../lib/chat/composer-draft-store.runtime.ts").DurableComposerDraftScope
@@ -314,13 +321,13 @@ export function renderChat(props: ChatProps) {
         onRetryQueuedMessage: props.connected && canCompose ? props.onQueueRetry : undefined,
         onDiscardQueuedMessage: props.onQueueRemove,
         onCompanionSelection:
-          props.canSend && !props.suggestionComposer && props.onCompanionStageAttachment
+          props.canSend && !props.suggestionComposer && props.onSideConversationSelection
             ? (selection, anchorRect) =>
                 openSelectionComment(
                   selection,
                   anchorRect,
                   (attachment) =>
-                    props.onCompanionStageAttachment?.(attachment, props.sessionKey) ?? false,
+                    props.onSideConversationSelection?.(attachment, props.sessionKey) ?? false,
                   undefined,
                   true,
                 )
@@ -363,6 +370,11 @@ export function renderChat(props: ChatProps) {
     props.presented ?? true,
   );
   const footerContent = html`${
+      props.sideConversationHandoff
+        ? renderSideConversationHandoffChip(props.sideConversationHandoff)
+        : nothing
+    }
+    ${
       pendingInputs &&
       (pendingInputs.error ||
         pendingInputs.page.nextBefore !== undefined ||

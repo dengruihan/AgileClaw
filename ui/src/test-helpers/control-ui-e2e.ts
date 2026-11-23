@@ -4,7 +4,11 @@ import { existsSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { HelloOk, MessageReactionSummary } from "@openclaw/gateway-protocol";
+import type {
+  HelloOk,
+  MessageReactionSummary,
+  SideConversationSummary,
+} from "@openclaw/gateway-protocol";
 import { normalizeAgentId } from "@openclaw/normalization-core/agent-id";
 import { buildControlUiSessionPath } from "@openclaw/session-url-contract";
 import type { Locator, Page } from "playwright";
@@ -486,6 +490,8 @@ export type ControlUiMockGatewayScenario = {
   sessionInfo?: Record<string, unknown> | null;
   /** Canonical fixture rows, independent of case/sequence/deferred wire overrides. */
   sessions?: ControlUiSessionFixture[];
+  /** Parent-owned side-conversation registry; create/transitions mutate this state. */
+  sideConversations?: SideConversationSummary[];
   /** Partition sessions.list fixtures by archived state after applying patches. */
   sessionArchiveFiltering?: boolean;
   models?: ModelCatalogEntry[];
@@ -973,6 +979,7 @@ function normalizeScenario(
     ],
     repeatingSessionEvents: scenario.repeatingSessionEvents ?? { events: [] },
     sessionInfo: scenario.sessionInfo ?? null,
+    sideConversations: scenario.sideConversations ?? [],
     sessions:
       scenario.sessions ??
       staticList?.sessions ??
@@ -1116,6 +1123,31 @@ function installControlUiMockGateway(
   const requests: MockGatewayRequest[] = [];
   const requestHandlers = new Map<string, ControlUiMockRequestHandler>();
   const pendingApprovals = new Map<string, Map<string, Record<string, unknown>>>();
+  // Side-conversation registry mirrors the Gateway's parent-owned membership so
+  // create/list/transition round-trips stay deterministic without hand responses.
+  // sessionStorage keeps created children resolvable across a page reload.
+  const sideConversationsStateKey = "openclaw.control-ui-e2e.side-conversations.v1";
+  let sideConversations = [...scenario.sideConversations];
+  let sideConversationSequence = 0;
+  try {
+    const storedSideConversations = window.sessionStorage.getItem(sideConversationsStateKey);
+    const parsedSideConversations = storedSideConversations
+      ? (JSON.parse(storedSideConversations) as unknown)
+      : null;
+    if (Array.isArray(parsedSideConversations)) {
+      sideConversations = parsedSideConversations as SideConversationSummary[];
+      sideConversationSequence = sideConversations.length;
+    }
+  } catch {
+    // The scenario registry remains authoritative without browser storage.
+  }
+  const persistSideConversations = () => {
+    try {
+      window.sessionStorage.setItem(sideConversationsStateKey, JSON.stringify(sideConversations));
+    } catch {
+      // Current-document transitions still apply.
+    }
+  };
   let canonicalSessionRows = scenario.sessions;
   let hasCanonicalSessionsOverride = false;
   try {
@@ -1142,6 +1174,107 @@ function installControlUiMockGateway(
     // preserves the same exact owner rows used by CAS, describe, and startup.
     sessions.replaceCanonicalList(canonicalSessionRows);
   }
+  const sideConversationRow = (summary: SideConversationSummary) => ({
+    key: summary.sessionKey,
+    displayName: summary.title ?? `Side chat ${summary.ordinal}`,
+    kind: "direct",
+    model: summary.model ?? "gpt-5.5",
+    modelProvider: summary.modelProvider ?? "openai",
+    modelOverrideSource: "inherited",
+    updatedAt: summary.updatedAt,
+    sideConversation: {
+      parentSessionKey: summary.parentSessionKey,
+      intentId: summary.intentId,
+      ordinal: summary.ordinal,
+      state: summary.state,
+      createdAt: summary.createdAt,
+      updatedAt: summary.updatedAt,
+    },
+  });
+  // Hidden children store exact rows without joining list membership.
+  for (const summary of sideConversations) {
+    sessions.add(summary.sessionKey, sideConversationRow(summary));
+  }
+  const sideConversationByKey = (sessionKey: unknown) =>
+    typeof sessionKey === "string"
+      ? sideConversations.find((conversation) => conversation.sessionKey === sessionKey)
+      : undefined;
+  const sideConversationScope = (params: unknown) => {
+    const parentSessionKey =
+      isRecord(params) && typeof params.parentSessionKey === "string"
+        ? params.parentSessionKey.trim()
+        : "";
+    const agentId =
+      isRecord(params) && typeof params.agentId === "string" ? params.agentId.trim() : "";
+    return { parentSessionKey, agentId };
+  };
+  const sideConversationCreate = (params: unknown) => {
+    const { parentSessionKey, agentId } = sideConversationScope(params);
+    const intentId =
+      isRecord(params) && typeof params.intentId === "string" ? params.intentId.trim() : "";
+    if (!parentSessionKey || !intentId) {
+      return { __mockError: { code: "INVALID_REQUEST", message: "side conversation target" } };
+    }
+    const existing = sideConversations.find(
+      (conversation) =>
+        conversation.parentSessionKey === parentSessionKey && conversation.intentId === intentId,
+    );
+    if (existing) {
+      return { ok: true, created: false, conversation: existing };
+    }
+    const parentAgentId = agentId || parentSessionKey.split(":")[1] || scenario.defaultAgentId;
+    const ordinal =
+      Math.max(
+        0,
+        ...sideConversations
+          .filter((conversation) => conversation.parentSessionKey === parentSessionKey)
+          .map((conversation) => conversation.ordinal),
+      ) + 1;
+    const digest = (++sideConversationSequence).toString(16).padStart(32, "0");
+    const sessionKey = `agent:${parentAgentId}:dashboard:side-${digest}`;
+    const now = Date.now();
+    const summary: SideConversationSummary = {
+      sessionKey,
+      sessionId: `session:${sessionKey}`,
+      parentSessionKey,
+      intentId,
+      ordinal,
+      state: "open",
+      createdAt: now,
+      updatedAt: now,
+      isolation: { filesystem: "worktree", externalState: "shared" },
+      worktree: {
+        id: `wt-${digest.slice(-8)}`,
+        branch: `side/${digest.slice(-8)}`,
+        path: `/mock/worktrees/${digest.slice(-8)}`,
+        baseRef: "mock-base",
+      },
+    };
+    sideConversations.push(summary);
+    sessions.add(sessionKey, sideConversationRow(summary));
+    persistSideConversations();
+    return { ok: true, created: true, conversation: summary };
+  };
+  const sideConversationTransition = (
+    params: unknown,
+    nextState: SideConversationSummary["state"],
+  ) => {
+    const conversation = sideConversationByKey(isRecord(params) ? params.sessionKey : undefined);
+    if (!conversation) {
+      return { __mockError: { code: "NOT_FOUND", message: "side conversation not found" } };
+    }
+    const now = Date.now();
+    Object.assign(conversation, {
+      state: nextState,
+      updatedAt: now,
+      ...(nextState === "closed" ? { closedAt: now } : {}),
+    });
+    if (nextState === "open") {
+      delete conversation.closedAt;
+    }
+    persistSideConversations();
+    return { ok: true, conversation };
+  };
   const subscriptionRouting = createSubscriptions(scenario, isRecord);
   const terminalSessions = new Map<string, MockTerminalSession>();
   let terminalSessionSequence = 0;
@@ -1825,6 +1958,34 @@ function installControlUiMockGateway(
         : configuredValue;
     }
     switch (method) {
+      case "sideConversations.list": {
+        const { parentSessionKey } = sideConversationScope(params);
+        const state =
+          isRecord(params) && typeof params.state === "string" ? params.state : undefined;
+        return {
+          ok: true,
+          parentSessionKey,
+          sideConversations: sideConversations.filter(
+            (conversation) =>
+              conversation.parentSessionKey === parentSessionKey &&
+              (state === undefined || conversation.state === state),
+          ),
+        };
+      }
+      case "sideConversations.create":
+        return sideConversationCreate(params);
+      case "sideConversations.close":
+        return sideConversationTransition(params, "closed");
+      case "sideConversations.reopen":
+        return sideConversationTransition(params, "open");
+      case "sideConversations.abandon":
+        return sideConversationTransition(params, "abandoned");
+      case "sideConversations.merge": {
+        const result = sideConversationTransition(params, "merged");
+        return "ok" in result
+          ? { ...result, alreadyMerged: false, mergeCommit: "mock-merge-commit" }
+          : result;
+      }
       case "session.reactions.list":
         return reactionFixtures.list(params);
       case "session.reactions.set":

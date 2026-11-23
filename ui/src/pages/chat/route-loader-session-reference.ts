@@ -4,6 +4,7 @@ import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { pathForRoute } from "../../app-route-paths.ts";
 import { waitForGatewayClient } from "../../app/gateway-readiness.ts";
 import type { BoardFace } from "../../lib/board/settings.ts";
+import { isSideConversationSessionKey } from "../../lib/chat/side-conversations.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
 import {
   buildAgentMainSessionKey,
@@ -107,13 +108,20 @@ export async function querySessionReference(
           return null;
         }
         try {
-          const result = await client.request<SessionsResolveResult>("sessions.resolve", {
-            reference: { key: search.key, ...(search.slug ? { slug: search.slug } : {}) },
-            agentId: search.agentId,
-            includeGlobal: true,
-            includeUnknown: true,
-            allowMissing: true,
-          });
+          // Side-conversation children never appear in a roster, so URL discovery
+          // would hide them. Their exact key is still a proof-of-knowledge read.
+          const result = await client.request<SessionsResolveResult>(
+            "sessions.resolve",
+            isSideConversationSessionKey(search.key)
+              ? { key: search.key, agentId: search.agentId, allowMissing: true }
+              : {
+                  reference: { key: search.key, ...(search.slug ? { slug: search.slug } : {}) },
+                  agentId: search.agentId,
+                  includeGlobal: true,
+                  includeUnknown: true,
+                  allowMissing: true,
+                },
+          );
           return isCurrent() ? sessionReferenceResolution(result) : null;
         } catch (error) {
           // Reconnects abandon old discovery; current failures belong to the route's error view.

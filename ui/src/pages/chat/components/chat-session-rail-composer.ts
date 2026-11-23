@@ -3,12 +3,12 @@ import { ref } from "lit/directives/ref.js";
 import type { ChatSendShortcut } from "../../../app/settings.ts";
 import { icons } from "../../../components/icons.ts";
 import { t } from "../../../i18n/index.ts";
+import type { ChatAttachment } from "../../../lib/chat/chat-types.ts";
 import {
   clearCompositionEnd,
   isComposingKeyboardEvent,
   recordCompositionEnd,
 } from "../../../lib/ime.ts";
-import type { ChatSessionCompanionThread } from "../chat-session-companion.ts";
 import type { ChatAttachmentControlsProps } from "./chat-attachment-controls.types.ts";
 import {
   handleChatAttachmentPaste,
@@ -22,10 +22,15 @@ import {
   scheduleTextareaHeightAdjustment,
 } from "./chat-composer-dom.ts";
 
-export function sessionRailQuestion(companion: ChatSessionCompanionThread): string {
+export type SessionRailComposerState = {
+  draft: string;
+  attachments?: ChatAttachment[];
+};
+
+export function sessionRailQuestion(state: SessionRailComposerState): string {
   return (
-    companion.draft.trim() ||
-    (companion.attachments?.some((attachment) => attachment.mimeType.startsWith("image/"))
+    state.draft.trim() ||
+    (state.attachments?.some((attachment) => attachment.mimeType.startsWith("image/"))
       ? t("chat.rail.askImageQuestion")
       : "")
   );
@@ -82,7 +87,7 @@ export function createSessionRailComposer(options: {
 }
 
 export function renderSessionRailComposer(options: {
-  companion: ChatSessionCompanionThread;
+  state: SessionRailComposerState;
   connected: boolean;
   pending: boolean;
   sendShortcut: ChatSendShortcut;
@@ -90,8 +95,7 @@ export function renderSessionRailComposer(options: {
   attachmentProps: ChatAttachmentControlsProps;
   submit: () => void;
 }) {
-  const { companion, connected, pending, sendShortcut, composer, attachmentProps, submit } =
-    options;
+  const { state, connected, pending, sendShortcut, composer, attachmentProps, submit } = options;
   const placeholder = t("chat.rail.askPlaceholder");
   return html`
     <form
@@ -112,7 +116,7 @@ export function renderSessionRailComposer(options: {
             autocomplete="off"
             aria-label=${t("chat.rail.askLabel")}
             aria-keyshortcuts=${sendShortcut === "enter" ? "Enter" : "Control+Enter Meta+Enter"}
-            .value=${companion.draft}
+            .value=${state.draft}
             placeholder=${placeholder}
             ?disabled=${!connected}
             @paste=${(event: ClipboardEvent) => {
@@ -140,7 +144,7 @@ export function renderSessionRailComposer(options: {
               class="chat-send-btn"
               type="submit"
               aria-label=${t("chat.rail.askSubmit")}
-              ?disabled=${!connected || pending || Boolean(attachmentProps.attachmentReads?.pendingReads) || !sessionRailQuestion(companion)}
+              ?disabled=${!connected || pending || Boolean(attachmentProps.attachmentReads?.pendingReads) || !sessionRailQuestion(state)}
             >
               ${icons.arrowUp}
             </button>

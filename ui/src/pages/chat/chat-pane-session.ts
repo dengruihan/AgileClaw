@@ -266,7 +266,7 @@ export abstract class ChatPaneSession extends ChatPaneTaskSuggestions {
           }
           void loadChatBranches(state);
           void this.probeSessionDiscussion(sessionKey);
-          this.hydrateSessionCompanion(sessionKey);
+          this.syncSideConversations();
           void this.refreshSessionPullRequests();
         } else if (isCurrent()) {
           this.pendingDeferredSessionHydration = () => scheduleHydration(historyCommitted);

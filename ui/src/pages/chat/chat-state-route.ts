@@ -3,6 +3,7 @@ import { loadLocalAssistantIdentity } from "../../app/assistant-identity.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { loadSettings, patchSettings } from "../../app/settings.ts";
 import { isRenderableControlUiAvatarUrl } from "../../lib/avatar.ts";
+import { isSideConversationSessionKey } from "../../lib/chat/side-conversations.ts";
 import { parseCatalogSessionKey } from "../../lib/sessions/catalog-key.ts";
 import { resolveSessionKey } from "../../lib/sessions/index.ts";
 import {
@@ -12,7 +13,7 @@ import {
   uiSessionRowMatchesSelectedChat,
 } from "../../lib/sessions/session-key.ts";
 import { resolveChatAgentId } from "./chat-agent-id.ts";
-import { isExpiredIncognitoSession } from "./chat-history-state.ts";
+import { getAcceptedChatHistorySession, isExpiredIncognitoSession } from "./chat-history-state.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 
 export { resolveChatAgentId } from "./chat-agent-id.ts";
@@ -64,7 +65,14 @@ export function selectedChatSessionRow(state: ChatPageHost) {
   const row = rows.find((candidate) =>
     uiSessionRowMatchesSelectedChat(state, candidate.key, state.sessionKey, candidate.agentId),
   );
-  if (!row || !isUiGlobalSessionKey(row.key)) {
+  if (!row) {
+    // Side-conversation children are hidden from every roster. The pane's
+    // accepted startup read is the authoritative descriptor for that child.
+    return isSideConversationSessionKey(state.sessionKey)
+      ? getAcceptedChatHistorySession(state)
+      : undefined;
+  }
+  if (!isUiGlobalSessionKey(row.key)) {
     return row;
   }
   const selectedAgentId = resolveChatAgentId(state);

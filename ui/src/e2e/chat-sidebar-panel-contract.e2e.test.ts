@@ -83,7 +83,7 @@ function coldOpenScenario(): ControlUiMockGatewayScenario {
       "environments.status",
       "session.discussion.info",
       "session.discussion.open",
-      "sessions.companion.state",
+      "sideConversations.list",
       "sessions.diff",
       "sessions.files.list",
       "terminal.open",
@@ -189,12 +189,25 @@ function populatedColdOpenScenario(): ControlUiMockGatewayScenario {
         openUrl: "https://discussion.example/session",
         state: "open",
       },
-      "sessions.companion.state": {
-        exchanges: [
+      "sideConversations.list": {
+        ok: true,
+        parentSessionKey: "agent:main:main",
+        sideConversations: [
           {
-            question: "What changed?",
-            answer: "Every offered panel now opens with useful content.",
-            ts: Date.now() - 1_000,
+            sessionKey: "agent:main:dashboard:side-cccccccccccccccccccccccccccccccc",
+            parentSessionKey: "agent:main:main",
+            intentId: "intent-cold-open",
+            ordinal: 1,
+            state: "open",
+            createdAt: 1_000,
+            updatedAt: 1_000,
+            title: "Every offered panel now opens with useful content.",
+            isolation: { filesystem: "worktree", externalState: "shared" },
+            worktree: {
+              id: "wt-cold-open",
+              branch: "side/intent-cold-open",
+              path: "/mock/wt-cold-open",
+            },
           },
         ],
       },
@@ -262,7 +275,8 @@ async function openColdSidebar(page: Page, scenario = coldOpenScenario()) {
   await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:main"));
   await waitForControlUiGatewayReady(page);
   await gateway.waitForRequest("session.discussion.info");
-  await gateway.waitForRequest("sessions.companion.state");
+  // The rail reads its registry only once it is opened; an idle chat stays quiet.
+  expect(await gateway.getRequests("sideConversations.list")).toHaveLength(0);
   expect(await gateway.getRequests("sessions.files.list")).toHaveLength(0);
   await page.getByRole("button", { name: "Side panel", exact: true }).first().click();
   const choices = page.locator(".side-panel-empty__type");
@@ -912,11 +926,11 @@ suite.define(() => {
     await choices.filter({ hasText: "Side chat" }).click();
     const contentActions = page.locator(".side-panel__action-group--content");
     const clearAction = contentActions.getByRole("button", {
-      name: "Clear side chat",
+      name: "Refresh side chats",
       exact: true,
     });
     await clearAction.waitFor();
-    expect(await clearAction.locator('path[d^="M3 6h18M19 6v14"]').count()).toBe(1);
+    expect(await clearAction.locator('path[d^="M21 12a9 9 0 1 1-9-9"]').count()).toBe(1);
     expect(await contentActions.locator("wa-dropdown").count()).toBe(0);
     const restingColor = await clearAction.evaluate((button) => getComputedStyle(button).color);
     for (const action of [
@@ -935,7 +949,7 @@ suite.define(() => {
       )
       .toBe(true);
     expect(await clearTooltip.locator("wa-tooltip .tooltip-content").textContent()).toContain(
-      "Clear side chat",
+      "Refresh side chats",
     );
 
     const tab = page.locator(".side-panel__header .tabstrip-tab[active]");

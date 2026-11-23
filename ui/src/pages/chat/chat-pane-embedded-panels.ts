@@ -16,6 +16,7 @@ import { renderPanelLoadingSkeleton } from "../../components/panel-loading-skele
 import { t } from "../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../i18n/locales/en-file-preview.ts";
 import type { ChatAttachment } from "../../lib/chat/chat-types.ts";
+import type { SideConversationSummary } from "../../lib/chat/side-conversations.ts";
 import { canCallGatewayMethod } from "../../lib/gateway-methods.ts";
 import {
   livePresentation,
@@ -27,12 +28,9 @@ import type { ControlUiRegistration } from "../../plugins/control-ui-capability.
 import { renderPluginContribution } from "../../plugins/control-ui-view.ts";
 import { SIDEBAR_PANEL_SHORTCUTS } from "./chat-pane-panel-shortcuts.ts";
 import type { PaneSessionChangeOptions } from "./chat-pane-shared.ts";
-import type {
-  ChatSessionCompanionThread,
-  ChatSessionCompanionTurn,
-} from "./chat-session-companion.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { resolveChatAttachmentLimits } from "./components/chat-attachment-admission.ts";
+import type { ChatAttachmentReadLifecycle } from "./components/chat-attachment-reads.ts";
 import {
   getSessionWorkspace,
   selectSessionWorkspacePreview,
@@ -45,6 +43,7 @@ import type {
   SidebarPanelTemplates,
 } from "./components/chat-sidebar-region-types.ts";
 import type { SessionDiscussionPanelConfig } from "./components/session-discussion-panel.ts";
+import type { SideConversationsView } from "./side-conversations-controller.ts";
 import type { SidebarSlotId } from "./sidebar-layout-types.ts";
 import { sidebarMainPanel } from "./sidebar-layout.ts";
 
@@ -92,14 +91,23 @@ type SidebarPanelDefinitionParams = {
   digest: SessionObserverDigest | null;
   activeRunId: string | null;
   pullRequests: ControlUiSessionPullRequest[];
-  companion: ChatSessionCompanionThread;
-  companionPresented: PresentationValue;
-  companionFocusRequest: (() => boolean) | undefined;
-  onCompanionSubmit: (question: string | ChatSessionCompanionTurn) => void;
-  onCompanionDraftChange: (draft: string) => void;
-  onCompanionAttachmentsChange?: (attachments: ChatAttachment[]) => boolean | void;
+  sideConversations: SideConversationsView | undefined;
+  sideConversationDraft: string;
+  sideConversationAttachments: ChatAttachment[];
+  sideConversationAttachmentReads: ChatAttachmentReadLifecycle;
+  sideConversationSubmitting: boolean;
+  sideConversationPresented: PresentationValue;
+  sideConversationFocusRequest: (() => boolean) | undefined;
+  onSideConversationSubmit: (question: string) => void;
+  onSideConversationDraftChange: (draft: string) => void;
+  onSideConversationAttachmentsChange?: (attachments: ChatAttachment[]) => boolean | void;
+  onRefreshSideConversations?: () => void;
+  onOpenSideConversation?: (conversation: SideConversationSummary) => void;
+  onCloseSideConversation?: (conversation: SideConversationSummary) => void;
+  onReopenSideConversation?: (conversation: SideConversationSummary) => void;
+  onMergeSideConversation?: (conversation: SideConversationSummary) => void;
+  onAbandonSideConversation?: (conversation: SideConversationSummary) => void;
   connected: boolean;
-  onClearCompanion: () => void;
   discussion: SessionDiscussionPanelConfig | null;
   discussionAvailable: boolean;
   discussionOpenUrl: string | null;
@@ -215,19 +223,28 @@ export function sidebarPanelDefinitions(
     : null;
   const companion = params
     ? html`<openclaw-chat-session-rail
-        .presented=${livePresentation(params.companionPresented)}
-        .focusRequest=${params.companionFocusRequest}
+        .presented=${livePresentation(params.sideConversationPresented)}
+        .focusRequest=${params.sideConversationFocusRequest}
         .sessionKey=${state?.sessionKey}
         .digest=${params.digest}
         .running=${Boolean(params.activeRunId)}
         .activeRunId=${params.activeRunId}
         .pullRequests=${params.pullRequests}
-        .companion=${params.companion}
+        .sideConversations=${params.sideConversations}
+        .draft=${params.sideConversationDraft}
+        .attachments=${params.sideConversationAttachments}
+        .attachmentReads=${params.sideConversationAttachmentReads}
+        .submitting=${params.sideConversationSubmitting}
         .connected=${state?.connected === true}
         .sendShortcut=${state?.settings.chatSendShortcut ?? "enter"}
-        .onSubmit=${params.onCompanionSubmit}
-        .onDraftChange=${params.onCompanionDraftChange}
-        .onAttachmentsChange=${params.onCompanionAttachmentsChange}
+        .onSubmit=${params.onSideConversationSubmit}
+        .onDraftChange=${params.onSideConversationDraftChange}
+        .onAttachmentsChange=${params.onSideConversationAttachmentsChange}
+        .onOpenConversation=${params.onOpenSideConversation}
+        .onCloseConversation=${params.onCloseSideConversation}
+        .onReopenConversation=${params.onReopenSideConversation}
+        .onMergeConversation=${params.onMergeSideConversation}
+        .onAbandonConversation=${params.onAbandonSideConversation}
         .uploadConfig=${state?.uploadConfig}
         .attachmentLimits=${resolveChatAttachmentLimits(state?.hello?.policy)}
       ></openclaw-chat-session-rail>`
@@ -401,16 +418,17 @@ export function sidebarPanelDefinitions(
       "companion",
       icons.messageSquarePlus,
       companion,
-      params
-        ? html`<openclaw-tooltip .content=${t("chat.rail.clear")}>
+      params?.onRefreshSideConversations
+        ? html`<openclaw-tooltip .content=${t("chat.rail.refresh")}>
             <button
-              class="rail-header__action chat-session-rail__clear"
+              class="rail-header__action"
               type="button"
-              aria-label=${t("chat.rail.clear")}
-              ?disabled=${!params.connected || params.companion.turns.some((turn) => turn.status === "pending")}
-              @click=${params.onClearCompanion}
+              aria-label=${t("chat.rail.refresh")}
+              title=${t("chat.rail.refresh")}
+              ?disabled=${!params.connected}
+              @click=${params.onRefreshSideConversations}
             >
-              ${icons.trash}
+              ${icons.refresh}
             </button>
           </openclaw-tooltip>`
         : undefined,

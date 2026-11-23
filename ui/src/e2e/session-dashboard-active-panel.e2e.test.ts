@@ -45,15 +45,46 @@ suite.define(() => {
               boardPresentation: "split",
             },
           ],
-          featureMethods: ["board.get", "chat.metadata", "chat.startup"],
+          featureMethods: ["board.get", "chat.metadata", "chat.startup", "sideConversations.list"],
+          sideConversations: [
+            {
+              sessionKey: "agent:main:dashboard:side-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              parentSessionKey: sessionKey,
+              intentId: "intent-dashboard",
+              ordinal: 1,
+              state: "open",
+              createdAt: 1_000,
+              updatedAt: 1_000,
+              title: "Keep this side conversation visible.",
+              isolation: { filesystem: "worktree", externalState: "shared" },
+              worktree: {
+                id: "wt-dashboard",
+                branch: "side/intent-dashboard",
+                path: "/mock/wt-dashboard",
+              },
+            },
+          ],
           methodResponses: {
             "board.get": boardSnapshot,
-            "sessions.companion.state": {
-              exchanges: [
+            "sideConversations.list": {
+              ok: true,
+              parentSessionKey: sessionKey,
+              sideConversations: [
                 {
-                  question: "What should I check?",
-                  answer: "Keep this side conversation visible.",
-                  ts: 1_000,
+                  sessionKey: "agent:main:dashboard:side-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                  parentSessionKey: sessionKey,
+                  intentId: "intent-dashboard",
+                  ordinal: 1,
+                  state: "open",
+                  createdAt: 1_000,
+                  updatedAt: 1_000,
+                  title: "Keep this side conversation visible.",
+                  isolation: { filesystem: "worktree", externalState: "shared" },
+                  worktree: {
+                    id: "wt-dashboard",
+                    branch: "side/intent-dashboard",
+                    path: "/mock/wt-dashboard",
+                  },
                 },
               ],
             },

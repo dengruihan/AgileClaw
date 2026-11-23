@@ -78,17 +78,17 @@ describe("handleSendChat browser annotation context", () => {
     "opens companion intent %s %s without sending annotation context",
     async (command, question) => {
       const attachment = createBrowserAnnotationAttachment("companion", "Review the page");
-      const openSessionCompanion = vi.fn();
+      const openSideConversation = vi.fn();
       const host = makeChatHost({
         requestHandlers: {},
         chatAttachments: [attachment],
         chatMessage: `${command} ${question}`.trim(),
-        openSessionCompanion,
+        openSideConversation,
       });
 
       await handleSendChat(host);
 
-      expect(openSessionCompanion).toHaveBeenCalledWith(question);
+      expect(openSideConversation).toHaveBeenCalledWith(question);
       expect(host.chatMessage).toBe("");
       expect(host.chatLocalInputHistoryBySession[host.sessionKey]?.[0]?.text).toBe(
         `${command} ${question}`.trim(),

@@ -31,7 +31,12 @@ export function projectSidebarArchiveVisibility(input: {
         visibility === "archived")
     );
   };
-  const isSessionHidden = (row: Pick<GatewaySessionRow, "key" | "archived" | "snoozedUntil">) =>
+  const isSessionHidden = (
+    row: Pick<GatewaySessionRow, "key" | "archived" | "snoozedUntil" | "sideConversation">,
+  ) =>
+    // Side-conversation children are hidden by the Gateway's own lists; the
+    // Control UI keeps them out of the sidebar even when a pane holds the route.
+    row.sideConversation !== undefined ||
     isLifecycleHidden(row.key) ||
     (input.statusFilter === "archived" && row.archived !== true) ||
     (input.statusFilter === "active" && isSessionSnoozed(row, input.now)) ||

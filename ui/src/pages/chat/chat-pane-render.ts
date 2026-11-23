@@ -645,11 +645,12 @@ export class ChatPane extends ChatPaneLayoutRender {
         suggestionViewer || catalogKey
           ? undefined
           : (draft, submissionAction) => submitChatGoalDraft(state, draft, submissionAction),
-      onCompanionStageAttachment: (attachment, sessionKey) =>
+      onSideConversationSelection: (attachment, sessionKey) =>
         this.state === state &&
         this.connectionGeneration === selectionConnectionGeneration &&
         resolveChatAgentId(state) === currentAgentId &&
-        this.stageSessionCompanionAttachment(attachment, sessionKey),
+        this.stageSideConversationSelection(attachment, sessionKey),
+      sideConversationHandoff: this.sideConversationHandoffProps(),
       replyTarget: state.chatReplyTarget ?? null,
       onClearReply: () => setReply(null),
       onSetReply: sessionDisabledBanner ? undefined : setReply,

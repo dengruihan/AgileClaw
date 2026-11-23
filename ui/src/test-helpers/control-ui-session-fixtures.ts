@@ -90,6 +90,8 @@ export function createControlUiSessionFixtures(
   >();
   const listed = new Set<string>();
   const materialized = new Set<string>();
+  // Exact rows stored by `add` serve describe/startup reads but stay unlisted.
+  const stored = new Set<string>();
   let materializedSequence = 0;
   let timestamp = 1_800_000_000_000;
   const canonicalKey = (key: string) => (key === "main" ? input.mainKey : key);
@@ -582,7 +584,10 @@ export function createControlUiSessionFixtures(
         input.mainKey === "global" && /^agent:[^:]+:(?:main|global)$/u.test(requestedKey)
           ? "global"
           : canonicalKey(requestedKey);
-      return listed.has(key) ? { ok: true, ...present(read(key)) } : { ok: false };
+      // Exact-key reads reach stored rows that no list publishes, such as hidden
+      // side-conversation children; URL references stay discovery-only.
+      const reachable = listed.has(key) || (params.reference ? false : records.has(key));
+      return reachable ? { ok: true, ...present(read(key)) } : { ok: false };
     }
     // Canonical fixtures provide short-key identity; slug-specific routing scenarios
     // declare explicit wire replies instead of cloning the Gateway's slug matcher.
@@ -606,8 +611,10 @@ export function createControlUiSessionFixtures(
   };
   // History publishes a full row replacement. An unseeded wire-only fixture
   // has no canonical metadata to publish until its caller declares the row.
-  const sessionInfo = (key: string) =>
-    listed.has(canonicalKey(key)) ? sample(read(key), Date.now()) : undefined;
+  const sessionInfo = (key: string) => {
+    const resolved = canonicalKey(key);
+    return listed.has(resolved) || stored.has(resolved) ? sample(read(key), Date.now()) : undefined;
+  };
   return {
     read,
     resolve,
@@ -642,6 +649,15 @@ export function createControlUiSessionFixtures(
     list,
     listResponse,
     materializedCount: () => materializedSequence,
+    /** Stores a row without publishing it in list membership (hidden children). */
+    add(key: string, fixture: ControlUiSessionFixture) {
+      const resolved = canonicalKey(key);
+      stored.add(resolved);
+      records.set(resolved, {
+        row: { sessionId: `session:${resolved}`, ...fixture, key: resolved },
+        changed: new Set(),
+      });
+    },
     replaceCanonicalList(rows: unknown[]) {
       const replacements: ControlUiSessionFixture[] = [];
       for (const row of rows) {

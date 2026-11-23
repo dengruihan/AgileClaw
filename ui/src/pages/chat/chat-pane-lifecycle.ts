@@ -337,7 +337,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
       pageState.requestUpdate?.();
     };
     pageState.refreshSessionPullRequests = (options) => this.refreshSessionPullRequests(options);
-    pageState.openSessionCompanion = (question) => this.openSessionCompanion(pageState, question);
+    pageState.openSideConversation = (question) => this.openSideConversation(pageState, question);
     pageState.retireSessionCompanion = (key, agentId) =>
       this.sessionCompanionThreads.retire(key, agentId);
     this.state = pageState;
@@ -578,6 +578,7 @@ export abstract class ChatPaneLifecycle extends ChatPaneSessionObservation {
       this.state.handleChatDraftChange(this.draft, []);
     }
     this.syncSessionReactions();
+    this.syncSideConversations();
   }
 
   override updated(changedProperties: Map<PropertyKey, unknown> = new Map()) {

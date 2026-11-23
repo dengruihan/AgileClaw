@@ -3,10 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SessionObserverDigest } from "../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
-import {
-  getChatAttachmentDataUrl,
-  registerChatAttachmentPayload,
-} from "./attachment-payload-store.ts";
+import type { SideConversationSummary } from "../../lib/chat/side-conversations.ts";
 import {
   ChatSessionCompanionThreads,
   requestSessionCompanionAnswer,
@@ -14,6 +11,7 @@ import {
   resetSessionCompanion,
 } from "./chat-session-companion.ts";
 import { ChatSessionRailElement } from "./components/chat-session-rail.ts";
+import type { SideConversationsView } from "./side-conversations-controller.ts";
 
 function digest(health: SessionObserverDigest["health"] = "on-track"): SessionObserverDigest {
   return {
@@ -332,6 +330,41 @@ describe("ChatSessionCompanionThreads", () => {
   );
 });
 
+function conversation(
+  overrides: Partial<SideConversationSummary> & { sessionKey?: string } = {},
+): SideConversationSummary {
+  return {
+    sessionKey: "agent:main:dashboard:side-0123456789abcdef0123456789abcdef",
+    parentSessionKey: "agent:main:run",
+    intentId: "intent-1",
+    ordinal: 1,
+    state: "open",
+    createdAt: 300_000,
+    updatedAt: 300_000,
+    isolation: { filesystem: "worktree", externalState: "shared" },
+    worktree: {
+      id: "wt-1",
+      branch: "side/intent-1",
+      path: "/tmp/wt-1",
+      baseRef: "abc123",
+    },
+    ...overrides,
+  };
+}
+
+function view(overrides: Partial<SideConversationsView> = {}): SideConversationsView {
+  return {
+    parentSessionKey: "agent:main:run",
+    loading: false,
+    error: null,
+    conversations: [conversation()],
+    cleanupPendingCount: 0,
+    pendingSessionKeys: new Set(),
+    notices: new Map(),
+    ...overrides,
+  };
+}
+
 describe("ChatSessionRailElement", () => {
   beforeEach(() => {
     vi.spyOn(Date, "now").mockReturnValue(600_000);
@@ -350,14 +383,15 @@ describe("ChatSessionRailElement", () => {
     element.running = true;
     element.activeRunId = "run-1";
     element.connected = true;
+    element.sideConversations = view();
     Object.assign(element, overrides);
     document.body.append(element);
     await element.updateComplete;
     return element;
   }
 
-  it("uses the shared surface empty state before the first side-chat exchange", async () => {
-    const element = await mount();
+  it("renders the shared surface empty state before any side conversation", async () => {
+    const element = await mount({ sideConversations: view({ conversations: [] }) });
     const empty = element.querySelector("openclaw-panel-empty-state");
     await empty?.updateComplete;
 
@@ -365,304 +399,169 @@ describe("ChatSessionRailElement", () => {
     expect(empty?.querySelector("svg")).not.toBeNull();
   });
 
-  it("submits the rail composer and renders sanitized markdown answers", async () => {
-    const onSubmit = vi.fn();
+  it("lists each side conversation with its state, worktree, and update time", async () => {
     const element = await mount({
-      onSubmit,
-      companion: {
-        turns: [
-          {
-            question: "What changed?",
-            status: "answered",
-            answer: "**Only** the UI. <script>bad()</script>",
-            ts: 300_000,
-          },
+      sideConversations: view({
+        conversations: [
+          conversation(),
+          conversation({
+            sessionKey: "agent:main:dashboard:side-fedcba9876543210fedcba9876543210",
+            ordinal: 2,
+            state: "closed",
+            title: "Release notes",
+            worktree: undefined,
+            worktreeSkipped: "not-git",
+          }),
         ],
-        loading: false,
-        draft: "What should I verify?",
-      },
+      }),
     });
+
+    const rows = [...element.querySelectorAll(".chat-session-rail__conversation")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.querySelector(".chat-session-rail__state")?.textContent?.trim()).toBe("Open");
+    expect(rows[0]?.querySelector(".chat-session-rail__worktree")?.textContent).toContain(
+      "side/intent-1",
+    );
+    expect(rows[1]?.querySelector(".chat-session-rail__conversation-title")?.textContent).toBe(
+      "Release notes",
+    );
+    expect(rows[1]?.querySelector(".chat-session-rail__state")?.textContent?.trim()).toBe("Closed");
+    expect(rows[1]?.querySelector(".chat-session-rail__worktree")?.textContent).toContain(
+      "Not a Git workspace",
+    );
+    expect(rows[1]?.querySelector(".chat-session-rail__timestamp")?.textContent).toContain(
+      "Updated",
+    );
+    expect(element.querySelector(".chat-session-rail__starter")).toBeNull();
+  });
+
+  it("opens a conversation from its row and only offers valid lifecycle actions", async () => {
+    const onOpenConversation = vi.fn();
+    const onCloseConversation = vi.fn();
+    const onReopenConversation = vi.fn();
+    const onMergeConversation = vi.fn();
+    const onAbandonConversation = vi.fn();
+    const element = await mount({
+      onOpenConversation,
+      onCloseConversation,
+      onReopenConversation,
+      onMergeConversation,
+      onAbandonConversation,
+    });
+
+    (element.querySelector(".chat-session-rail__conversation-main") as HTMLButtonElement).click();
+    expect(onOpenConversation).toHaveBeenCalledOnce();
+    const buttons = [
+      ...element.querySelectorAll(".chat-session-rail__conversation-actions button"),
+    ];
+    expect(buttons.map((button) => button.textContent?.trim())).toEqual([
+      "Close",
+      "Merge",
+      "Abandon",
+    ]);
+    (buttons[0] as HTMLButtonElement).click();
+    expect(onCloseConversation).toHaveBeenCalledOnce();
+    expect(onReopenConversation).not.toHaveBeenCalled();
+
+    element.sideConversations = view({
+      conversations: [conversation({ state: "closed" })],
+    });
+    await element.updateComplete;
+    const actions = element.querySelectorAll(".chat-session-rail__conversation-actions button");
+    expect(actions[0]?.textContent?.trim()).toBe("Reopen");
+    (actions[0] as HTMLButtonElement).click();
+    expect(onReopenConversation).toHaveBeenCalledOnce();
+    expect(element.querySelector(".chat-session-rail__conversation-actions button")).not.toBeNull();
+  });
+
+  it("shows merge outcomes and preserved failures on the row", async () => {
+    const element = await mount({
+      sideConversations: view({
+        notices: new Map([
+          [conversation().sessionKey, "already-merged"],
+          [
+            "agent:main:dashboard:side-fedcba9876543210fedcba9876543210",
+            "Merge conflict in app.ts",
+          ],
+        ]),
+        conversations: [
+          conversation(),
+          conversation({
+            sessionKey: "agent:main:dashboard:side-fedcba9876543210fedcba9876543210",
+            ordinal: 2,
+          }),
+        ],
+      }),
+    });
+    const notices = [...element.querySelectorAll(".chat-session-rail__notice")];
+    expect(notices.map((notice) => notice.textContent?.trim())).toEqual([
+      "This branch was already merged.",
+      "Merge conflict in app.ts",
+    ]);
+  });
+
+  it("submits the rail composer to the side-conversation entry", async () => {
+    const onSubmit = vi.fn();
+    const element = await mount({ onSubmit, draft: "What should I verify?" });
 
     element.querySelector("form")?.dispatchEvent(new SubmitEvent("submit", { bubbles: true }));
     expect(onSubmit).toHaveBeenCalledWith("What should I verify?");
-    expect(element.querySelector(".chat-session-rail__answer strong")?.textContent).toBe("Only");
-    expect(element.querySelector("script")).toBeNull();
-    expect(element.querySelector(".chat-session-rail__timestamp")?.textContent).toContain("as of");
+    expect(element.querySelector("textarea")?.value).toBe("What should I verify?");
   });
 
-  it.each([false, true])(
-    "uses an empty-question fallback only for images (image: %s)",
-    async (image) => {
-      const onSubmit = vi.fn();
-      const element = await mount({
-        onSubmit,
-        companion: {
-          turns: [],
-          loading: false,
-          draft: "",
-          attachments: [
-            image
-              ? { id: "image", mimeType: "image/png" }
-              : {
-                  id: "comment",
-                  mimeType: "text/plain",
-                  selectionAnnotation: {
-                    text: "Selected text",
-                    comment: "Explain this",
-                    sessionKey: "agent:main:run",
-                    start: 0,
-                    end: 13,
-                  },
-                },
-          ],
-        },
-      });
-      expect(element.querySelector<HTMLButtonElement>(".chat-send-btn")?.disabled).toBe(!image);
-      element.querySelector("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true }));
-      element
-        .querySelector("textarea")!
-        .dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-      expect(onSubmit.mock.calls).toEqual(
-        image ? [["What does this image show?"], ["What does this image show?"]] : [],
-      );
-    },
-  );
-
-  it("explains unsupported image input and retries the retained image only on user action", async () => {
-    const threads = new ChatSessionCompanionThreads(() => {
-      element.companion = { ...threads.view("one") };
-    });
-    const image = registerChatAttachmentPayload({
-      attachment: { id: "retry-image", mimeType: "image/png", fileName: "retry.png" },
-      dataUrl: "data:image/png;base64,aW1hZ2U=",
-      file: new File(["image"], "retry.png", { type: "image/png" }),
-    });
-    const ask = vi
-      .fn()
-      .mockRejectedValueOnce(
-        Object.assign(new Error("Image input unsupported"), {
-          details: { reason: "image-input-unsupported" },
-          retryable: false,
-        }),
-      )
-      .mockResolvedValue({ answer: "The image is now visible.", ts: 123 });
-    let submitted: Promise<void> | undefined;
-    const element = await mount({
-      companion: threads.view("one"),
-      onSubmit: (turn) => {
-        submitted = threads.submit("one", turn, ask);
-      },
-    });
-    try {
-      threads.setAttachments("one", [image]);
-      await threads.submit("one", "Explain this image", ask);
-      await element.updateComplete;
-      expect(element.textContent).toContain(
-        "This Side chat model cannot read images. Choose an image-capable utility model, then retry.",
-      );
-      expect(element.textContent).not.toContain("No utility model is configured");
-      expect(ask).toHaveBeenCalledOnce();
-      expect(getChatAttachmentDataUrl(image)).not.toBeNull();
-      threads.setDraft("one", "Keep my next question");
-      await element.updateComplete;
-      const retry = element.querySelector<HTMLButtonElement>(".chat-session-rail__retry");
-      expect(retry).not.toBeNull();
-      expect(retry?.disabled).toBe(false);
-      retry!.click();
-      await submitted;
-      await element.updateComplete;
-      expect(ask).toHaveBeenCalledTimes(2);
-      expect(ask).toHaveBeenLastCalledWith("one", "Explain this image", [image]);
-      expect(element.textContent).toContain("The image is now visible.");
-      expect(element.querySelector(".chat-session-rail__retry")).toBeNull();
-      expect(threads.view("one").draft).toBe("Keep my next question");
-      expect(getChatAttachmentDataUrl(image)).toBeNull();
-    } finally {
-      threads.retire();
-    }
-  });
-
-  it("renders one pending state and retries a retryable failure", async () => {
+  it("uses an empty-question fallback only for images", async () => {
     const onSubmit = vi.fn();
     const element = await mount({
       onSubmit,
-      companion: {
-        turns: [{ question: "What changed?", status: "pending" }],
-        loading: false,
-        draft: "",
-      },
+      attachments: [{ id: "image", mimeType: "image/png" }],
     });
-    expect(element.textContent).toContain("Answering from this session…");
-
-    element.companion = {
-      turns: [
-        {
-          question: "What changed?",
-          status: "failed",
-          hint: "history-unavailable",
-          retryable: true,
-        },
-      ],
-      loading: false,
-      draft: "",
-    };
-    await element.updateComplete;
-    expect(element.textContent).toContain("Couldn't load this session's history.");
-    expect(element.querySelector("openclaw-panel-empty-state")).toBeNull();
-    (element.querySelector(".chat-session-rail__retry") as HTMLButtonElement).click();
-    expect(onSubmit).toHaveBeenCalledExactlyOnceWith(element.companion.turns[0]);
-    expect(onSubmit.mock.calls[0]?.[0]).toBe(element.companion.turns[0]);
+    expect(element.querySelector<HTMLButtonElement>(".chat-send-btn")?.disabled).toBe(false);
+    (element.querySelector(".chat-send-btn") as HTMLButtonElement).click();
+    expect(onSubmit).toHaveBeenCalledExactlyOnceWith("What does this image show?");
   });
 
-  it.each(["answered", "failed"] as const)(
-    "keeps a follow-up editable while answering and retains it when %s",
-    async (outcome) => {
-      const threads = new ChatSessionCompanionThreads(() => {
-        element.companion = { ...threads.view("one") };
-      });
-      const ask = vi.fn<() => Promise<{ answer: string; ts: number }>>();
-      let resolveAnswer!: (value: { answer: string; ts: number }) => void;
-      let rejectAnswer!: (error: Error) => void;
-      ask.mockImplementation(
-        () =>
-          new Promise((resolve, reject) => {
-            resolveAnswer = resolve;
-            rejectAnswer = reject;
-          }),
-      );
-      let submission: Promise<void> | undefined;
-      const element = await mount({
-        companion: threads.view("one"),
-        onDraftChange: (draft) => threads.setDraft("one", draft),
-        onSubmit: (question) => {
-          submission = threads.submit("one", question, ask);
-        },
-      });
-      const textarea = element.querySelector<HTMLTextAreaElement>("textarea")!;
-      const send = element.querySelector<HTMLButtonElement>(".chat-send-btn")!;
-      const type = async (draft: string) => {
-        textarea.value = draft;
-        textarea.dispatchEvent(new InputEvent("input", { bubbles: true }));
-        await element.updateComplete;
-      };
-      const enter = () =>
-        textarea.dispatchEvent(
-          new KeyboardEvent("keydown", {
-            key: "Enter",
-            bubbles: true,
-            cancelable: true,
-          }),
-        );
-      expect(send.disabled).toBe(true);
-      await type("What changed?");
-      expect(send.disabled).toBe(false);
-      const compositionEnd = new CompositionEvent("compositionend", { bubbles: true });
-      textarea.dispatchEvent(compositionEnd);
-      const confirmingEnter = new KeyboardEvent("keydown", {
-        key: "Enter",
-        keyCode: 13,
-        bubbles: true,
-        cancelable: true,
-      });
-      Object.defineProperty(confirmingEnter, "timeStamp", {
-        value: compositionEnd.timeStamp - 1,
-      });
-      textarea.dispatchEvent(confirmingEnter);
-      expect(confirmingEnter.defaultPrevented).toBe(false);
-      expect(ask).not.toHaveBeenCalled();
-      expect(textarea.value).toBe("What changed?");
-      textarea.dispatchEvent(new KeyboardEvent("keyup", { key: "Enter", bubbles: true }));
-      enter();
-      await element.updateComplete;
-      expect(textarea.disabled).toBe(false);
-      expect(textarea.value).toBe("");
-      expect(textarea.placeholder).toBe("Ask a question");
-      await type("What should I verify next?");
-      expect(send.disabled).toBe(true);
-      enter();
-      element.querySelector("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true }));
-      expect(ask).toHaveBeenCalledTimes(1);
-      expect(textarea.value).toBe("What should I verify next?");
-      if (outcome === "answered") {
-        resolveAnswer({ answer: "The composer changed.", ts: 42 });
-      } else {
-        rejectAnswer(new Error("Side chat timed out."));
-      }
-      await submission;
-      await element.updateComplete;
-      expect(threads.view("one").turns[0]?.status).toBe(outcome);
-      expect(textarea.value).toBe("What should I verify next?");
-      expect(send.disabled).toBe(false);
-      element.connected = false;
-      await element.updateComplete;
-      expect(textarea.disabled).toBe(true);
-      expect(send.disabled).toBe(true);
-      element.querySelector("form")!.dispatchEvent(new SubmitEvent("submit", { bubbles: true }));
-      expect(ask).toHaveBeenCalledTimes(1);
-      element.connected = true;
-      await element.updateComplete;
-      expect(textarea.disabled).toBe(false);
-      expect(textarea.value).toBe("What should I verify next?");
-      expect(send.disabled).toBe(false);
-    },
-  );
-
-  it("shows the shared chat skeleton instead of the empty state during hydration", async () => {
+  it("disables submit for a text-only attachment without a question", async () => {
     const element = await mount({
-      companion: {
-        turns: [],
-        loading: true,
-        draft: "",
-      },
+      attachments: [
+        {
+          id: "comment",
+          mimeType: "text/plain",
+          selectionAnnotation: {
+            text: "Selected text",
+            comment: "Explain this",
+            sessionKey: "agent:main:run",
+            start: 0,
+            end: 13,
+          },
+        },
+      ],
     });
+    expect(element.querySelector<HTMLButtonElement>(".chat-send-btn")?.disabled).toBe(true);
+  });
 
+  it("shows the shared chat skeleton while the registry loads", async () => {
+    const element = await mount({
+      sideConversations: view({ loading: true, conversations: [] }),
+    });
     const skeleton = element.querySelector("openclaw-panel-loading-skeleton");
     await skeleton?.updateComplete;
     expect(skeleton?.getAttribute("data-panel-skeleton")).toBe("chat");
     expect(element.querySelector("openclaw-panel-empty-state")).toBeNull();
   });
 
-  it("keeps live announcements scoped to the message thread", async () => {
-    const element = await mount();
-    const section = element.querySelector(".chat-session-rail--expanded");
-    expect(section?.hasAttribute("aria-live")).toBe(false);
-    expect(element.querySelector(".chat-session-rail__thread")?.getAttribute("aria-live")).toBe(
-      "polite",
-    );
-  });
-
-  it("offers starter questions instead of an empty thread, and asks the tapped one", async () => {
+  it("offers starter questions only when no side conversation exists", async () => {
     const onSubmit = vi.fn();
-    const element = await mount({ onSubmit });
-
+    const element = await mount({
+      onSubmit,
+      sideConversations: view({ conversations: [] }),
+    });
     const starters = [...element.querySelectorAll(".chat-session-rail__starter")];
     expect(starters.map((starter) => starter.textContent?.trim())).toEqual([
       "What changed?",
       "Why did it stop?",
       "What's left?",
     ]);
-
     (starters[1] as HTMLButtonElement).click();
     expect(onSubmit).toHaveBeenCalledExactlyOnceWith("Why did it stop?");
-  });
-
-  it("replaces the starters once the thread has an exchange", async () => {
-    const element = await mount({
-      companion: {
-        turns: [
-          {
-            question: "What changed?",
-            status: "answered",
-            answer: "The rail toggle.",
-            ts: 300_000,
-          },
-        ],
-        loading: false,
-        draft: "",
-      },
-    });
-
-    expect(element.querySelector(".chat-session-rail__starter")).toBeNull();
-    expect(element.querySelector(".chat-session-rail__exchange")).not.toBeNull();
   });
 });

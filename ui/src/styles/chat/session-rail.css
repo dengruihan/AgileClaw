@@ -171,3 +171,89 @@ openclaw-chat-session-rail {
     animation: none;
   }
 }
+
+/* Side-conversation registry list. Each row opens the real child pane; the
+   Gateway owns lifecycle, so actions here only request transitions. */
+.chat-session-rail__list {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 96px;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px 16px;
+  overflow-y: auto;
+  user-select: text;
+  overscroll-behavior-y: contain;
+}
+
+.chat-session-rail__conversation {
+  display: grid;
+  gap: 6px;
+  padding: 8px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.chat-session-rail__conversation-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.chat-session-rail__conversation-main:hover .chat-session-rail__conversation-title {
+  text-decoration: underline;
+}
+
+.chat-session-rail__conversation-title {
+  min-width: 0;
+  flex: 1 1 120px;
+  overflow-wrap: anywhere;
+  font-size: var(--control-ui-text-sm);
+  font-weight: 600;
+}
+
+.chat-session-rail__state {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  corner-shape: round;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.chat-session-rail__state--closed,
+.chat-session-rail__state--merged,
+.chat-session-rail__state--abandoned {
+  border-style: dashed;
+  color: var(--muted);
+}
+
+.chat-session-rail__worktree {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.chat-session-rail__conversation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.chat-session-rail__notice {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}

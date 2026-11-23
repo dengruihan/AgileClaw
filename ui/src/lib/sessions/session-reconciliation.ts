@@ -236,6 +236,17 @@ export function createSessionReconciliation(host: Host) {
     ) {
       return false;
     }
+    // A hidden side-conversation child keeps its descriptor with the pane that
+    // holds the exact route. A history read must not add it to a shared roster
+    // that the sidebar or another client renders as a normal session.
+    if (
+      row?.sideConversation &&
+      !state.result?.sessions.some((candidate) =>
+        areUiSessionKeysEquivalent(candidate.key, row.key),
+      )
+    ) {
+      return false;
+    }
     if (observation && !observation.isCurrent(row, historyAgentId)) {
       // A newer same-agent row does not retire this history's scoped defaults.
       // Admit only the pane's defaults after connection and generation checks;
