@@ -1,3 +1,4 @@
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type { ApplicationContext } from "../../app/context.ts";
 import {
   SESSION_COMPOSER_FOCUS_PARAM,
@@ -23,13 +24,32 @@ export type SideConversationPageOwner = SideConversationPaneHost & {
   pendingCreate: boolean;
 };
 
+/** Reads the event detail only when it carries the dispatched request shape. */
+function sideConversationOpenDetail(event: Event): SideConversationOpenDetail | undefined {
+  if (!(event instanceof CustomEvent) || !isRecord(event.detail)) {
+    return undefined;
+  }
+  const { parentSessionKey, childSessionKey, draft, agentId } = event.detail;
+  if (
+    typeof parentSessionKey !== "string" ||
+    typeof childSessionKey !== "string" ||
+    (draft !== undefined && typeof draft !== "string") ||
+    (agentId !== undefined && typeof agentId !== "string")
+  ) {
+    return undefined;
+  }
+  return {
+    parentSessionKey,
+    childSessionKey,
+    ...(draft === undefined ? {} : { draft }),
+    ...(agentId === undefined ? {} : { agentId }),
+  };
+}
+
 /** Event handler for a page that shows the parent; retained previews stay inert. */
 export function createSideConversationOpenHandler(page: () => SideConversationPageOwner) {
   return (event: Event) => {
-    const detail =
-      event instanceof CustomEvent
-        ? (event.detail as SideConversationOpenDetail | undefined)
-        : undefined;
+    const detail = sideConversationOpenDetail(event);
     const owner = page();
     if (!detail || !owner.presented || owner.pendingCreate) {
       return;

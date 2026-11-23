@@ -27,6 +27,7 @@ import {
   SIDEBAR_GEOMETRY_COMMIT_EVENT,
   type SidebarLayout,
 } from "../sidebar-layout.ts";
+import { ChatAttachmentReadLifecycle } from "./chat-attachment-reads.ts";
 import type { SidebarPanelDefinition } from "./chat-sidebar-region-types.ts";
 import "./chat-sidebar-region.runtime.ts";
 
@@ -375,8 +376,8 @@ describe("chat sidebar region", () => {
         browserPresented: false,
         browserTabsInHeader: true,
         terminalTabsInHeader: true,
-        companionPresented: false,
-        companionFocusRequest: undefined,
+        sideConversationPresented: false,
+        sideConversationFocusRequest: undefined,
         browserRefreshOnPresentation: false,
         desktopPresented: false,
         desktopRefreshOnPresentation: false,
@@ -390,15 +391,14 @@ describe("chat sidebar region", () => {
         digest: null,
         activeRunId: null,
         pullRequests: [],
-        companion: {
-          turns: [],
-          loading: false,
-          draft: "",
-        },
-        onCompanionSubmit: vi.fn(),
-        onCompanionDraftChange: vi.fn(),
+        sideConversations: undefined,
+        sideConversationDraft: "",
+        sideConversationAttachments: [],
+        sideConversationAttachmentReads: new ChatAttachmentReadLifecycle(() => {}),
+        sideConversationSubmitting: false,
+        onSideConversationSubmit: vi.fn(),
+        onSideConversationDraftChange: vi.fn(),
         connected: false,
-        onClearCompanion: vi.fn(),
         discussion: null,
         discussionAvailable: false,
         discussionOpenUrl: null,

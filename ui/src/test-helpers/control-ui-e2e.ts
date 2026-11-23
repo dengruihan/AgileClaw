@@ -54,6 +54,11 @@ import {
   waitForControlUiInitialRoster,
 } from "./control-ui-e2e-readiness.ts";
 import { getSharedControlUiE2ePreview } from "./control-ui-e2e-shared-preview.ts";
+import {
+  controlUiE2eGatewayAssetPathPlugin,
+  controlUiE2ePreviewConfigPlugin,
+} from "./control-ui-e2e/preview-plugins.ts";
+import { createControlUiMockSideConversations } from "./control-ui-e2e/side-conversations.ts";
 import { createControlUiMockPresence } from "./control-ui-mock-presence.ts";
 import { createControlUiMockReactions } from "./control-ui-mock-reactions.ts";
 import { createControlUiMockResponses } from "./control-ui-mock-responses.ts";
@@ -684,46 +689,6 @@ export async function startControlUiE2eServer(
   };
 }
 
-// Mirror the Gateway's depth-insensitive asset resolution
-// (src/gateway/control-ui.ts): any "/assets/" segment serves the bundled
-// asset. The built index.html uses portable relative asset URLs, so a
-// document reloaded on a deep link like /chat/research requests
-// /chat/assets/*.js; without this contract Vite's SPA fallback answers with
-// index.html and the module never executes, bricking the page.
-function controlUiE2eGatewayAssetPathPlugin(): Plugin {
-  return {
-    name: "control-ui-e2e-gateway-asset-paths",
-    configurePreviewServer(server) {
-      server.middlewares.use((req, _res, next) => {
-        const url = req.url ?? "";
-        const assetsIndex = url.indexOf("/assets/");
-        if (assetsIndex > 0) {
-          req.url = url.slice(assetsIndex);
-        }
-        next();
-      });
-    },
-  };
-}
-
-function controlUiE2ePreviewConfigPlugin(
-  bootstrapConfig: Record<string, unknown> = {
-    basePath: "/",
-    assistantName: "",
-    assistantAvatar: "",
-  },
-): Plugin {
-  return {
-    name: "control-ui-e2e-preview-config",
-    configurePreviewServer(server) {
-      server.middlewares.use(CONTROL_UI_BOOTSTRAP_CONFIG_PATH, (_req, res) => {
-        res.setHeader("Content-Type", "application/json");
-        res.end(JSON.stringify(bootstrapConfig));
-      });
-    },
-  };
-}
-
 function createBundledControlUiE2eConfig(
   controlUiViteConfig: (options: { outDir?: string }) => InlineConfig,
   outDir: string,
@@ -1045,7 +1010,7 @@ export function createControlUiMockGatewayInitScript(
     protocolVersion: PROTOCOL_VERSION,
     scenario: normalizeScenario(scenario),
   };
-  return `${json5BrowserSource}\n;(() => { const __name = (target) => target; (${installControlUiMockGateway.toString()})(${JSON.stringify(input)}, globalThis.JSON5.parse, ${createControlUiSessionFixtures.toString()}, ${createControlUiAttachmentFacts.toString()}, ${createControlUiMockResponses.toString()}, ${createControlUiMockSessionSubscriptions.toString()}, ${createControlUiMockPresence.toString()}, ${createControlUiMockReactions.toString()}); })();`;
+  return `${json5BrowserSource}\n;(() => { const __name = (target) => target; (${installControlUiMockGateway.toString()})(${JSON.stringify(input)}, globalThis.JSON5.parse, ${createControlUiSessionFixtures.toString()}, ${createControlUiAttachmentFacts.toString()}, ${createControlUiMockResponses.toString()}, ${createControlUiMockSessionSubscriptions.toString()}, ${createControlUiMockPresence.toString()}, ${createControlUiMockReactions.toString()}, ${createControlUiMockSideConversations.toString()}); })();`;
 }
 
 function installControlUiMockGateway(
@@ -1060,6 +1025,7 @@ function installControlUiMockGateway(
   createSubscriptions: typeof createControlUiMockSessionSubscriptions,
   createPresence: typeof createControlUiMockPresence,
   createReactions: typeof createControlUiMockReactions,
+  createSideConversations: typeof createControlUiMockSideConversations,
 ) {
   const NativeWebSocket = window.WebSocket;
   type BrowserFrame = {
@@ -1123,31 +1089,6 @@ function installControlUiMockGateway(
   const requests: MockGatewayRequest[] = [];
   const requestHandlers = new Map<string, ControlUiMockRequestHandler>();
   const pendingApprovals = new Map<string, Map<string, Record<string, unknown>>>();
-  // Side-conversation registry mirrors the Gateway's parent-owned membership so
-  // create/list/transition round-trips stay deterministic without hand responses.
-  // sessionStorage keeps created children resolvable across a page reload.
-  const sideConversationsStateKey = "openclaw.control-ui-e2e.side-conversations.v1";
-  let sideConversations = [...scenario.sideConversations];
-  let sideConversationSequence = 0;
-  try {
-    const storedSideConversations = window.sessionStorage.getItem(sideConversationsStateKey);
-    const parsedSideConversations = storedSideConversations
-      ? (JSON.parse(storedSideConversations) as unknown)
-      : null;
-    if (Array.isArray(parsedSideConversations)) {
-      sideConversations = parsedSideConversations as SideConversationSummary[];
-      sideConversationSequence = sideConversations.length;
-    }
-  } catch {
-    // The scenario registry remains authoritative without browser storage.
-  }
-  const persistSideConversations = () => {
-    try {
-      window.sessionStorage.setItem(sideConversationsStateKey, JSON.stringify(sideConversations));
-    } catch {
-      // Current-document transitions still apply.
-    }
-  };
   let canonicalSessionRows = scenario.sessions;
   let hasCanonicalSessionsOverride = false;
   try {
@@ -1174,107 +1115,12 @@ function installControlUiMockGateway(
     // preserves the same exact owner rows used by CAS, describe, and startup.
     sessions.replaceCanonicalList(canonicalSessionRows);
   }
-  const sideConversationRow = (summary: SideConversationSummary) => ({
-    key: summary.sessionKey,
-    displayName: summary.title ?? `Side chat ${summary.ordinal}`,
-    kind: "direct",
-    model: summary.model ?? "gpt-5.5",
-    modelProvider: summary.modelProvider ?? "openai",
-    modelOverrideSource: "inherited",
-    updatedAt: summary.updatedAt,
-    sideConversation: {
-      parentSessionKey: summary.parentSessionKey,
-      intentId: summary.intentId,
-      ordinal: summary.ordinal,
-      state: summary.state,
-      createdAt: summary.createdAt,
-      updatedAt: summary.updatedAt,
-    },
+  const sideConversations = createSideConversations({
+    conversations: scenario.sideConversations,
+    defaultAgentId: scenario.defaultAgentId,
+    addSession: (key, row) => sessions.add(key, row),
+    isRecord,
   });
-  // Hidden children store exact rows without joining list membership.
-  for (const summary of sideConversations) {
-    sessions.add(summary.sessionKey, sideConversationRow(summary));
-  }
-  const sideConversationByKey = (sessionKey: unknown) =>
-    typeof sessionKey === "string"
-      ? sideConversations.find((conversation) => conversation.sessionKey === sessionKey)
-      : undefined;
-  const sideConversationScope = (params: unknown) => {
-    const parentSessionKey =
-      isRecord(params) && typeof params.parentSessionKey === "string"
-        ? params.parentSessionKey.trim()
-        : "";
-    const agentId =
-      isRecord(params) && typeof params.agentId === "string" ? params.agentId.trim() : "";
-    return { parentSessionKey, agentId };
-  };
-  const sideConversationCreate = (params: unknown) => {
-    const { parentSessionKey, agentId } = sideConversationScope(params);
-    const intentId =
-      isRecord(params) && typeof params.intentId === "string" ? params.intentId.trim() : "";
-    if (!parentSessionKey || !intentId) {
-      return { __mockError: { code: "INVALID_REQUEST", message: "side conversation target" } };
-    }
-    const existing = sideConversations.find(
-      (conversation) =>
-        conversation.parentSessionKey === parentSessionKey && conversation.intentId === intentId,
-    );
-    if (existing) {
-      return { ok: true, created: false, conversation: existing };
-    }
-    const parentAgentId = agentId || parentSessionKey.split(":")[1] || scenario.defaultAgentId;
-    const ordinal =
-      Math.max(
-        0,
-        ...sideConversations
-          .filter((conversation) => conversation.parentSessionKey === parentSessionKey)
-          .map((conversation) => conversation.ordinal),
-      ) + 1;
-    const digest = (++sideConversationSequence).toString(16).padStart(32, "0");
-    const sessionKey = `agent:${parentAgentId}:dashboard:side-${digest}`;
-    const now = Date.now();
-    const summary: SideConversationSummary = {
-      sessionKey,
-      sessionId: `session:${sessionKey}`,
-      parentSessionKey,
-      intentId,
-      ordinal,
-      state: "open",
-      createdAt: now,
-      updatedAt: now,
-      isolation: { filesystem: "worktree", externalState: "shared" },
-      worktree: {
-        id: `wt-${digest.slice(-8)}`,
-        branch: `side/${digest.slice(-8)}`,
-        path: `/mock/worktrees/${digest.slice(-8)}`,
-        baseRef: "mock-base",
-      },
-    };
-    sideConversations.push(summary);
-    sessions.add(sessionKey, sideConversationRow(summary));
-    persistSideConversations();
-    return { ok: true, created: true, conversation: summary };
-  };
-  const sideConversationTransition = (
-    params: unknown,
-    nextState: SideConversationSummary["state"],
-  ) => {
-    const conversation = sideConversationByKey(isRecord(params) ? params.sessionKey : undefined);
-    if (!conversation) {
-      return { __mockError: { code: "NOT_FOUND", message: "side conversation not found" } };
-    }
-    const now = Date.now();
-    Object.assign(conversation, {
-      state: nextState,
-      updatedAt: now,
-      ...(nextState === "closed" ? { closedAt: now } : {}),
-    });
-    if (nextState === "open") {
-      delete conversation.closedAt;
-    }
-    persistSideConversations();
-    return { ok: true, conversation };
-  };
   const subscriptionRouting = createSubscriptions(scenario, isRecord);
   const terminalSessions = new Map<string, MockTerminalSession>();
   let terminalSessionSequence = 0;
@@ -1957,35 +1803,11 @@ function installControlUiMockGateway(
           })
         : configuredValue;
     }
+    const sideConversationReply = sideConversations.handle(method, params);
+    if (sideConversationReply.matched) {
+      return sideConversationReply.reply;
+    }
     switch (method) {
-      case "sideConversations.list": {
-        const { parentSessionKey } = sideConversationScope(params);
-        const state =
-          isRecord(params) && typeof params.state === "string" ? params.state : undefined;
-        return {
-          ok: true,
-          parentSessionKey,
-          sideConversations: sideConversations.filter(
-            (conversation) =>
-              conversation.parentSessionKey === parentSessionKey &&
-              (state === undefined || conversation.state === state),
-          ),
-        };
-      }
-      case "sideConversations.create":
-        return sideConversationCreate(params);
-      case "sideConversations.close":
-        return sideConversationTransition(params, "closed");
-      case "sideConversations.reopen":
-        return sideConversationTransition(params, "open");
-      case "sideConversations.abandon":
-        return sideConversationTransition(params, "abandoned");
-      case "sideConversations.merge": {
-        const result = sideConversationTransition(params, "merged");
-        return "ok" in result
-          ? { ...result, alreadyMerged: false, mergeCommit: "mock-merge-commit" }
-          : result;
-      }
       case "session.reactions.list":
         return reactionFixtures.list(params);
       case "session.reactions.set":
