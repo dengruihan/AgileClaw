@@ -323,7 +323,7 @@ user skill directly.
     | `/loop stop [name]` | Owner-only. Stop matching loops bound to this conversation |
     | `/allowlist [list\|add\|remove] ...` | Manage allowlist entries. Text-only |
     | `/approve <id> <decision>` | Resolve exec, plugin, or OpenClaw change approval prompts |
-    | `/btw <question>` | Ask a side question without changing session context. Alias: `/side`. See [BTW](/tools/btw) |
+    | `/btw <question>` | Ask a side question without changing the parent session. In the Control UI this opens a persistent side conversation. Alias: `/side`. See [BTW](/tools/btw) |
   </Accordion>
 
   <Accordion title="Subagents and ACP">
@@ -585,18 +585,22 @@ tool output).
 /side what changed while the main run continued?
 ```
 
-Unlike a normal message:
+On channels, the TUI, and embedded `tui --local`, `/btw` is a one-shot
+detached question:
 
 - Uses the current session as background context.
 - In Codex harness sessions, runs as an ephemeral Codex side thread.
 - Does **not** change future session context.
 - Is not written to transcript history.
 
-In the Control UI, `/btw` and `/side` open Side chat instead of starting the
-detached BTW path. The TUI and
-external-channel behavior above is unchanged.
+In the Control UI, `/btw` and `/side` instead create a persistent hidden child
+session — a [side conversation](/concepts/side-conversations). It has its own
+transcript, model selection, and worktree, opens as a split pane, and survives a
+reload; close, merge, or abandon keeps it until you delete it. An empty command
+only opens the new child's composer. The parent session and its main run are
+untouched.
 
-See [BTW side questions](/tools/btw) for the full behavior.
+See [BTW side questions](/tools/btw) for the full behavior on every surface.
 
 ## Surface notes
 
@@ -655,6 +659,9 @@ See [BTW side questions](/tools/btw) for the full behavior.
   </Card>
   <Card title="BTW" href="/tools/btw" icon="comments">
     Side questions without changing session context.
+  </Card>
+  <Card title="Side conversations" href="/concepts/side-conversations" icon="message-square">
+    Persistent hidden child sessions behind the Control UI Side chat.
   </Card>
   <Card title="Steer" href="/tools/steer" icon="compass">
     Guide the agent mid-run with `/steer`.

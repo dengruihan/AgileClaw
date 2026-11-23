@@ -30,6 +30,21 @@ Opening a dock replaces any other conversation dock. A plugin can include a
 bounded page reference, shown as **Context attached** after sending; it remains
 untrusted reference data.
 
+## Side chat
+
+**Side chat** is the parent session's side-conversation rail. It lists the
+persistent hidden children of the current session, shows each child's state and
+worktree, and starts a new child from its composer. Choosing a child opens it as
+a split chat pane beside the parent rather than replacing the panel. Several
+children can stay open at once, each with its own chat state, and narrow layouts
+show only the active pane. Closing a pane hides it without closing the child;
+use the child's status strip or the rail to close, reopen, merge, or abandon the
+conversation.
+
+The parent composer shows a handoff chip when closed children have pending
+next-message reminders. See [Side conversations](/concepts/side-conversations)
+for child lifecycle, worktrees, model inheritance, and handoff delivery.
+
 ## Operator terminal
 
 The operator terminal is enabled by default; set `gateway.terminal.enabled: false` to opt out. The terminal requires an `operator.admin` connection and opens a host PTY in the active agent workspace. New tabs follow the currently selected chat agent.

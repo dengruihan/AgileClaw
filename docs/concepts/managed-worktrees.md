@@ -286,6 +286,42 @@ For a same-agent `sessions_spawn` with `worktree: true`, omitting `cwd` uses the
 
 The parent session and its managed-worktree or registered-project binding must remain current until the child is accepted. Accepted child sessions retain their saved repository choice across parent archive, replacement, or worktree changes. A retry must still be authorized for the current child session and uses the current caller's setup permissions.
 
+## Side-conversation worktrees
+
+A side conversation tries to start with its own managed worktree and branch,
+based on the parent's committed `HEAD`. This is the default for a parent that
+runs in a local Git checkout, and it is created before the child's first turn so
+no run starts in the parent checkout. The parent's uncommitted edits are never
+copied, and `.openclaw/worktree-setup.sh` does not run for this implicit
+creation; starting a worktree with setup remains an explicit admin action.
+
+When the parent has no usable local Git source, the child shares the parent
+workspace instead and reports why: `not-git` for a plain folder, `remote-exec`
+for a parent running on a paired node, or `unavailable` for a child with no
+resolvable checkout. Shared mode is not isolation, and the filesystem isolation
+fact is `shared`.
+
+Side conversations never isolate external state. Databases, listening ports, and
+network services stay shared with the parent even when the child has its own
+checkout.
+
+The normal session-worktree lifecycle then applies:
+
+- **Close** keeps the transcript, branch, and checkout. **Reopen** restores a
+  retired checkout before changing state and leaves the child closed if the
+  checkout cannot return.
+- **Merge** writes the child's committed branch into the parent checkout and
+  requires clean, idle parent and child checkouts. It keeps the branch and
+  checkout after recording `merged`.
+- **Abandon** keeps the branch, checkout, and uncommitted files and only records
+  the state.
+- **Explicit delete** snapshots the checkout before removal. Parent delete and
+  archive settle registered children in the parent's lifecycle fence and report
+  any preserved checkout with its branch, path, and reason.
+
+See [Side conversations](/concepts/side-conversations) for the child lifecycle,
+the frozen snapshot, and next-message delivery.
+
 ## Troubleshoot creation
 
 If creation reports `git checkout has no commits`, create an initial commit in the source repository, then retry. Running `git init` alone does not provide a commit for the new worktree.
