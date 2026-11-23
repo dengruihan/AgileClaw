@@ -264,7 +264,7 @@ export async function handleSendChat(
           recordNonTranscriptInputHistory(host, userMessage);
           clearComposer("all");
         }
-        await host.openSessionCompanion?.(question);
+        await host.openSideConversation?.(question);
       });
       return undefined;
     }

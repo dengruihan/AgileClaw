@@ -61,7 +61,7 @@ export type ChatHost = ToolStreamHost &
     /** Selected message to reply to (right-click / keyboard shortcut). */
     chatReplyTarget?: ChatReplyTarget | null;
     /** Control UI route for /btw and /side; server/TUI command handling remains unchanged. */
-    openSessionCompanion?: (question: string) => Promise<void> | void;
+    openSideConversation?: (question: string) => Promise<void> | void;
     /** Handles a recognized catalog action only when this client can complete it. */
     dispatchClientPresentation?: (action: CommandClientPresentationAction) => Promise<boolean>;
   };

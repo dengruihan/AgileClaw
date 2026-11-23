@@ -2014,15 +2014,15 @@ describe("handleSendChat", () => {
   });
 
   it("routes /btw without adopting a main chat run when idle", async () => {
-    const openSessionCompanion = vi.fn();
+    const openSideConversation = vi.fn();
     const host = makeChatHost({
       chatMessage: "/btw summarize this",
-      openSessionCompanion,
+      openSideConversation,
     });
 
     await handleSendChat(host);
 
-    expect(openSessionCompanion).toHaveBeenCalledWith("summarize this");
+    expect(openSideConversation).toHaveBeenCalledWith("summarize this");
     expect(host.chatRunId).toBeNull();
     expect(host.chatMessages).toStrictEqual([]);
     expect(host.chatMessage).toBe("");

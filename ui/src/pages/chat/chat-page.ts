@@ -34,15 +34,17 @@ import { ChatPageRetainedSessions } from "./chat-page-retained-sessions.ts";
 import { resumeStagedPanes } from "./chat-pane-attachment-handoff.ts";
 import { bindChatPageSession } from "./chat-state-route.ts";
 import { ChatViewerPresenceController } from "./chat-viewer-presence.ts";
+import { RouteDraftComposerFocus, type ChatPaneElement } from "./route-draft-focus-handoff.ts";
 import "../../styles/chat.ts";
 import "../../styles/chat/composer.css";
 import "./chat-pane.ts";
-import { RouteDraftComposerFocus, type ChatPaneElement } from "./route-draft-focus-handoff.ts";
 import { locationWithoutDraft } from "./route-draft.ts";
 import type { SessionChatRouteData } from "./route-loader.ts";
 import { observeChatCache, type ChatMessageCache } from "./session-message-cache.ts";
 import { SessionPrefetchController } from "./session-prefetch.ts";
 import { SessionSnapshotStore } from "./session-snapshot-store.ts";
+import { SIDE_CONVERSATION_OPEN_EVENT } from "./side-conversation-events.ts";
+import { createSideConversationOpenHandler } from "./side-conversation-pane.ts";
 import type { SplitDropZone } from "./split-drop-zone.ts";
 import type { ChatSplitLayout, ChatSplitPane, SessionSplitHost } from "./split-layout-types.ts";
 import {
@@ -176,6 +178,7 @@ export class ChatPage extends OpenClawLightDomElement implements SessionSplitHos
     this.mobileNavMediaQuery.addEventListener("change", this.handleMobileNavViewportChange);
     this.sessionDrop.connect();
     window.addEventListener(UI_COMMAND_EVENT, this.handleUiCommand);
+    window.addEventListener(SIDE_CONVERSATION_OPEN_EVENT, this.handleSideConversationOpen);
     this.retainedSessions.connect();
     this.syncRouteToActivePane();
     this.syncRouteBindings();
@@ -201,6 +204,7 @@ export class ChatPage extends OpenClawLightDomElement implements SessionSplitHos
     this.mobileNavMediaQuery = null;
     this.sessionDrop.disconnect();
     window.removeEventListener(UI_COMMAND_EVENT, this.handleUiCommand);
+    window.removeEventListener(SIDE_CONVERSATION_OPEN_EVENT, this.handleSideConversationOpen);
     super.disconnectedCallback();
   }
 
@@ -585,6 +589,16 @@ export class ChatPage extends OpenClawLightDomElement implements SessionSplitHos
   };
 
   private readonly openSplitView = () => this.handleSplit(this.classicPaneId, "right");
+
+  private readonly handleSideConversationOpen = createSideConversationOpenHandler(() => ({
+    presented: this.presented,
+    pendingCreate: this.pendingCreate,
+    context: this.context,
+    data: this.data,
+    layout: this.layout,
+    classicLayout: (sessionKey) => this.classicLayout(sessionKey),
+    persistLayout: (layout) => this.persistLayout(layout),
+  }));
 
   private handleSplit(paneId: string, direction: "right" | "down") {
     const layout =

@@ -190,7 +190,9 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
           leaseHeld: resolveChatSessionDeviceScope(state)?.leaseHeld === true,
         })
       : nothing;
-    const primary = html`<div class="chat-pane-primary-column">${chat}</div>`;
+    const primary = html`<div class="chat-pane-primary-column">
+      ${this.renderSideConversationStatusFor(state)}${chat}
+    </div>`;
     const subagentStop =
       chatProps.disabledBanner?.presentation &&
       chatProps.canAbort &&
@@ -222,8 +224,6 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
     const discussionState = this.sessionDiscussionStates.get(state.sessionKey.trim());
     const discussionAvailable = discussionState === "available" || discussionState === "open";
     const desktopAvailable = isDesktopPanelAvailable(this.context.gateway.snapshot);
-    const companionSessionKey = state.sessionKey;
-    const companionThread = this.sessionCompanionThreads.view(companionSessionKey, currentAgentId);
     const companionPresented = slotPresentation("companion");
     // Capture the opening before the lazy rail can yield to newer input intent.
     this.syncSessionCompanionPresentation(companionPresented.isPresented());
@@ -320,20 +320,22 @@ export abstract class ChatPaneLayoutRender extends ChatPaneBrowserAnnotationRend
       digest: observerDigest,
       activeRunId: observerRunId,
       pullRequests: this.sessionPullRequests,
-      companion: companionThread,
-      companionFocusRequest: this.sessionCompanionFocusRequest,
-      companionPresented,
-      onCompanionSubmit: (question) => void this.submitSessionCompanionQuestion(question),
-      onCompanionDraftChange: (draft) =>
-        this.sessionCompanionThreads.setDraft(state.sessionKey, draft, currentAgentId),
-      onCompanionAttachmentsChange: (attachments) =>
-        this.sessionCompanionThreads.setAttachments(
-          companionSessionKey,
-          attachments,
-          currentAgentId,
-        ),
+      sideConversations: this.sideConversationsView(),
+      sideConversationDraft: this.sideConversationDraft,
+      sideConversationAttachments: this.sideConversationAttachments,
+      sideConversationAttachmentReads: this.sideConversationAttachmentReads,
+      sideConversationFocusRequest: this.sessionCompanionFocusRequest,
+      sideConversationPresented: companionPresented,
+      onSideConversationSubmit: (question) => void this.submitSideConversationQuestion(question),
+      onSideConversationDraftChange: this.onSideConversationDraftChange,
+      onSideConversationAttachmentsChange: this.onSideConversationAttachmentsChange,
+      onRefreshSideConversations: () => this.refreshSideConversations(),
+      onOpenSideConversation: this.openSideConversationPane,
+      onCloseSideConversation: this.closeSideConversation,
+      onReopenSideConversation: this.reopenSideConversation,
+      onMergeSideConversation: this.mergeSideConversation,
+      onAbandonSideConversation: this.abandonSideConversation,
       connected: state.connected,
-      onClearCompanion: () => void this.clearSessionCompanion(),
       discussion,
       discussionAvailable,
       discussionOpenUrl: discussion?.openUrl ?? null,

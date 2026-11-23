@@ -31,6 +31,47 @@ function project(rows: GatewaySessionRow[], statusFilter: SidebarSessionStatusFi
 
 afterEach(() => vi.useRealTimers());
 
+describe("hidden side-conversation children", () => {
+  it.each(["active", "snoozed", "archived", "all"] as const)(
+    "keeps a child out of sidebar rows and child windows in %s",
+    (filter) => {
+      const parent: GatewaySessionRow = { key: "agent:main:parent", kind: "direct" };
+      const child: GatewaySessionRow = {
+        key: "agent:main:dashboard:side-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        kind: "direct",
+        parentSessionKey: parent.key,
+        sideConversation: {
+          parentSessionKey: parent.key,
+          intentId: "intent-one",
+          ordinal: 1,
+          state: "open",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      };
+      const projected = projectSidebarArchiveVisibility({
+        sessionData: {
+          sessionsAgentId: "main",
+          sessionsResult: sessionsResult([parent], 100),
+          sessionResultsByAgent: {},
+          childSessionRowsByParent: { [parent.key]: [child] },
+          loadedChildSessionKeys: new Set(),
+          loadingChildSessionKeys: new Set(),
+          childSessionErrorsByParent: new Map(),
+        },
+        selectedAgentId: "main",
+        statusFilter: filter,
+        now: 100,
+        deletionState: () => undefined,
+        archiveVisibility: () => undefined,
+      });
+      expect(projected.rows.map((row) => row.key)).not.toContain(child.key);
+      expect(projected.childSessionRowsByParent[parent.key]).toEqual([]);
+      expect(projected.isChildSessionVisible(parent.key, child.key, child)).toBe(false);
+    },
+  );
+});
+
 describe("sidebar snooze visibility", () => {
   const rows: GatewaySessionRow[] = [
     { key: "awake", kind: "direct" },

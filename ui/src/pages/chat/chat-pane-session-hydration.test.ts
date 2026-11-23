@@ -108,12 +108,8 @@ describe("chat pane session hydration", () => {
     expect(listBranches).toHaveBeenCalledOnce();
     expect(request.mock.calls.map(([method]) => method)).toEqual([
       "session.discussion.info",
-      "sessions.companion.state",
       SESSION_PULL_REQUESTS_SUBSCRIBE_METHOD,
     ]);
-    expect(
-      request.mock.calls.find(([method]) => method === "sessions.companion.state")?.[1],
-    ).toEqual({ sessionKey: state.sessionKey, agentId: "work" });
     expect(complete).toHaveBeenCalledOnce();
   });
 
@@ -165,7 +161,7 @@ describe("chat pane session hydration", () => {
     expect(complete).toHaveBeenCalledOnce();
   });
 
-  it("resumes deferred companion and discussion hydration when a retained pane returns", async () => {
+  it("resumes deferred discussion and pull-request hydration when a retained pane returns", async () => {
     const { commitEffects, pane, request, runAnimationFrame, state } =
       createSecondaryHydrationPane();
     const transcript = deferred<boolean>();
@@ -192,7 +188,7 @@ describe("chat pane session hydration", () => {
 
     const methods = request.mock.calls.map(([method]) => method);
     expect(methods).toContain("session.discussion.info");
-    expect(methods).toContain("sessions.companion.state");
+    expect(methods).toContain("session.discussion.info");
   });
 
   it.each([

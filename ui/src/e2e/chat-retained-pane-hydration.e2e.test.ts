@@ -12,13 +12,18 @@ const suite = createControlUiE2eSuite({
 });
 
 const sessionKeys = ["agent:main:perf-a", "agent:main:perf-b", "agent:main:perf-c"] as const;
-const hydrationMethods = ["sessions.branches.list", "sessions.companion.state"];
+const hydrationMethods = ["sessions.branches.list"];
 
 function sessionHydrationMethods(requests: MockGatewayRequest[], sessionKey: string): string[] {
   return requests
     .filter((request) => {
-      const params = request.params as { sessionKey?: unknown } | undefined;
-      return params?.sessionKey === sessionKey && hydrationMethods.includes(request.method);
+      const params = request.params as
+        | { parentSessionKey?: unknown; sessionKey?: unknown }
+        | undefined;
+      return (
+        (params?.sessionKey === sessionKey || params?.parentSessionKey === sessionKey) &&
+        hydrationMethods.includes(request.method)
+      );
     })
     .map((request) => request.method)
     .toSorted();
@@ -53,13 +58,12 @@ suite.define(() => {
           "sessions.diff",
           "sessions.files.list",
           "sessions.branches.list",
-          "sessions.companion.state",
+          "sideConversations.list",
         ],
         historyMessages: [{ role: "assistant", content: "Retained session transcript." }],
         methodResponses: {
           "artifacts.list": { artifacts: [] },
           "sessions.branches.list": { branches: [] },
-          "sessions.companion.state": { exchanges: [] },
           "sessions.files.list": {
             browser: { entries: [], path: "" },
             files: [],
@@ -162,7 +166,7 @@ suite.define(() => {
       Array.from({ length: 5 }, () => ({
         [sessionKeys[0]]: 0,
         [sessionKeys[1]]: 0,
-        [sessionKeys[2]]: 2,
+        [sessionKeys[2]]: 1,
       })),
     );
   });
