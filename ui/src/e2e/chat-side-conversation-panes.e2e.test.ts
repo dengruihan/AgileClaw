@@ -140,6 +140,57 @@ suite.define(() => {
     });
   });
 
+  it("keeps the visible parent selected while hidden children own the route", async () => {
+    await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
+      const gateway = await installMockGateway(page, parentScenario());
+      await page.goto(controlUiSessionUrl(suite.server.baseUrl, PARENT_KEY));
+      const parentRow = page.locator(`.sidebar-recent-session[data-session-key="${PARENT_KEY}"]`);
+      await expect(parentRow).toHaveClass(/sidebar-recent-session--active/);
+
+      await enterSideCommand(page, "/side what changed?");
+      const firstSend = await gateway.waitForRequest("chat.send");
+      const firstChildKey = String((firstSend.params as { sessionKey?: unknown }).sessionKey);
+      await expect(page.locator("openclaw-chat-pane")).toHaveCount(2);
+      await expect.poll(() => page.url()).toContain(firstChildKey.split(":").slice(2).join("/"));
+
+      // The child holds the route, but the sidebar selects the parent it belongs to.
+      await expect(
+        page.locator(`.sidebar-recent-session[data-session-key="${firstChildKey}"]`),
+      ).toHaveCount(0);
+      await expect(parentRow).toHaveClass(/sidebar-recent-session--active/);
+      await expect(parentRow.locator(".sidebar-recent-session__link")).toHaveAttribute(
+        "aria-current",
+        "page",
+      );
+      await expect(page.locator(".sidebar-recent-session--active")).toHaveCount(1);
+
+      const sendsBeforeBtw = (await gateway.getRequests("chat.send")).length;
+      await enterSideCommand(page, "/btw second?");
+      const secondSend = await gateway.waitForRequest("chat.send", { after: sendsBeforeBtw });
+      const secondChildKey = String((secondSend.params as { sessionKey?: unknown }).sessionKey);
+      expect(secondChildKey).not.toBe(firstChildKey);
+      await expect(page.locator("openclaw-chat-pane")).toHaveCount(3);
+      await expect.poll(() => page.url()).toContain(secondChildKey.split(":").slice(2).join("/"));
+      for (const childKey of [firstChildKey, secondChildKey]) {
+        await expect(
+          page.locator(`.sidebar-recent-session[data-session-key="${childKey}"]`),
+        ).toHaveCount(0);
+      }
+      await expect(page.locator(".sidebar-recent-session--active")).toHaveCount(1);
+      await expect(parentRow).toHaveClass(/sidebar-recent-session--active/);
+
+      // Ordinary session selection still moves the sidebar selection.
+      const mainRow = page.locator('.sidebar-recent-session[data-session-key="agent:main:main"]');
+      await mainRow.locator(".sidebar-recent-session__link").click();
+      await expect(mainRow).toHaveClass(/sidebar-recent-session--active/);
+      await expect(parentRow).not.toHaveClass(/sidebar-recent-session--active/);
+
+      // A new-session route highlights no session row.
+      await page.locator(".sidebar-brand__new-thread").click();
+      await expect(page.locator(".sidebar-recent-session--active")).toHaveCount(0);
+    });
+  });
+
   it("restores the parent and child panes after a refresh", async () => {
     await suite.withPage({ viewport: { width: 1440, height: 900 } }, async ({ page }) => {
       const gateway = await installMockGateway(page, parentScenario());

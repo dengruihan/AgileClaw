@@ -9,6 +9,7 @@ import {
 } from "../../../../src/shared/session-list-visibility.ts";
 import type { GatewayHelloOk } from "../../api/gateway.ts";
 import type { GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
+import { isSideConversationSessionKey } from "../chat/side-conversations.ts";
 import { parseCatalogSessionKey } from "./catalog-key.ts";
 import {
   isUiGlobalSessionKey,
@@ -231,7 +232,14 @@ export function compareSessionRowsByUpdatedAt(a: GatewaySessionRow, b: GatewaySe
 }
 
 export function resolveSessionNavigation(input: SessionNavigationInput): SessionNavigation {
-  const currentSessionKey = resolveSessionKey(input.sessionKey, input.hello);
+  const routeSessionKey = resolveSessionKey(input.sessionKey, input.hello);
+  // A side-conversation child owns a split pane, never a roster session. The
+  // visible parent holds the sidebar selection; until its descriptor proves
+  // that parent, the route stays unselected instead of naming the child.
+  const currentSessionKey =
+    (isSideConversationSessionKey(routeSessionKey)
+      ? normalizeOptionalString(input.activeSession?.sideConversation?.parentSessionKey)
+      : undefined) ?? routeSessionKey;
   const defaultAgentId = resolveUiSelectedGlobalAgentId({
     assistantAgentId: input.assistantAgentId,
     hello: input.hello,
@@ -250,12 +258,13 @@ export function resolveSessionNavigation(input: SessionNavigationInput): Session
     (input.activeSession && matchesCurrentSession(input.activeSession)
       ? input.activeSession
       : undefined);
-  // Catalog sessions select their own sidebar rows; synthesizing a session row
-  // here would surface the raw catalog key as a phantom chat entry.
+  // Catalog sessions select their own sidebar rows, and a hidden side-conversation
+  // child has none; synthesizing either would surface a phantom chat entry.
   const activeSession =
     currentSessionKey &&
     currentSessionKey.toLowerCase() !== "unknown" &&
-    !parseCatalogSessionKey(currentSessionKey)
+    !parseCatalogSessionKey(currentSessionKey) &&
+    !isSideConversationSessionKey(currentSessionKey)
       ? { ...(selectedSession ?? { kind: "direct", updatedAt: null }), key: currentSessionKey }
       : undefined;
   const sortedSessions = getVisibleSessionRows(input.result, {
