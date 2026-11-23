@@ -88,14 +88,18 @@ async function seedPendingHandoff(): Promise<void> {
   await replaceSessionEntry({ agentId: "main", sessionKey: parentKey, storePath }, entry);
 }
 
-function readPending(): number {
+function readQueue() {
   const entry = loadSessionEntry({
     agentId: "main",
     sessionKey: parentKey,
     storePath,
     readConsistency: "latest",
   }) as InternalSessionEntry | undefined;
-  return readSideConversationHandoffQueue(entry).pending.length;
+  return readSideConversationHandoffQueue(entry);
+}
+
+function readPending(): number {
+  return readQueue().pending.length;
 }
 
 type Fixture = {
@@ -187,6 +191,7 @@ async function fixture(
           await session.prompt(prompt, promptOptions);
         }),
       ...(assembly.handoffDispatch ? { onPrimaryModelDispatched: assembly.handoffDispatch } : {}),
+      ...(assembly.handoffRelease ? { onPrimaryModelNotDispatched: assembly.handoffRelease } : {}),
     });
   return { attempt, assemble, submit, session };
 }
@@ -221,6 +226,9 @@ describe("side conversation next-message handoff", () => {
     await f.submit(assembly);
 
     expect(readPending()).toBe(0);
+    const queue = readQueue();
+    expect(queue.dispatching).toBeUndefined();
+    expect(queue.delivered?.["intent-1"]).toMatchObject({ sequence: 1 });
     // The durable user turn keeps the prompt bytes the user sent.
     const userMessages = f.session.messages.filter((message) => message.role === "user");
     expect(JSON.stringify(userMessages.at(-1)?.content)).toContain("Hello");
@@ -244,7 +252,9 @@ describe("side conversation next-message handoff", () => {
         throw new Error("preflight refused before dispatch");
       }),
     ).rejects.toThrow("preflight refused");
+    // A submission that never dispatched rolls its claim receipt back.
     expect(readPending()).toBe(1);
+    expect(readQueue().dispatching).toBeUndefined();
 
     // The next real user message still gets it, exactly once.
     const retryRun = await fixture();

@@ -38,13 +38,13 @@ import {
   SessionWorktreeLifecycleError,
   synchronizeSessionWorktreeArchive,
 } from "../../sessions/session-worktree-lifecycle.js";
-import { recordClosedSideConversationHandoff } from "../../sessions/side-conversation-handoff.js";
 import { resolveFrozenParentSessionSelection } from "../session-create-model-selection.js";
 import { createGatewaySession } from "../session-create-service.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
 import { isSessionVisibilityAllowed } from "../session-sharing-policy.js";
 import { prepareSideConversationWorktreeCreation } from "../session-worktree-preparation.side-conversation.js";
 import { prepareSessionLifecycleDrain } from "./sessions-lifecycle-drain.js";
+import { repairCloseHandoff } from "./side-conversations-close-handoff.js";
 import { cancelReopenHandoff } from "./side-conversations-reopen-handoff.js";
 import {
   clearIntentReservation,
@@ -519,9 +519,9 @@ async function transitionSideConversation(params: {
   const sessionKey = params.sessionKey.trim();
   const state = marker.state;
   if (state === params.nextState) {
-    // A retried reopen still owns cancellation: a pending reminder must never
-    // outlive the state that promised it would be withdrawn.
     if (params.nextState === "open") {
+      // A retried reopen still owns cancellation: a pending reminder must never
+      // outlive the state that promised it would be withdrawn.
       const cancelled = await cancelReopenHandoff({
         agentId: target.agentId,
         intentId: marker.intentId,
@@ -531,6 +531,22 @@ async function transitionSideConversation(params: {
       });
       if (cancelled.error) {
         return { ok: false, error: cancelled.error };
+      }
+    } else {
+      // A repeated close repairs a reminder whose earlier enqueue write failed.
+      const repaired = await repairCloseHandoff({
+        cfg: params.cfg,
+        agentId: target.agentId,
+        child,
+        childSessionKey: sessionKey,
+        now: marker.closedAt ?? Date.now(),
+        parentEntry: target.entry,
+        parentSessionKey: target.canonicalKey,
+        sessionKey,
+        storePath: target.storePath,
+      });
+      if (repaired.error) {
+        return { ok: false, error: repaired.error };
       }
     }
     return {
@@ -686,7 +702,7 @@ async function transitionSideConversation(params: {
   if (params.nextState === "closed") {
     // Close only records a reminder for the parent's next real user message; it
     // never reviews, merges, or runs the child.
-    await recordClosedSideConversationHandoff({
+    const repaired = await repairCloseHandoff({
       cfg: params.cfg,
       agentId: target.agentId,
       child: patched,
@@ -694,8 +710,12 @@ async function transitionSideConversation(params: {
       now,
       parentEntry: target.entry,
       parentSessionKey: target.canonicalKey,
+      sessionKey,
       storePath: target.storePath,
     });
+    if (repaired.error) {
+      return { ok: false, error: repaired.error };
+    }
   } else {
     const cancelled = await cancelReopenHandoff({
       agentId: target.agentId,

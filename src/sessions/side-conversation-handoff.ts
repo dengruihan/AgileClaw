@@ -4,9 +4,16 @@
  * Closing a side conversation only records a durable, bounded reminder on the
  * parent row; it never reviews, merges, or runs anything. The next real external
  * user turn on that parent drains the queue into a model-only prepend — the user
- * text, transcript bytes, and chat history are never rewritten. Delivery is
- * committed only after the provider request is actually dispatched, so a
- * pre-send failure leaves the notice pending for the next user message.
+ * text, transcript bytes, and chat history are never rewritten.
+ *
+ * Delivery is a small two-phase contract on the same parent row:
+ * 1. A claim persists one `dispatching` receipt before the batch is injected, so
+ *    an injected reminder is always durably promised to one run.
+ * 2. After the provider request is actually dispatched, the receipt is committed
+ *    (notices removed, delivery recorded). If that write fails, the receipt stays
+ *    behind: the next run reconciles it as delivered and only cleans up, so the
+ *    user never sees the same reminder twice. A run that never dispatched rolls
+ *    its receipt back, so a pre-send failure keeps the notice pending.
  *
  * Queue shape and rendering live in `side-conversation-handoff-queue.ts`; this
  * module owns the parent-row transactions, Git facts, and delivery bookkeeping.
@@ -35,10 +42,15 @@ import {
 import type { InputProvenance } from "./input-provenance.js";
 import {
   appendSideConversationHandoffNotice,
+  beginSideConversationHandoffDispatch,
   cancelSideConversationHandoffNotices,
+  clearSideConversationHandoffDropped,
+  commitSideConversationHandoffDispatch,
   formatSideConversationHandoffPrompt,
+  isSideConversationHandoffRecorded,
   readSideConversationHandoffQueue,
-  removeSideConversationHandoffNotices,
+  reconcileSideConversationHandoffDispatch,
+  releaseSideConversationHandoffDispatch,
 } from "./side-conversation-handoff-queue.js";
 import {
   resolveSideConversationChildCheckout,
@@ -60,21 +72,32 @@ const HANDOFF_CLAIM_CACHE_MAX = 256;
 
 type HandoffScope = { agentId: string; sessionKey: string; storePath: string };
 
+type ClaimPhase = "claimed" | "dispatched" | "released";
+
 type CachedHandoffClaim = {
-  prependContext: string;
-  sequences: number[];
-  delivered: boolean;
+  status: "empty" | "pending" | "delivered";
+  claim?: SideConversationHandoffPromptClaim;
 };
 
 const claimsByRun = new Map<string, CachedHandoffClaim>();
 
-/** One drained reminder batch plus its delivery receipt. */
+/** One drained reminder batch plus its delivery and pre-send rollback receipts. */
 export type SideConversationHandoffPromptClaim = {
   /** Model-only prepend text; never part of the user turn or transcript. */
   prependContext: string;
   /** Commits delivery once the provider request was actually dispatched. */
-  dispatch: () => Promise<void>;
+  commit: () => Promise<void>;
+  /** Rolls the claim receipt back when the provider request was never sent. */
+  release: () => Promise<void>;
 };
+
+/** What a close recorded on the parent row. */
+export type SideConversationHandoffEnsureResult =
+  | { status: "recorded" }
+  | { status: "already-recorded" }
+  | { status: "no-edits" }
+  | { status: "no-checkout" }
+  | { status: "missing-parent" };
 
 /** Drop every claim; only a test fixture resets the process-wide cache. */
 export function clearSideConversationHandoffClaimsForTest(): void {
@@ -146,12 +169,69 @@ function resolveHandoffScope(params: {
   return { agentId: target.agentId, sessionKey, storePath: target.storePath };
 }
 
+type ClaimPlan = {
+  notices: SideConversationHandoffNotice[];
+  droppedCount: number;
+  droppedSequences: number[];
+};
+
+/**
+ * Persist the claim receipt before the batch can reach the model.
+ *
+ * The same transaction reconciles a receipt left by another run: such a batch is
+ * treated as delivered (never injected again) and only cleaned up here.
+ */
+async function persistClaim(params: {
+  runId: string;
+  scope: HandoffScope;
+}): Promise<ClaimPlan | undefined> {
+  let plan: ClaimPlan | undefined;
+  try {
+    await patchSessionEntryCore(
+      params.scope,
+      (entry: InternalSessionEntry) => {
+        const queue = readSideConversationHandoffQueue(entry);
+        let reconciled = reconcileSideConversationHandoffDispatch(queue, params.runId);
+        if (reconciled.pending.length === 0) {
+          reconciled = clearSideConversationHandoffDropped(reconciled);
+          plan = { notices: [], droppedCount: 0, droppedSequences: [] };
+          return reconciled === queue ? null : { ...entry, sideConversationHandoffs: reconciled };
+        }
+        const notices = reconciled.pending;
+        const droppedSequences = reconciled.dropped ?? [];
+        const next = beginSideConversationHandoffDispatch(reconciled, {
+          runId: params.runId,
+          sequences: notices.map((notice) => notice.sequence),
+          droppedSequences,
+          at: Date.now(),
+        });
+        if (!next) {
+          // Another run claimed between the read and this transaction; never
+          // inject a batch this run cannot durably promise to deliver.
+          plan = undefined;
+          return reconciled === queue ? null : { ...entry, sideConversationHandoffs: reconciled };
+        }
+        plan = { notices, droppedCount: droppedSequences.length, droppedSequences };
+        return { ...entry, sideConversationHandoffs: next };
+      },
+      { replaceEntry: true, skipMaintenance: true },
+    );
+  } catch (error) {
+    log.warn(
+      `side conversation handoff claim failed for ${params.scope.sessionKey}: ${formatError(error)}`,
+    );
+    return undefined;
+  }
+  return plan;
+}
+
 /**
  * Claim the pending reminders for one real external user turn.
  *
- * The run-scoped cache keeps retries of the same run byte-identical and stops a
- * second assembly after delivery from injecting the block again. Nothing is
- * marked delivered here; the returned `dispatch` owns that boundary.
+ * Eligible turns are cached for the whole run: a retry keeps the identical
+ * batch, a run that saw an empty queue never absorbs a close that lands during
+ * its own retries, and a run that already dispatched (or treated another run's
+ * receipt as delivered) never injects again.
  */
 export async function claimSideConversationHandoffPrompt(params: {
   hasInternalEvents?: boolean;
@@ -173,14 +253,11 @@ export async function claimSideConversationHandoffPrompt(params: {
   }
   const cached = claimsByRun.get(runId);
   if (cached) {
-    return cached.delivered ? undefined : buildClaim({ cached, scope });
+    return cached.status === "pending" ? cached.claim : undefined;
   }
   let entry: InternalSessionEntry | undefined;
   try {
-    entry = loadSessionEntryReadOnly({
-      ...scope,
-      readConsistency: "latest",
-    });
+    entry = loadSessionEntryReadOnly({ ...scope, readConsistency: "latest" });
   } catch (error) {
     log.warn(
       `side conversation handoff read failed for ${scope.sessionKey}: ${formatError(error)}`,
@@ -188,79 +265,171 @@ export async function claimSideConversationHandoffPrompt(params: {
     return undefined;
   }
   if (!entry || entry.incognito === true) {
+    rememberClaim(runId, { status: "empty" });
     return undefined;
   }
   const queue = readSideConversationHandoffQueue(entry);
-  const prependContext = formatSideConversationHandoffPrompt(queue);
-  if (!prependContext) {
+  if (queue.pending.length === 0) {
+    // Nothing can render without pending notices; clear stale dropped history
+    // best effort and keep the run silent from here on.
+    if (queue.dropped?.length || queue.dispatching) {
+      await clearEmptyQueue({ runId, scope });
+    }
+    rememberClaim(runId, { status: "empty" });
     return undefined;
   }
-  const cachedClaim: CachedHandoffClaim = {
-    prependContext,
-    sequences: queue.pending.map((notice) => notice.sequence),
-    delivered: false,
-  };
-  rememberClaim(runId, cachedClaim);
-  return buildClaim({ cached: cachedClaim, scope });
-}
-
-function buildClaim(params: {
-  cached: CachedHandoffClaim;
-  scope: HandoffScope;
-}): SideConversationHandoffPromptClaim {
-  let dispatched = false;
-  return {
-    prependContext: params.cached.prependContext,
-    dispatch: async () => {
-      if (dispatched || params.cached.delivered) {
-        return;
-      }
-      dispatched = true;
-      await removeDeliveredNotices({ sequences: params.cached.sequences, scope: params.scope });
-      params.cached.delivered = true;
-    },
-  };
-}
-
-/** Remove exactly the delivered notices; bookkeeping failure never fails the send. */
-async function removeDeliveredNotices(params: {
-  sequences: readonly number[];
-  scope: HandoffScope;
-}): Promise<void> {
-  if (params.sequences.length === 0) {
-    return;
+  const plan = await persistClaim({ runId, scope });
+  if (!plan) {
+    // No receipt means no injection: the queue stays intact for a later attempt.
+    return undefined;
   }
+  if (plan.notices.length === 0) {
+    rememberClaim(runId, { status: "empty" });
+    return undefined;
+  }
+  const prependContext = formatSideConversationHandoffPrompt({
+    notices: plan.notices,
+    droppedCount: plan.droppedCount,
+  });
+  if (!prependContext) {
+    rememberClaim(runId, { status: "empty" });
+    return undefined;
+  }
+  const cachedClaim: CachedHandoffClaim = { status: "pending" };
+  const claim = buildClaim({
+    droppedSequences: plan.droppedSequences,
+    onDelivered: () => {
+      cachedClaim.status = "delivered";
+      cachedClaim.claim = undefined;
+    },
+    onReleased: () => {
+      // A retry of the same run may claim again; only a dispatched batch stays
+      // suppressed for the rest of the run.
+      if (claimsByRun.get(runId) === cachedClaim) {
+        claimsByRun.delete(runId);
+      }
+    },
+    prependContext,
+    runId,
+    scope,
+    sequences: plan.notices.map((notice) => notice.sequence),
+  });
+  cachedClaim.claim = claim;
+  rememberClaim(runId, cachedClaim);
+  return claim;
+}
+
+/** Clear an empty queue's stale bookkeeping without touching pending notices. */
+async function clearEmptyQueue(params: { runId: string; scope: HandoffScope }): Promise<void> {
   try {
     await patchSessionEntryCore(
       params.scope,
       (entry: InternalSessionEntry) => {
-        const queue = readSideConversationHandoffQueue(entry);
-        const nextQueue = removeSideConversationHandoffNotices(queue, params.sequences);
-        if (nextQueue === queue) {
+        const queue = reconcileSideConversationHandoffDispatch(
+          readSideConversationHandoffQueue(entry),
+          params.runId,
+        );
+        const next =
+          queue.pending.length === 0 ? clearSideConversationHandoffDropped(queue) : queue;
+        if (next === queue) {
           return null;
         }
-        const next: InternalSessionEntry = { ...entry, sideConversationHandoffs: nextQueue };
-        return next;
+        return { ...entry, sideConversationHandoffs: next };
       },
       { replaceEntry: true, skipMaintenance: true },
     );
   } catch (error) {
-    // The model request already went out; the notice stays pending for the next
-    // user message instead of turning an accepted send into an ambiguous error.
     log.warn(
-      `side conversation handoff delivery bookkeeping failed for ${params.scope.sessionKey}: ${formatError(error)}`,
+      `side conversation handoff cleanup failed for ${params.scope.sessionKey}: ${formatError(error)}`,
     );
   }
 }
 
+type ClaimInputs = {
+  droppedSequences: number[];
+  onDelivered: () => void;
+  onReleased: () => void;
+  prependContext: string;
+  runId: string;
+  scope: HandoffScope;
+  sequences: number[];
+};
+
+function buildClaim(inputs: ClaimInputs): SideConversationHandoffPromptClaim {
+  let phase: ClaimPhase = "claimed";
+  return {
+    prependContext: inputs.prependContext,
+    async commit() {
+      if (phase !== "claimed") {
+        return;
+      }
+      phase = "dispatched";
+      inputs.onDelivered();
+      try {
+        await patchSessionEntryCore(
+          inputs.scope,
+          (entry: InternalSessionEntry) => {
+            const queue = readSideConversationHandoffQueue(entry);
+            const next = commitSideConversationHandoffDispatch(queue, {
+              runId: inputs.runId,
+              sequences: inputs.sequences,
+              droppedSequences: inputs.droppedSequences,
+            });
+            if (next === queue) {
+              return null;
+            }
+            return { ...entry, sideConversationHandoffs: next };
+          },
+          { replaceEntry: true, skipMaintenance: true },
+        );
+      } catch (error) {
+        // The reminder was already handed to the provider; the persisted receipt
+        // keeps the next run from repeating it and retries the cleanup instead.
+        log.warn(
+          `side conversation handoff delivery bookkeeping failed for ${inputs.scope.sessionKey}: ${formatError(error)}`,
+        );
+      }
+    },
+    async release() {
+      if (phase !== "claimed") {
+        return;
+      }
+      phase = "released";
+      inputs.onReleased();
+      try {
+        await patchSessionEntryCore(
+          inputs.scope,
+          (entry: InternalSessionEntry) => {
+            const queue = readSideConversationHandoffQueue(entry);
+            const next = releaseSideConversationHandoffDispatch(queue, inputs.runId);
+            if (next === queue) {
+              return null;
+            }
+            return { ...entry, sideConversationHandoffs: next };
+          },
+          { replaceEntry: true, skipMaintenance: true },
+        );
+      } catch (error) {
+        // A receipt that survives this write is treated as delivered by the next
+        // run (no repeat); the alternative would resend the same reminder.
+        log.warn(
+          `side conversation handoff release failed for ${inputs.scope.sessionKey}: ${formatError(error)}`,
+        );
+      }
+    },
+  };
+}
+
 /**
- * Enqueue one closed conversation's bounded Git facts on the parent row.
+ * Record the close-time reminder, or repair a repeated close of the same
+ * generation whose enqueue failed earlier.
  *
- * A close that produced no edits records nothing, so an untouched side
- * conversation never nags the user. The write is a parent-row transaction; the
- * queue survives Gateway restarts with the parent entry.
+ * The owner decides from the durable queue: a pending notice or a delivered
+ * record for this exact `closedAt` is final, otherwise it inspects the checkout
+ * again and enqueues. Failures propagate so close can report the explicit
+ * "closed committed, reminder missing" retryable result.
  */
-export async function enqueueSideConversationHandoff(params: {
+export async function ensureClosedSideConversationHandoff(params: {
   cfg: OpenClawConfig;
   agentId: string;
   child: InternalSessionEntry;
@@ -269,10 +438,28 @@ export async function enqueueSideConversationHandoff(params: {
   parentEntry: InternalSessionEntry;
   parentSessionKey: string;
   storePath: string;
-}): Promise<{ enqueued: boolean; reason?: "no-checkout" | "no-edits" | "missing-parent" }> {
+}): Promise<SideConversationHandoffEnsureResult> {
   const marker = params.child.sideConversation;
   if (!marker) {
-    return { enqueued: false, reason: "no-checkout" };
+    return { status: "no-checkout" };
+  }
+  const closedAt = marker.closedAt ?? params.now;
+  const existing = loadSessionEntryReadOnly({
+    agentId: params.agentId,
+    sessionKey: params.parentSessionKey,
+    storePath: params.storePath,
+    readConsistency: "latest",
+  });
+  if (!existing) {
+    return { status: "missing-parent" };
+  }
+  if (
+    isSideConversationHandoffRecorded(readSideConversationHandoffQueue(existing), {
+      closedAt,
+      intentId: marker.intentId,
+    })
+  ) {
+    return { status: "already-recorded" };
   }
   const facts = await collectSideConversationHandoffFacts({
     cfg: params.cfg,
@@ -281,17 +468,20 @@ export async function enqueueSideConversationHandoff(params: {
     parentEntry: params.parentEntry,
   });
   if (!facts) {
-    return { enqueued: false, reason: "no-checkout" };
+    return { status: "no-checkout" };
   }
   if (facts.changedFiles === 0 && facts.commitsAhead === 0) {
-    return { enqueued: false, reason: "no-edits" };
+    return { status: "no-edits" };
   }
-  let enqueuedSequence: number | undefined;
+  let outcome: SideConversationHandoffEnsureResult | undefined;
   const updated = await patchSessionEntryCore(
     { agentId: params.agentId, sessionKey: params.parentSessionKey, storePath: params.storePath },
     (entry: InternalSessionEntry) => {
       const queue = readSideConversationHandoffQueue(entry);
-      enqueuedSequence = queue.nextSequence;
+      if (isSideConversationHandoffRecorded(queue, { closedAt, intentId: marker.intentId })) {
+        outcome = { status: "already-recorded" };
+        return null;
+      }
       const title = resolveHandoffTitle(params.child);
       const notice: SideConversationHandoffNotice = {
         sequence: queue.nextSequence,
@@ -299,9 +489,10 @@ export async function enqueueSideConversationHandoff(params: {
         intentId: marker.intentId,
         ordinal: marker.ordinal,
         ...(title ? { title } : {}),
-        closedAt: marker.closedAt ?? params.now,
+        closedAt,
         worktree: facts,
       };
+      outcome = { status: "recorded" };
       const next: InternalSessionEntry = {
         ...entry,
         sideConversationHandoffs: appendSideConversationHandoffNotice(queue, notice),
@@ -311,38 +502,13 @@ export async function enqueueSideConversationHandoff(params: {
     { replaceEntry: true, skipMaintenance: true },
   );
   if (!updated) {
-    return { enqueued: false, reason: "missing-parent" };
+    return outcome ?? { status: "missing-parent" };
   }
-  log.debug(
-    `side conversation handoff queued for ${params.parentSessionKey} (sequence ${enqueuedSequence})`,
-  );
-  return { enqueued: true };
-}
-
-/**
- * Best-effort close-time reminder.
- *
- * The close state is already committed, so an unreadable checkout or failed
- * parent write must log and leave close successful instead of reporting an
- * ambiguous state change.
- */
-export async function recordClosedSideConversationHandoff(params: {
-  cfg: OpenClawConfig;
-  agentId: string;
-  child: InternalSessionEntry;
-  childSessionKey: string;
-  now: number;
-  parentEntry: InternalSessionEntry;
-  parentSessionKey: string;
-  storePath: string;
-}): Promise<void> {
-  try {
-    await enqueueSideConversationHandoff(params);
-  } catch (error) {
-    log.warn(
-      `side conversation ${params.childSessionKey} closed but its handoff reminder could not be recorded: ${formatError(error)}`,
-    );
+  if (outcome?.status !== "recorded") {
+    return outcome ?? { status: "missing-parent" };
   }
+  log.debug(`side conversation handoff queued for ${params.parentSessionKey}`);
+  return outcome;
 }
 
 function resolveHandoffTitle(entry: InternalSessionEntry): string | undefined {

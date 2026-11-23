@@ -453,7 +453,9 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
     promptBuildAppendContext,
     effectiveTranscriptPrompt,
     originContext,
-    ...(handoffClaim ? { handoffDispatch: handoffClaim.dispatch } : {}),
+    ...(handoffClaim
+      ? { handoffDispatch: handoffClaim.commit, handoffRelease: handoffClaim.release }
+      : {}),
     transcriptLeafId,
     heartbeatSummary,
     leasedSteering,

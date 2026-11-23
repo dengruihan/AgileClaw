@@ -110,6 +110,8 @@ export async function submitEmbeddedAttemptPrompt(input: {
    * Failures are logged: accepted sends must not become ambiguous results.
    */
   onPrimaryModelDispatched?: () => Promise<void> | void;
+  /** Runs once when this submission ends without ever dispatching the request. */
+  onPrimaryModelNotDispatched?: () => Promise<void> | void;
   onSteeringAcknowledged: () => void;
   persistToolResultProjections: () => Promise<void>;
   prependContext?: string;
@@ -520,6 +522,15 @@ export async function submitEmbeddedAttemptPrompt(input: {
       input.onSteeringAcknowledged();
     }
   } finally {
+    // A submission that never reached the provider keeps its model-only context
+    // pending instead of consuming a delivery receipt.
+    if (!primaryRequestDispatched) {
+      try {
+        await input.onPrimaryModelNotDispatched?.();
+      } catch (error) {
+        log.warn(`primary model non-dispatch observer failed: ${formatErrorMessage(error)}`);
+      }
+    }
     cleanupProviderPromptHistoryTransform();
     cleanupModelPromptTransform();
   }

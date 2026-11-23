@@ -655,6 +655,27 @@ export type SideConversationHandoffNotice = {
   worktree?: SideConversationHandoffFacts;
 };
 
+/** Last successfully delivered reminder for one child close generation. */
+export type SideConversationHandoffDelivery = {
+  sequence: number;
+  /** Close timestamp of the delivered generation; a later close gets a new one. */
+  closedAt: number;
+};
+
+/**
+ * One in-flight claim: the run that promised to deliver exactly these notices.
+ *
+ * A receipt from another run is treated as delivered on the next claim, so a
+ * failed delivery write can never re-inject the same reminder. The claiming run
+ * rolls its own receipt back only when the provider request was never sent.
+ */
+export type SideConversationHandoffDispatchReceipt = {
+  runId: string;
+  sequences: number[];
+  droppedSequences: number[];
+  at: number;
+};
+
 /**
  * Private parent-owned handoff queue for closed side conversations.
  *
@@ -668,8 +689,12 @@ export type SideConversationHandoffQueue = {
   nextSequence: number;
   /** Pending notices, oldest first, bounded by the owner's cap. */
   pending: SideConversationHandoffNotice[];
-  /** Notices evicted by the pending cap; surfaced once, never replayed. */
-  droppedCount?: number;
+  /** Evicted notice sequences; rendered once and consumed by that batch's delivery. */
+  dropped?: number[];
+  /** intentId -> last delivered close generation; blocks re-recording the same close. */
+  delivered?: Record<string, SideConversationHandoffDelivery>;
+  /** At most one in-flight claim; a different run treats it as already delivered. */
+  dispatching?: SideConversationHandoffDispatchReceipt;
 };
 
 export type InternalSessionEntryCore = SessionEntryCore & {

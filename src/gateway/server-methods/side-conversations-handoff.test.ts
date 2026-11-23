@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { afterEach, expect, test, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
@@ -20,11 +21,31 @@ import {
 } from "../test/server-sessions.test-helpers.js";
 import { disposeSessionReadContexts } from "./sessions-read-cache.test-support.js";
 
+const closeHandoffFaults = vi.hoisted(() => ({ failNextEnsure: false }));
+
+vi.mock("../../sessions/side-conversation-handoff.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../sessions/side-conversation-handoff.js")>();
+  return {
+    ...actual,
+    ensureClosedSideConversationHandoff: async (
+      params: Parameters<typeof actual.ensureClosedSideConversationHandoff>[0],
+    ) => {
+      if (closeHandoffFaults.failNextEnsure) {
+        closeHandoffFaults.failNextEnsure = false;
+        throw new Error("database is locked");
+      }
+      return await actual.ensureClosedSideConversationHandoff(params);
+    },
+  };
+});
+
 const execFileAsync = promisify(execFile);
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
 const { createSessionStoreDir } = setupGatewaySessionsHandlerTestHarness();
 
 afterEach(async () => {
+  closeHandoffFaults.failNextEnsure = false;
   await disposeSessionReadContexts();
   vi.restoreAllMocks();
   closeOpenClawStateDatabaseForTest();
@@ -237,5 +258,51 @@ test(
     const queue = readParentQueue(storePath);
     expect(queue.pending).toHaveLength(1);
     expect(queue.pending[0]?.sequence).toBe(2);
+  },
+);
+
+test(
+  "a close whose reminder write fails reports a retryable partial and repairs on retry",
+  { timeout: 60_000 },
+  async () => {
+    const { storePath } = await createGitFixture();
+    const { sessionKey, checkoutPath } = await createSide("intent-partial");
+    await fs.writeFile(path.join(checkoutPath, "draft.txt"), "child draft\n");
+
+    closeHandoffFaults.failNextEnsure = true;
+    const failed = await directSessionReq<never>(
+      "sideConversations.close",
+      {
+        parentSessionKey: parentKey,
+        sessionKey,
+      },
+      { client },
+    );
+    expect(failed.ok).toBe(false);
+    expect(failed.error?.code).toBe("UNAVAILABLE");
+    const errorPayload: unknown = failed.error;
+    expect(isRecord(errorPayload) ? errorPayload.retryable : undefined).toBe(true);
+    expect(failed.error?.details).toMatchObject({
+      sessionKey,
+      state: "closed",
+      handoffRecorded: false,
+    });
+    // The close itself is durable; only the reminder is missing.
+    const child = loadSessionEntry({ agentId: "main", sessionKey, storePath });
+    expect(child?.sideConversation?.state).toBe("closed");
+    expect(readParentQueue(storePath).pending).toHaveLength(0);
+
+    // The retried close inspects the checkout again and records the reminder.
+    const retried = await directSessionReq<{ conversation: { state: string } }>(
+      "sideConversations.close",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
+    expect(readParentQueue(storePath).pending).toHaveLength(1);
+    const listed = await directSessionReq<{
+      sessions: Array<{ key: string; handoffCount?: number }>;
+    }>("sessions.list", { agentId: "main" }, { client });
+    expect(listed.payload?.sessions.find((row) => row.key === parentKey)?.handoffCount).toBe(1);
   },
 );

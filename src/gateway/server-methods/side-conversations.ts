@@ -5,6 +5,7 @@
  * through the ordinary `chat.send` path after creation, so no model-run path is
  * added here.
  */
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import {
   validateSideConversationsAbandonParams,
   validateSideConversationsCloseParams,
@@ -144,6 +145,18 @@ export const sideConversationHandlers: GatewayRequestHandlers = {
       },
     });
     if (!result.ok) {
+      // A close whose state committed must still publish its rows when only the
+      // reminder write failed; the retryable error tells the caller to retry.
+      if (isRecord(result.error.details) && result.error.details.state === "closed") {
+        emitSessionsChanged(context, {
+          sessionKey: params.sessionKey,
+          reason: "side-conversation.close",
+        });
+        emitSessionsChanged(context, {
+          sessionKey: params.parentSessionKey,
+          reason: "side-conversation.close",
+        });
+      }
       respond(false, undefined, result.error);
       return;
     }

@@ -107,6 +107,7 @@ export async function runEmbeddedAttemptPromptPhase(
   const toolSearchCompacted = prepared.toolCatalog.toolSearch.compacted;
   let skipPromptSubmission = false;
   let leasedSteering: PromptAssemblyResult["leasedSteering"];
+  let releaseHandoffClaim: (() => Promise<void>) | undefined;
 
   const setFailure = (error: unknown, source: AgentRunAttemptFailureSource | null) => {
     input.state.terminal = setAgentRunAttemptTerminalFailure(
@@ -182,6 +183,7 @@ export async function runEmbeddedAttemptPromptPhase(
         leasedSteering = lease;
       },
     });
+    releaseHandoffClaim = promptAssembly.handoffRelease;
     systemPromptText = sessionRuntimeState.systemPromptText;
     if (prepared.toolCatalog.emptyExplicitToolAllowlistError) {
       setFailure(prepared.toolCatalog.emptyExplicitToolAllowlistError, "precheck");
@@ -471,6 +473,9 @@ export async function runEmbeddedAttemptPromptPhase(
         ...(promptAssembly.handoffDispatch
           ? { onPrimaryModelDispatched: promptAssembly.handoffDispatch }
           : {}),
+        ...(promptAssembly.handoffRelease
+          ? { onPrimaryModelNotDispatched: promptAssembly.handoffRelease }
+          : {}),
         onSteeringAcknowledged: () => {
           leasedSteering = undefined;
         },
@@ -546,6 +551,9 @@ export async function runEmbeddedAttemptPromptPhase(
       setFailure(promptErrorOutcome.promptFailure.error, promptErrorOutcome.promptFailure.source);
     }
   } finally {
+    // A claim that never dispatched (assembly/preflight failure or a skipped
+    // submission) rolls its receipt back so the reminder stays pending.
+    await releaseHandoffClaim?.();
     stopAcceptingSteerMessages();
     log.debug(
       `embedded run prompt end: runId=${attempt.runId} sessionId=${attempt.sessionId} durationMs=${Date.now() - promptStartedAt}`,

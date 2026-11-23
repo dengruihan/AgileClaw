@@ -2,12 +2,15 @@
  * Pure stored-queue helpers for side-conversation handoffs.
  *
  * The parent session entry owns one bounded, monotonically sequenced queue of
- * closed side conversations. This module only reads, bounds, and renders that
- * shape so hot row projection never imports the Git/DB owner.
+ * closed side conversations plus at most one in-flight dispatch receipt. This
+ * module only reads, bounds, transitions, and renders that shape so hot row
+ * projection never imports the Git/DB owner.
  */
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import type {
   InternalSessionEntry,
+  SideConversationHandoffDelivery,
+  SideConversationHandoffDispatchReceipt,
   SideConversationHandoffFacts,
   SideConversationHandoffNotice,
   SideConversationHandoffQueue,
@@ -16,6 +19,9 @@ import { truncateUtf16Safe } from "../utils.js";
 
 /** Reminders in one model-only block stay bounded; the newest are kept. */
 export const SIDE_CONVERSATION_HANDOFF_MAX_PENDING = 8;
+
+/** Evicted-sequence history stays bounded; they are only ever counted. */
+const SIDE_CONVERSATION_HANDOFF_MAX_DROPPED = 32;
 
 /** Stored counts stay small; the rendered reminder shows `N+` at the cap. */
 const HANDOFF_COUNT_CAP = 100;
@@ -68,6 +74,54 @@ function isHandoffNotice(value: unknown): value is SideConversationHandoffNotice
   );
 }
 
+function readDropped(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (sequence): sequence is number =>
+      typeof sequence === "number" && Number.isInteger(sequence) && sequence >= 1,
+  );
+}
+
+function readDelivered(value: unknown): Record<string, SideConversationHandoffDelivery> {
+  const delivered: Record<string, SideConversationHandoffDelivery> = {};
+  if (!isRecord(value)) {
+    return delivered;
+  }
+  for (const [intentId, record] of Object.entries(value)) {
+    if (
+      isRecord(record) &&
+      typeof record.sequence === "number" &&
+      Number.isInteger(record.sequence) &&
+      record.sequence >= 1 &&
+      typeof record.closedAt === "number" &&
+      Number.isFinite(record.closedAt)
+    ) {
+      delivered[intentId] = { sequence: record.sequence, closedAt: record.closedAt };
+    }
+  }
+  return delivered;
+}
+
+function readDispatching(value: unknown): SideConversationHandoffDispatchReceipt | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.runId !== "string" ||
+    !value.runId ||
+    typeof value.at !== "number" ||
+    !Number.isFinite(value.at)
+  ) {
+    return undefined;
+  }
+  const sequences = readDropped(value.sequences);
+  const droppedSequences = readDropped(value.droppedSequences);
+  if (sequences.length === 0 && droppedSequences.length === 0) {
+    return undefined;
+  }
+  return { runId: value.runId, sequences, droppedSequences, at: value.at };
+}
+
 /** Read defensively: legacy or partially written shapes fall back to empty. */
 export function readSideConversationHandoffQueue(
   entry: QueueOwnerEntry | undefined,
@@ -83,15 +137,16 @@ export function readSideConversationHandoffQueue(
     return emptySideConversationHandoffQueue();
   }
   const pending = stored.pending.filter(isHandoffNotice);
+  const dropped = readDropped(stored.dropped);
+  const delivered = readDelivered(stored.delivered);
+  const dispatching = readDispatching(stored.dispatching);
   return {
     version: 1,
     nextSequence: stored.nextSequence,
     pending,
-    ...(typeof stored.droppedCount === "number" &&
-    Number.isInteger(stored.droppedCount) &&
-    stored.droppedCount > 0
-      ? { droppedCount: stored.droppedCount }
-      : {}),
+    ...(dropped.length > 0 ? { dropped } : {}),
+    ...(Object.keys(delivered).length > 0 ? { delivered } : {}),
+    ...(dispatching ? { dispatching } : {}),
   };
 }
 
@@ -101,8 +156,28 @@ export function resolveSideConversationHandoffCount(entry: QueueOwnerEntry | und
 }
 
 /**
+ * Whether this close generation already has a live or delivered reminder.
+ *
+ * Reopen clears the delivered record, and a re-close gets a new `closedAt`, so
+ * only a repeated close of the same generation reports as recorded.
+ */
+export function isSideConversationHandoffRecorded(
+  queue: SideConversationHandoffQueue,
+  params: { closedAt: number; intentId: string },
+): boolean {
+  if (
+    queue.pending.some(
+      (notice) => notice.intentId === params.intentId && notice.closedAt === params.closedAt,
+    )
+  ) {
+    return true;
+  }
+  return queue.delivered?.[params.intentId]?.closedAt === params.closedAt;
+}
+
+/**
  * Append one notice, replacing any pending notice for the same intent and
- * evicting the oldest entries beyond the cap.
+ * evicting the oldest entries beyond the cap into the dropped history.
  */
 export function appendSideConversationHandoffNotice(
   queue: SideConversationHandoffQueue,
@@ -111,41 +186,163 @@ export function appendSideConversationHandoffNotice(
   const others = queue.pending.filter((pending) => pending.intentId !== notice.intentId);
   const merged = [...others, notice];
   const overflow = Math.max(0, merged.length - SIDE_CONVERSATION_HANDOFF_MAX_PENDING);
-  const dropped = queue.droppedCount ?? 0;
+  const evicted = merged.slice(0, overflow).map((pending) => pending.sequence);
+  const dropped = [...(queue.dropped ?? []), ...evicted];
+  const delivered = queue.delivered ? { ...queue.delivered } : undefined;
+  // A new close generation supersedes the intent's previous delivery record.
+  if (delivered) {
+    delete delivered[notice.intentId];
+  }
   return {
-    version: 1,
+    ...queue,
     nextSequence: Math.max(queue.nextSequence, notice.sequence + 1),
     pending: merged.slice(overflow),
-    ...(dropped + overflow > 0 ? { droppedCount: dropped + overflow } : {}),
+    ...(dropped.length > 0
+      ? { dropped: dropped.slice(-SIDE_CONVERSATION_HANDOFF_MAX_DROPPED) }
+      : { dropped: undefined }),
+    ...(delivered && Object.keys(delivered).length > 0 ? { delivered } : { delivered: undefined }),
   };
 }
 
-function removePending(
+/** Reopen removes the intent's pending notice and forgets its delivery record. */
+export function cancelSideConversationHandoffNotices(
   queue: SideConversationHandoffQueue,
-  shouldRemove: (notice: SideConversationHandoffNotice) => boolean,
+  intentId: string,
 ): SideConversationHandoffQueue {
-  const pending = queue.pending.filter((notice) => !shouldRemove(notice));
+  const pending = queue.pending.filter((notice) => notice.intentId !== intentId);
+  const delivered = queue.delivered ? { ...queue.delivered } : undefined;
+  const hadDelivered = delivered ? Object.hasOwn(delivered, intentId) : false;
+  if (delivered && hadDelivered) {
+    delete delivered[intentId];
+  }
+  if (pending.length === queue.pending.length && !hadDelivered) {
+    return queue;
+  }
+  return {
+    ...queue,
+    pending,
+    ...(delivered && Object.keys(delivered).length > 0 ? { delivered } : { delivered: undefined }),
+  };
+}
+
+function recordDelivery(
+  queue: SideConversationHandoffQueue,
+  deliveredNotices: readonly SideConversationHandoffNotice[],
+): SideConversationHandoffQueue {
+  if (deliveredNotices.length === 0) {
+    return queue;
+  }
+  const delivered = { ...queue.delivered };
+  for (const notice of deliveredNotices) {
+    const previous = delivered[notice.intentId];
+    if (!previous || previous.closedAt <= notice.closedAt) {
+      delivered[notice.intentId] = { sequence: notice.sequence, closedAt: notice.closedAt };
+    }
+  }
+  return { ...queue, delivered };
+}
+
+/**
+ * Claim the queue for one run: at most one receipt may exist.
+ *
+ * Returns `undefined` when another run already holds the receipt, so the caller
+ * never injects a batch it could not durably promise to deliver.
+ */
+export function beginSideConversationHandoffDispatch(
+  queue: SideConversationHandoffQueue,
+  receipt: SideConversationHandoffDispatchReceipt,
+): SideConversationHandoffQueue | undefined {
+  if (queue.dispatching && queue.dispatching.runId !== receipt.runId) {
+    return undefined;
+  }
+  return { ...queue, dispatching: receipt };
+}
+
+/**
+ * Treat another run's receipt as delivered: nothing may be injected again.
+ *
+ * This is the no-repeat reconciliation for a delivery write that failed after
+ * the provider dispatch (or for a run that died between claim and dispatch).
+ */
+export function reconcileSideConversationHandoffDispatch(
+  queue: SideConversationHandoffQueue,
+  currentRunId: string,
+): SideConversationHandoffQueue {
+  const receipt = queue.dispatching;
+  if (!receipt || receipt.runId === currentRunId) {
+    return queue;
+  }
+  const sequences = new Set(receipt.sequences);
+  const droppedSequences = new Set(receipt.droppedSequences);
+  const removed = queue.pending.filter((notice) => sequences.has(notice.sequence));
+  const pending = queue.pending.filter((notice) => !sequences.has(notice.sequence));
+  const dropped = (queue.dropped ?? []).filter((sequence) => !droppedSequences.has(sequence));
+  return recordDelivery(
+    {
+      ...queue,
+      pending,
+      ...(dropped.length > 0 ? { dropped } : { dropped: undefined }),
+      dispatching: undefined,
+    },
+    removed,
+  );
+}
+
+/** Drop only the claimed sequences; evictions after the claim stay visible. */
+export function dropSideConversationHandoffNotices(
+  queue: SideConversationHandoffQueue,
+  sequences: readonly number[],
+): SideConversationHandoffQueue {
+  const claimed = new Set(sequences);
+  const pending = queue.pending.filter((notice) => !claimed.has(notice.sequence));
   if (pending.length === queue.pending.length) {
     return queue;
   }
   return { ...queue, pending };
 }
 
-/** Delivery removes exactly the notices that the dispatched prompt carried. */
-export function removeSideConversationHandoffNotices(
+/** Delivery removes exactly the claimed notices, dropped lines, and receipt. */
+export function commitSideConversationHandoffDispatch(
   queue: SideConversationHandoffQueue,
-  sequences: readonly number[],
+  receipt: Pick<SideConversationHandoffDispatchReceipt, "runId" | "sequences" | "droppedSequences">,
 ): SideConversationHandoffQueue {
-  const claimed = new Set(sequences);
-  return removePending(queue, (notice) => claimed.has(notice.sequence));
+  const sequences = new Set(receipt.sequences);
+  const droppedSequences = new Set(receipt.droppedSequences);
+  const removed = queue.pending.filter((notice) => sequences.has(notice.sequence));
+  const pending = queue.pending.filter((notice) => !sequences.has(notice.sequence));
+  const dropped = (queue.dropped ?? []).filter((sequence) => !droppedSequences.has(sequence));
+  const released = queue.dispatching?.runId === receipt.runId;
+  const next = recordDelivery(
+    {
+      ...queue,
+      pending,
+      ...(dropped.length > 0 ? { dropped } : { dropped: undefined }),
+      ...(released ? { dispatching: undefined } : {}),
+    },
+    removed,
+  );
+  return next;
 }
 
-/** Reopen cancels only the still-pending notices of that exact child. */
-export function cancelSideConversationHandoffNotices(
+/** Pre-dispatch release clears only this run's receipt; pending stays queued. */
+export function releaseSideConversationHandoffDispatch(
   queue: SideConversationHandoffQueue,
-  intentId: string,
+  runId: string,
 ): SideConversationHandoffQueue {
-  return removePending(queue, (notice) => notice.intentId === intentId);
+  if (queue.dispatching?.runId !== runId) {
+    return queue;
+  }
+  return { ...queue, dispatching: undefined };
+}
+
+/** Remove dropped history that can never render because no notices are pending. */
+export function clearSideConversationHandoffDropped(
+  queue: SideConversationHandoffQueue,
+): SideConversationHandoffQueue {
+  if (!queue.dropped?.length) {
+    return queue;
+  }
+  return { ...queue, dropped: undefined };
 }
 
 function boundedValue(value: string | undefined, maxChars: number): string | undefined {
@@ -186,15 +383,16 @@ function renderFacts(facts: SideConversationHandoffFacts | undefined): string {
 }
 
 /**
- * Fixed-format model-only reminder for the batch.
+ * Fixed-format model-only reminder for one claimed batch.
  *
  * It restates the close-time facts only; it never claims the branch still needs
  * merging and never asks the model to act without the user's request.
  */
-export function formatSideConversationHandoffPrompt(
-  queue: SideConversationHandoffQueue,
-): string | undefined {
-  const notices = queue.pending;
+export function formatSideConversationHandoffPrompt(batch: {
+  notices: readonly SideConversationHandoffNotice[];
+  droppedCount: number;
+}): string | undefined {
+  const notices = batch.notices;
   if (notices.length === 0) {
     return undefined;
   }
@@ -216,9 +414,9 @@ export function formatSideConversationHandoffPrompt(
     }
     lines.push(`   ${renderFacts(notice.worktree)}`);
   }
-  if (queue.droppedCount) {
+  if (batch.droppedCount > 0) {
     lines.push(
-      `${queue.droppedCount} earlier closed side conversation${queue.droppedCount === 1 ? "" : "s"} had pending handoffs that this reminder omits; list them with sideConversations.list only if the user asks.`,
+      `${batch.droppedCount} earlier closed side conversation${batch.droppedCount === 1 ? "" : "s"} had pending handoffs that this reminder omits; list them with sideConversations.list only if the user asks.`,
     );
   }
   return lines.join("\n");

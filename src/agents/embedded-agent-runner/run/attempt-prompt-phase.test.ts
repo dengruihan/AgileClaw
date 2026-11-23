@@ -45,7 +45,7 @@ import { prepareEmbeddedAttemptSessionBoundary } from "./attempt-session-prepare
 import { buildRuntimeContextCustomMessage } from "./runtime-context-prompt.js";
 
 // Register the shared module mocks before importing any runtime dependency.
-const { createFixture, mocks } = await vi.hoisted(
+const { createFixture, createPromptAssemblyResult, mocks } = await vi.hoisted(
   async () => await import("./attempt-prompt-phase.test-support.js"),
 );
 
@@ -86,6 +86,26 @@ afterEach(() => {
 });
 
 describe("runEmbeddedAttemptPromptPhase", () => {
+  it("releases an undispatched handoff claim when prompt preparation fails", async () => {
+    const f = createFixture();
+    const release = vi.fn(async () => {});
+    mocks.preparePromptAssembly.mockImplementation(async (input) => ({
+      ...createPromptAssemblyResult(input),
+      effectivePrompt: "hello",
+      effectiveTranscriptPrompt: "hello",
+      handoffDispatch: vi.fn(),
+      handoffRelease: release,
+    }));
+    mocks.preparePromptContext.mockImplementation(() => {
+      throw new Error("context preparation failed");
+    });
+
+    await runEmbeddedAttemptPromptPhase(f.input, f.promptState);
+
+    expect(release).toHaveBeenCalledTimes(1);
+    expect(mocks.submitPrompt).not.toHaveBeenCalled();
+  });
+
   it.each([false, true])(
     "wires final Decision withdrawal with in-history updates %s",
     async (inHistorySystemUpdates) => {
