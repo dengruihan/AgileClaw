@@ -1631,6 +1631,7 @@
                   "concepts/multi-user",
                   "concepts/session",
                   "concepts/session-attachment",
+                  "concepts/side-conversations",
                   "concepts/session-search",
                   "concepts/session-pruning",
                   "concepts/session-state",

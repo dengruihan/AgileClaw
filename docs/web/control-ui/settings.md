@@ -479,6 +479,11 @@ The new panel chords include Option/Alt to avoid browser actions such as develop
 tools, Read Aloud, and find previous, and OpenClaw's existing debug-overlay shortcut.
 The existing Terminal, Files, and Side chat bindings are unchanged.
 
+**Side chat** opens the selected session's side-conversation rail. Starting or
+opening a hidden child adds a split chat pane, so the child has its own composer,
+model controls, and panel layout beside the parent. See
+[Side conversations](/concepts/side-conversations).
+
 <a id="this-mac-macos-app" />
 
 ### This device (macOS and iOS apps)

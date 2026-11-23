@@ -5014,5 +5014,9 @@
   {
     "source": "Database schemas",
     "target": "数据库架构"
+  },
+  {
+    "source": "Side conversations",
+    "target": "侧边会话"
   }
 ]
