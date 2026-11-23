@@ -6,9 +6,12 @@
  * added here.
  */
 import {
+  validateSideConversationsAbandonParams,
   validateSideConversationsCloseParams,
   validateSideConversationsCreateParams,
+  validateSideConversationsDeleteParams,
   validateSideConversationsListParams,
+  validateSideConversationsMergeParams,
   validateSideConversationsReopenParams,
 } from "../../../packages/gateway-protocol/src/index.js";
 import { resolveRequestedSessionAgentId } from "../session-request-agent.js";
@@ -16,6 +19,11 @@ import { SessionMutationAuthorizationChangedError } from "../session-sharing.js"
 import { emitSessionsChanged } from "./session-change-event.js";
 import { readGatewayRequestMutationAuthority } from "./session-mutation-guards.js";
 import { retainSessionScopedRead } from "./session-scoped-read.js";
+import {
+  abandonPersistentSideConversation,
+  deletePersistentSideConversation,
+  mergePersistentSideConversation,
+} from "./side-conversations-handoff.js";
 import {
   closePersistentSideConversation,
   createPersistentSideConversation,
@@ -143,6 +151,123 @@ export const sideConversationHandlers: GatewayRequestHandlers = {
     emitSessionsChanged(context, {
       sessionKey: result.value.sessionKey,
       reason: "side-conversation.close",
+    });
+  },
+
+  "sideConversations.merge": async (options) => {
+    const { params, respond, context, sessionMutationAuthorization } = options;
+    if (
+      !assertValidParams(
+        params,
+        validateSideConversationsMergeParams,
+        "sideConversations.merge",
+        respond,
+      )
+    ) {
+      return;
+    }
+    const requestAuthority = readGatewayRequestMutationAuthority(options);
+    const result = await mergePersistentSideConversation({
+      cfg: context.getRuntimeConfig(),
+      context,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+      parentSessionKey: params.parentSessionKey,
+      sessionKey: params.sessionKey,
+      ...(options.signal ? { signal: options.signal } : {}),
+      assertCurrent: () => {
+        requestAuthority.assertCurrent();
+        sessionMutationAuthorization?.assertCurrent();
+      },
+    });
+    if (!result.ok) {
+      respond(false, undefined, result.error);
+      return;
+    }
+    respond(true, { ok: true, ...result.value });
+    emitSessionsChanged(context, {
+      sessionKey: result.value.conversation.sessionKey,
+      reason: "side-conversation.merge",
+    });
+    emitSessionsChanged(context, {
+      sessionKey: result.value.conversation.parentSessionKey,
+      reason: "side-conversation.merge",
+    });
+  },
+
+  "sideConversations.abandon": async (options) => {
+    const { params, respond, context, sessionMutationAuthorization } = options;
+    if (
+      !assertValidParams(
+        params,
+        validateSideConversationsAbandonParams,
+        "sideConversations.abandon",
+        respond,
+      )
+    ) {
+      return;
+    }
+    const requestAuthority = readGatewayRequestMutationAuthority(options);
+    const result = await abandonPersistentSideConversation({
+      cfg: context.getRuntimeConfig(),
+      context,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+      parentSessionKey: params.parentSessionKey,
+      sessionKey: params.sessionKey,
+      assertCurrent: () => {
+        requestAuthority.assertCurrent();
+        sessionMutationAuthorization?.assertCurrent();
+      },
+    });
+    if (!result.ok) {
+      respond(false, undefined, result.error);
+      return;
+    }
+    respond(true, { ok: true, conversation: result.value });
+    emitSessionsChanged(context, {
+      sessionKey: result.value.sessionKey,
+      reason: "side-conversation.abandon",
+    });
+  },
+
+  "sideConversations.delete": async (options) => {
+    const { params, respond, context, sessionMutationAuthorization } = options;
+    if (
+      !assertValidParams(
+        params,
+        validateSideConversationsDeleteParams,
+        "sideConversations.delete",
+        respond,
+      )
+    ) {
+      return;
+    }
+    const requestAuthority = readGatewayRequestMutationAuthority(options);
+    const result = await deletePersistentSideConversation({
+      cfg: context.getRuntimeConfig(),
+      context,
+      ...(params.agentId ? { agentId: params.agentId } : {}),
+      parentSessionKey: params.parentSessionKey,
+      sessionKey: params.sessionKey,
+      ...(params.deleteTranscript !== undefined
+        ? { deleteTranscript: params.deleteTranscript }
+        : {}),
+      assertCurrent: () => {
+        requestAuthority.assertCurrent();
+        sessionMutationAuthorization?.assertCurrent();
+      },
+    });
+    if (!result.ok) {
+      respond(false, undefined, result.error);
+      return;
+    }
+    respond(true, { ok: true, ...result.value });
+    emitSessionsChanged(context, {
+      sessionKey: params.sessionKey,
+      reason: "side-conversation.delete",
+    });
+    emitSessionsChanged(context, {
+      sessionKey: params.parentSessionKey,
+      reason: "side-conversation.registry",
     });
   },
 

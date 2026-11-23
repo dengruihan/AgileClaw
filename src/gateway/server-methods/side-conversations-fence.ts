@@ -85,7 +85,13 @@ function childKeys(params: { entry: InternalSessionEntry; sessionKey: string }):
   return [params.sessionKey, ...(params.entry.sessionId ? [params.entry.sessionId] : [])];
 }
 
-/** Read the registered children of one parent; no scan of unrelated rows. */
+/**
+ * Read the registered children of one parent; no scan of unrelated rows.
+ *
+ * Abandoned registrations are included because parent cleanup is their only
+ * remaining retirement path: once the parent row is gone, no RPC can resolve the
+ * hidden child again. Abandon itself stays a state-only operation.
+ */
 export function readRegisteredSideConversationChildren(params: {
   agentId: string;
   parentEntry: InternalSessionEntry;
@@ -94,9 +100,6 @@ export function readRegisteredSideConversationChildren(params: {
 }): RegisteredChild[] {
   const children: RegisteredChild[] = [];
   for (const [intentId, registration] of listSideConversationRegistrations(params.parentEntry)) {
-    if (registration.state === "abandoned") {
-      continue;
-    }
     const entry = readSideConversationChildEntry({
       agentId: params.agentId,
       storePath: params.storePath,
@@ -195,6 +198,138 @@ function childWriteGuard(params: {
       throw new SideConversationChildActiveError(sessionKey);
     }
   };
+}
+
+export type SideConversationChildDeleteResult =
+  | {
+      status: "deleted";
+      preserved?: PreservedSessionWorktree;
+      cleanupPending: SideConversationRemainder[];
+    }
+  | { status: "missing-membership" }
+  | { status: "changed"; message: string }
+  | { status: "failed"; active: boolean; message: string };
+
+/**
+ * Delete one registered hidden child and its checkout with snapshot protection.
+ *
+ * The caller owns the lifecycle lane: the parent fence passes its own guard,
+ * while a standalone explicit delete drains and enters the mutation first. The
+ * delete tombstone is restored whenever the row survived, so a failed attempt
+ * never hides a live membership.
+ */
+export async function deleteRegisteredSideConversationChild(params: {
+  agentId: string;
+  cfg: OpenClawConfig;
+  child: RegisteredChild;
+  commitGuard: () => void;
+  deleteTranscript: boolean;
+  /** Standalone deletes own a different busy error; the fence uses its default. */
+  isActiveError?: (error: unknown) => boolean;
+  parentSessionKey: string;
+  storePath: string;
+}): Promise<SideConversationChildDeleteResult> {
+  const sessionKey = params.child.registration.sessionKey;
+  let previousState: string | undefined;
+  const restoreTombstone = async () => {
+    if (previousState === undefined) {
+      return;
+    }
+    await restoreSideConversationState({
+      agentId: params.agentId,
+      cfg: params.cfg,
+      intentId: params.child.intentId,
+      now: Date.now(),
+      parentSessionKey: params.parentSessionKey,
+      state:
+        previousState === "deleting"
+          ? "open"
+          : (previousState as "open" | "closed" | "merged" | "abandoned"),
+    }).catch((error: unknown) => {
+      log.warn(
+        `side conversation tombstone restore failed for ${sessionKey}: ${formatErrorMessage(error)}`,
+      );
+    });
+  };
+  try {
+    // The admission was closed before this write; an already accepted run still
+    // fails the authoritative guard below.
+    params.commitGuard();
+    previousState = await markSideConversationDeleting({
+      agentId: params.agentId,
+      cfg: params.cfg,
+      intentId: params.child.intentId,
+      now: Date.now(),
+      parentSessionKey: params.parentSessionKey,
+    });
+    if (previousState === undefined) {
+      return { status: "missing-membership" };
+    }
+    const result = await deleteSessionEntryLifecycle({
+      agentId: params.agentId,
+      archiveTranscript: params.deleteTranscript,
+      commitGuard: params.commitGuard,
+      deleteDeliveryArtifacts: true,
+      expectedEntry: params.child.entry,
+      expectedSessionId: params.child.entry.sessionId,
+      expectedUpdatedAt: params.child.entry.updatedAt,
+      storePath: params.storePath,
+      target: { canonicalKey: sessionKey, storeKeys: [sessionKey] },
+    });
+    if (!result.deleted) {
+      await restoreTombstone();
+      return { status: "changed", message: "child changed before deletion" };
+    }
+    const cleanupPending: SideConversationRemainder[] = [];
+    try {
+      handleSessionStateSessionDeleted(sessionKey, params.agentId);
+    } catch (error) {
+      cleanupPending.push(
+        remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
+      );
+    }
+    let preserved: PreservedSessionWorktree | undefined;
+    try {
+      const childPreserved = await removeSessionWorktree({
+        id: params.child.entry.worktree?.id,
+        sessionKey,
+        reason: "session-delete",
+        commitGuard: params.commitGuard,
+      });
+      if (isValidPreservedWorktree(childPreserved)) {
+        preserved = childPreserved;
+      } else if (childPreserved) {
+        log.warn(`side conversation worktree preserved without a valid location: ${sessionKey}`);
+      }
+    } catch (error) {
+      cleanupPending.push(
+        remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
+      );
+    }
+    try {
+      await removeSideConversationIntent({
+        agentId: params.agentId,
+        cfg: params.cfg,
+        intentId: params.child.intentId,
+        parentSessionKey: params.parentSessionKey,
+      });
+    } catch (error) {
+      // The delete tombstone stays: count/list already exclude it, and the
+      // partial result carries the retryable cleanup fact.
+      cleanupPending.push(
+        remainder(sessionKey, "REGISTRY_CLEANUP_PENDING", formatErrorMessage(error)),
+      );
+    }
+    return { status: "deleted", ...(preserved ? { preserved } : {}), cleanupPending };
+  } catch (error) {
+    await restoreTombstone();
+    return {
+      status: "failed",
+      active:
+        error instanceof SideConversationChildActiveError || params.isActiveError?.(error) === true,
+      message: formatErrorMessage(error),
+    };
+  }
 }
 
 export type SideConversationChildFenceResult = {
@@ -296,138 +431,50 @@ export async function deleteSideConversationChildrenInParentFence(params: {
   try {
     for (const [index, child] of children.entries()) {
       const sessionKey = child.registration.sessionKey;
-      const guard = childWriteGuard({ ...params, child });
-      let previousState: string | undefined;
-      const restoreTombstone = async () => {
-        if (previousState === undefined) {
-          return;
-        }
-        await restoreSideConversationState({
-          agentId: params.agentId,
-          cfg: params.cfg,
-          intentId: child.intentId,
-          now: Date.now(),
-          parentSessionKey: params.parentSessionKey,
-          state:
-            previousState === "deleting"
-              ? "open"
-              : (previousState as "open" | "closed" | "merged" | "abandoned"),
-        }).catch((error: unknown) => {
-          log.warn(
-            `side conversation tombstone restore failed for ${sessionKey}: ${formatErrorMessage(error)}`,
-          );
-        });
-      };
+      let outcome: SideConversationChildDeleteResult;
       try {
-        // The admission was closed before this write; an already accepted run
-        // still fails the authoritative guard below.
-        guard();
-        previousState = await markSideConversationDeleting({
+        outcome = await deleteRegisteredSideConversationChild({
           agentId: params.agentId,
           cfg: params.cfg,
-          intentId: child.intentId,
-          now: Date.now(),
+          child,
+          commitGuard: childWriteGuard({ ...params, child }),
+          deleteTranscript: params.deleteTranscript,
           parentSessionKey: params.parentSessionKey,
-        });
-        if (previousState === undefined) {
-          return {
-            ok: true,
-            deletedKeys,
-            preserved,
-            cleanupPending,
-            remaining: [
-              remainder(sessionKey, "CHILD_DELETE_FAILED", "membership reservation is missing"),
-              ...skippedRemainders(children, index + 1),
-            ],
-          };
-        }
-        const result = await deleteSessionEntryLifecycle({
-          agentId: params.agentId,
-          archiveTranscript: params.deleteTranscript,
-          commitGuard: guard,
-          deleteDeliveryArtifacts: true,
-          expectedEntry: child.entry,
-          expectedSessionId: child.entry.sessionId,
-          expectedUpdatedAt: child.entry.updatedAt,
           storePath: params.storePath,
-          target: { canonicalKey: sessionKey, storeKeys: [sessionKey] },
         });
-        if (!result.deleted) {
-          await restoreTombstone();
-          return {
-            ok: true,
-            deletedKeys,
-            preserved,
-            cleanupPending,
-            remaining: [
-              remainder(sessionKey, "CHILD_CHANGED", "child changed before deletion"),
-              ...skippedRemainders(children, index + 1),
-            ],
-          };
-        }
-        // Durable delete committed: record it before any cleanup that may throw.
-        deletedKeys.push(sessionKey);
-        try {
-          handleSessionStateSessionDeleted(sessionKey, params.agentId);
-        } catch (error) {
-          cleanupPending.push(
-            remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
-          );
-        }
-        try {
-          const childPreserved = await removeSessionWorktree({
-            id: child.entry.worktree?.id,
-            sessionKey,
-            reason: "session-delete",
-            commitGuard: guard,
-          });
-          if (isValidPreservedWorktree(childPreserved)) {
-            preserved.push(childPreserved);
-          } else if (childPreserved) {
-            log.warn(
-              `side conversation worktree preserved without a valid location: ${sessionKey}`,
-            );
-          }
-        } catch (error) {
-          cleanupPending.push(
-            remainder(sessionKey, "POST_DELETE_CLEANUP_FAILED", formatErrorMessage(error)),
-          );
-        }
-        try {
-          await removeSideConversationIntent({
-            agentId: params.agentId,
-            cfg: params.cfg,
-            intentId: child.intentId,
-            parentSessionKey: params.parentSessionKey,
-          });
-        } catch (error) {
-          // The delete tombstone stays: count/list already exclude it, and the
-          // partial result carries the retryable cleanup fact.
-          cleanupPending.push(
-            remainder(sessionKey, "REGISTRY_CLEANUP_PENDING", formatErrorMessage(error)),
-          );
-        }
-      } catch (error) {
-        await restoreTombstone();
-        return {
-          ok: true,
-          deletedKeys,
-          preserved,
-          cleanupPending,
-          remaining: [
-            remainder(
-              sessionKey,
-              error instanceof SideConversationChildActiveError
-                ? "CHILD_ACTIVE"
-                : "CHILD_DELETE_FAILED",
-              formatErrorMessage(error),
-            ),
-            ...skippedRemainders(children, index + 1),
-          ],
-        };
       } finally {
         releases[index]?.();
       }
+      if (outcome.status === "deleted") {
+        deletedKeys.push(sessionKey);
+        if (outcome.preserved) {
+          preserved.push(outcome.preserved);
+        }
+        cleanupPending.push(...outcome.cleanupPending);
+        continue;
+      }
+      return {
+        ok: true,
+        deletedKeys,
+        preserved,
+        cleanupPending,
+        remaining: [
+          remainder(
+            sessionKey,
+            outcome.status === "missing-membership"
+              ? "CHILD_DELETE_FAILED"
+              : outcome.status === "changed"
+                ? "CHILD_CHANGED"
+                : outcome.active
+                  ? "CHILD_ACTIVE"
+                  : "CHILD_DELETE_FAILED",
+            outcome.status === "missing-membership"
+              ? "membership reservation is missing"
+              : outcome.message,
+          ),
+          ...skippedRemainders(children, index + 1),
+        ],
+      };
     }
   } finally {
     for (const release of releases) {
@@ -598,15 +645,19 @@ export async function archiveSideConversationChildrenInParentFence(params: {
             // a null here would be reported as a successful archive.
             throw new SideConversationChildChangedError(sessionKey);
           }
+          const marker = currentEntry.sideConversation!;
+          // Archive retires the checkout, not the abandon decision: an abandoned
+          // child keeps its terminal state and only gains the archive facts.
+          const archivedState = marker.state === "abandoned" ? "abandoned" : "closed";
           return {
             ...currentEntry,
             archivedAt: now,
             archiveReason: "manual" as const,
             sideConversation: {
-              ...currentEntry.sideConversation!,
-              state: "closed" as const,
+              ...marker,
+              state: archivedState,
               updatedAt: now,
-              closedAt: currentEntry.sideConversation!.closedAt ?? now,
+              ...(archivedState === "closed" ? { closedAt: marker.closedAt ?? now } : {}),
             },
           };
         },
@@ -637,7 +688,7 @@ export async function archiveSideConversationChildrenInParentFence(params: {
         intentId: child.intentId,
         now,
         parentSessionKey: params.parentSessionKey,
-        state: "closed",
+        state: committed.sideConversation?.state === "abandoned" ? "abandoned" : "closed",
       });
     } catch (error) {
       log.warn(

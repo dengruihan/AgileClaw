@@ -12,9 +12,12 @@ import type {
   WebPushVapidPublicKeyParams,
 } from "./schema-modules.js";
 import {
+  SideConversationsAbandonParamsSchema,
   SideConversationsCloseParamsSchema,
   SideConversationsCreateParamsSchema,
+  SideConversationsDeleteParamsSchema,
   SideConversationsListParamsSchema,
+  SideConversationsMergeParamsSchema,
   SideConversationsReopenParamsSchema,
 } from "./schema/side-conversations.js";
 import { WorkerComputerParamsSchema } from "./schema/worker-computer.js";
@@ -374,6 +377,9 @@ export const validateSideConversationsCreateParams = compile(SideConversationsCr
 export const validateSideConversationsListParams = compile(SideConversationsListParamsSchema);
 export const validateSideConversationsCloseParams = compile(SideConversationsCloseParamsSchema);
 export const validateSideConversationsReopenParams = compile(SideConversationsReopenParamsSchema);
+export const validateSideConversationsMergeParams = compile(SideConversationsMergeParamsSchema);
+export const validateSideConversationsAbandonParams = compile(SideConversationsAbandonParamsSchema);
+export const validateSideConversationsDeleteParams = compile(SideConversationsDeleteParamsSchema);
 export const validateSessionsAssignOwnerParams = compile(S.SessionsAssignOwnerParamsSchema);
 export const validateSessionsSetInvolvementParams = compile(S.SessionsSetInvolvementParamsSchema);
 export const validateSessionsGroupsListParams = compile(S.SessionsGroupsListParamsSchema);

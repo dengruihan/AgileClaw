@@ -73,6 +73,37 @@ export const SideConversationRemainderSchema = closedObject({
   message: Type.String(),
 });
 
+/** Why a side conversation could not get its own checkout. Never claims isolation. */
+export const SideConversationWorktreeSkipReasonSchema = Type.Union([
+  /** The parent's workspace is not inside a Git checkout. */
+  Type.Literal("not-git"),
+  /** The parent runs on a remote node, so a local checkout is not its workspace. */
+  Type.Literal("remote-exec"),
+  /** The child has no resolvable Git source, for example a row created before this feature. */
+  Type.Literal("unavailable"),
+]);
+
+/** One materialized managed worktree bound to the hidden child. */
+export const SideConversationWorktreeFactsSchema = closedObject({
+  id: NonEmptyString,
+  branch: NonEmptyString,
+  path: NonEmptyString,
+  /**
+   * Parent's committed HEAD recorded at creation. Side conversations pin the
+   * exact commit here, so uncommitted parent edits are never copied.
+   */
+  baseRef: Type.Optional(NonEmptyString),
+});
+
+/**
+ * Filesystem and external-state isolation are separate facts. A side conversation
+ * never isolates databases, listening ports, or network APIs from the parent.
+ */
+export const SideConversationIsolationSchema = closedObject({
+  filesystem: Type.Union([Type.Literal("worktree"), Type.Literal("shared")]),
+  externalState: Type.Literal("shared"),
+});
+
 /** One registered side conversation as returned by the new RPCs. */
 export const SideConversationSummarySchema = closedObject({
   sessionKey: NonEmptyString,
@@ -89,6 +120,11 @@ export const SideConversationSummarySchema = closedObject({
   modelProvider: Type.Optional(Type.String()),
   model: Type.Optional(Type.String()),
   snapshot: Type.Optional(SideConversationSnapshotFactsSchema),
+  isolation: SideConversationIsolationSchema,
+  /** Present when the child owns its own checkout. */
+  worktree: Type.Optional(SideConversationWorktreeFactsSchema),
+  /** Present when the child shares the parent checkout instead of being isolated. */
+  worktreeSkipped: Type.Optional(SideConversationWorktreeSkipReasonSchema),
 });
 
 const ParentTargetParams = {
@@ -140,9 +176,72 @@ export const SideConversationsCloseParamsSchema = closedObject({
 
 export const SideConversationsReopenParamsSchema = SideConversationsCloseParamsSchema;
 
+/** Manual merge of the child's committed branch into the parent checkout. */
+export const SideConversationsMergeParamsSchema = SideConversationsCloseParamsSchema;
+
+/** Keep the branch and checkout, and only record that the conversation was dropped. */
+export const SideConversationsAbandonParamsSchema = SideConversationsCloseParamsSchema;
+
+/** Explicit delete is the only operation that may retire the child's checkout. */
+export const SideConversationsDeleteParamsSchema = closedObject({
+  ...ParentTargetParams,
+  sessionKey: NonEmptyString,
+  deleteTranscript: Type.Optional(Type.Boolean()),
+});
+
 export const SideConversationsTransitionResultSchema = closedObject({
   ok: Type.Literal(true),
   conversation: SideConversationSummarySchema,
+});
+
+export const SideConversationsMergeResultSchema = closedObject({
+  ok: Type.Literal(true),
+  conversation: SideConversationSummarySchema,
+  /**
+   * Commit that contains the merged branch: the merge commit created by this
+   * call, or the original landing commit when the branch was already merged.
+   */
+  mergeCommit: Type.Optional(NonEmptyString),
+  alreadyMerged: Type.Boolean(),
+});
+
+/**
+ * Bounded server-owned worktree preservation reasons.
+ *
+ * Mirrors `WORKTREE_PRESERVATION_REASONS` in the session-delete owner; this
+ * module cannot import that one at runtime because it already imports this
+ * module. A schema test pins the two lists to the same vocabulary.
+ */
+export const SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS = [
+  "owner-mismatch",
+  "busy",
+  "foreign-lock",
+  "snapshot-failed",
+  "cleanup-failed",
+] as const;
+
+export const SideConversationWorktreePreservationReasonSchema = Type.Enum(
+  SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS,
+  { type: "string" },
+);
+
+export const SideConversationsDeleteResultSchema = closedObject({
+  ok: Type.Literal(true),
+  sessionKey: NonEmptyString,
+  deleted: Type.Literal(true),
+  /** Retryable cleanup left after the row was already deleted. */
+  cleanupPending: Type.Optional(
+    Type.Array(SideConversationRemainderSchema, { maxItems: SIDE_CONVERSATION_MAX_LISTED }),
+  ),
+  /** Present when cleanup refused to retire the checkout; it stays on disk as reported. */
+  worktreePreserved: Type.Optional(
+    closedObject({
+      id: NonEmptyString,
+      branch: NonEmptyString,
+      path: NonEmptyString,
+      reason: SideConversationWorktreePreservationReasonSchema,
+    }),
+  ),
 });
 
 export type SideConversationCleanupPending = Static<typeof SideConversationCleanupPendingSchema>;
@@ -157,6 +256,16 @@ export type SideConversationsListParams = Static<typeof SideConversationsListPar
 export type SideConversationsListResult = Static<typeof SideConversationsListResultSchema>;
 export type SideConversationsCloseParams = Static<typeof SideConversationsCloseParamsSchema>;
 export type SideConversationsReopenParams = Static<typeof SideConversationsReopenParamsSchema>;
+export type SideConversationsMergeParams = Static<typeof SideConversationsMergeParamsSchema>;
+export type SideConversationsAbandonParams = Static<typeof SideConversationsAbandonParamsSchema>;
+export type SideConversationsDeleteParams = Static<typeof SideConversationsDeleteParamsSchema>;
 export type SideConversationsTransitionResult = Static<
   typeof SideConversationsTransitionResultSchema
 >;
+export type SideConversationsMergeResult = Static<typeof SideConversationsMergeResultSchema>;
+export type SideConversationsDeleteResult = Static<typeof SideConversationsDeleteResultSchema>;
+export type SideConversationWorktreeFact = Static<typeof SideConversationWorktreeFactsSchema>;
+export type SideConversationWorktreeSkipReason = Static<
+  typeof SideConversationWorktreeSkipReasonSchema
+>;
+export type SideConversationIsolation = Static<typeof SideConversationIsolationSchema>;
