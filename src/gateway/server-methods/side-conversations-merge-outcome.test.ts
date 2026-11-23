@@ -305,6 +305,18 @@ test(
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
     expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
 
+    // Abandon must not bury the accepted write; it points back at the merge retry.
+    const abandoned = await directSessionReq(
+      "sideConversations.abandon",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(abandoned.ok).toBe(false);
+    expect(abandoned.error?.message).toContain("already merged");
+    expect(mergeCommitDetail(abandoned.error)).toBe(landed);
+    expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+
     const retried = await directSessionReq<{
       alreadyMerged: boolean;
       mergeCommit?: string;
@@ -316,6 +328,53 @@ test(
       mergeCommit: landed,
       conversation: { state: "merged" },
     });
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+  },
+);
+
+test(
+  "abandon after a post-Git metadata failure is refused and the retry records merged",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath, sessionKey } =
+      await createMergedFixture("intent-metadata-abandon");
+    mockState.failNextPatch = true;
+    const failed = await directSessionReq(
+      "sideConversations.merge",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(failed.ok).toBe(false);
+    const landed = mergeCommitDetail(failed.error);
+    expect(landed).toBeTruthy();
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+    expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+
+    // The sequential post-Git failure must not become an unreconcilable abandon.
+    const abandoned = await directSessionReq(
+      "sideConversations.abandon",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(abandoned.ok).toBe(false);
+    expect(abandoned.error?.retryable).toBe(true);
+    expect(abandoned.error?.message).toContain("already merged");
+    expect(mergeCommitDetail(abandoned.error)).toBe(landed);
+    expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+
+    const retried = await directSessionReq<{
+      alreadyMerged: boolean;
+      mergeCommit?: string;
+      conversation: { state: string };
+    }>("sideConversations.merge", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
+    expect(retried.payload).toMatchObject({
+      alreadyMerged: true,
+      mergeCommit: landed,
+      conversation: { state: "merged" },
+    });
+    // The retry records the state without creating another merge.
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
   },
 );

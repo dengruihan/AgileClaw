@@ -18,6 +18,7 @@ import {
 import {
   buildSideConversationMergeMessage,
   mergeSideConversationBranch,
+  inspectSideConversationLanded,
   resolveLandedSideConversationMerge,
   type SideConversationMergeFailure,
 } from "../../agents/worktrees/side-conversation-merge.js";
@@ -40,6 +41,7 @@ import {
 import {
   SideConversationBusyError,
   SideConversationChangedError,
+  type ParentTarget,
   assertSideConversationIdle,
   busyErrorShape,
   changedErrorShape,
@@ -374,6 +376,39 @@ function mergeOutcomePendingError(
   );
 }
 
+async function resolveLandedAbandonMerge(params: {
+  cfg: OpenClawConfig;
+  child: InternalSessionEntry;
+  target: ParentTarget;
+}): Promise<string | undefined> {
+  const childCheckout = resolveSideConversationChildCheckout(params.child);
+  if (!childCheckout.branch) {
+    return undefined;
+  }
+  const parentCheckout = resolveSideConversationParentCheckout({
+    cfg: params.cfg,
+    agentId: params.target.agentId,
+    parentEntry: params.target.entry,
+  });
+  if (!parentCheckout) {
+    return undefined;
+  }
+  const inspection = await inspectSideConversationLanded({
+    parentCheckoutPath: parentCheckout.path,
+    childBranch: childCheckout.branch,
+  }).catch(() => undefined);
+  return inspection?.landed ? inspection.mergeCommit : undefined;
+}
+
+/** The landed write must be recorded by a merge retry; abandon stays refused. */
+function landedAbandonError(sessionKey: string, mergeCommit: string): ErrorShape {
+  return errorShape(
+    ErrorCodes.UNAVAILABLE,
+    `Side conversation ${sessionKey} already merged at ${mergeCommit}; retry sideConversations.merge to record it before abandoning.`,
+    { retryable: true, details: { mergeCommit, retry: "merge" } },
+  );
+}
+
 /**
  * Abandon keeps the branch, checkout, and uncommitted files; it only records state.
  *
@@ -447,6 +482,18 @@ async function abandonSideConversationInLane(params: {
     });
   if (marker.state === "abandoned") {
     return { ok: true, value: summarize(child) };
+  }
+  // A post-Git failure can leave the branch landed while the marker is still
+  // open. Abandoning then would make the advertised merge retry impossible, so
+  // reconcile through the canonical merge owner (read-only, no checkout moves)
+  // before any state write.
+  const landed = await resolveLandedAbandonMerge({
+    cfg: params.cfg,
+    child,
+    target,
+  });
+  if (landed) {
+    return { ok: false, error: landedAbandonError(sessionKey, landed) };
   }
   const assertIdle = () =>
     assertSideConversationIdle({

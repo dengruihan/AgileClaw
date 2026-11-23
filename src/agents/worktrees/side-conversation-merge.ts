@@ -180,6 +180,55 @@ export async function resolveLandedSideConversationMerge(params: {
   return landed ?? childHead.value;
 }
 
+/**
+ * Read-only landing check used before a state-only abandon.
+ *
+ * A child that never committed sits exactly on the parent HEAD; that is not an
+ * accepted merge write and must not block an abandon. A landing merge commit
+ * naming the child, or a child commit strictly contained in the parent branch,
+ * is an accepted write whose merge retry must record it first.
+ */
+export async function inspectSideConversationLanded(params: {
+  parentCheckoutPath: string;
+  childBranch: string;
+}): Promise<{ landed: boolean; mergeCommit?: string }> {
+  const parentHead = await commitAt(
+    params.parentCheckoutPath,
+    "HEAD",
+    "merge-failed",
+    "parent checkout has no committed HEAD",
+  );
+  if (!parentHead.ok) {
+    return { landed: false };
+  }
+  const childHead = await commitAt(
+    params.parentCheckoutPath,
+    params.childBranch,
+    "child-branch-missing",
+    "side conversation branch is missing",
+  );
+  if (!childHead.ok) {
+    return { landed: false };
+  }
+  const already = await isAncestor(params.parentCheckoutPath, childHead.value, parentHead.value);
+  if (!already.ok || !already.value) {
+    return { landed: false };
+  }
+  const landing = await findLandedMergeCommit(
+    params.parentCheckoutPath,
+    childHead.value,
+    parentHead.value,
+  );
+  if (landing) {
+    return { landed: true, mergeCommit: landing };
+  }
+  // Same commit on both sides: the child never committed beyond its base.
+  if (childHead.value === parentHead.value) {
+    return { landed: false };
+  }
+  return { landed: true, mergeCommit: childHead.value };
+}
+
 type MergeTreeInspection =
   | { status: "clean" }
   | { status: "conflict"; paths: string[] }
