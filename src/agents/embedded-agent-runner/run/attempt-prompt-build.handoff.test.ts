@@ -112,6 +112,7 @@ type Fixture = {
   submit: (
     assembly: Awaited<ReturnType<typeof prepareEmbeddedAttemptPromptAssembly>>,
     promptActiveSession?: Parameters<typeof submitEmbeddedAttemptPrompt>[0]["promptActiveSession"],
+    extras?: Partial<Parameters<typeof submitEmbeddedAttemptPrompt>[0]>,
   ) => Promise<void>;
   session: Awaited<ReturnType<typeof createTestSession>>["session"];
 };
@@ -177,6 +178,7 @@ async function fixture(
   const submit = async (
     assembly: Awaited<ReturnType<typeof prepareEmbeddedAttemptPromptAssembly>>,
     promptActiveSession?: Parameters<typeof submitEmbeddedAttemptPrompt>[0]["promptActiveSession"],
+    extras: Partial<Parameters<typeof submitEmbeddedAttemptPrompt>[0]> = {},
   ) =>
     await submitEmbeddedAttemptPrompt({
       attempt,
@@ -207,6 +209,7 @@ async function fixture(
       ...(assembly.handoffFreeModelPrompt !== undefined
         ? { handoffFreeModelPrompt: assembly.handoffFreeModelPrompt }
         : {}),
+      ...extras,
     });
   return { attempt, assemble, releasedClaims, submit, session };
 }
@@ -356,6 +359,124 @@ describe("side conversation next-message handoff", () => {
     expect(queue.pending).toHaveLength(0);
     expect(queue.dispatching).toBeUndefined();
     expect(queue.delivered).toBeUndefined();
+  });
+
+  it("aborts before the provider when reopen lands after the first revalidation", async () => {
+    await seedPendingHandoff();
+    const f = await fixture();
+    const assembly = await f.assemble();
+    let revalidateCalls = 0;
+    let releaseCalls = 0;
+    const originalRevalidate = assembly.handoffRevalidate!;
+    const originalRelease = assembly.handoffRelease!;
+    const instrumented = {
+      ...assembly,
+      handoffRevalidate: async () => {
+        revalidateCalls += 1;
+        return await originalRevalidate();
+      },
+      handoffRelease: async () => {
+        releaseCalls += 1;
+        await originalRelease();
+      },
+    };
+    let cancelled = 0;
+    const providerPrompts: string[] = [];
+    streamMocks.streamSimple.mockImplementation((model: Model, context) => {
+      providerPrompts.push(JSON.stringify(context.messages));
+      return createAssistantResultStream(createAssistant(model, [{ type: "text", text: "done" }]));
+    });
+
+    await f.submit(instrumented, undefined, {
+      preparePrimaryModelRequest: () => {
+        // The projection already revalidated once; cancel only after that.
+        expect(revalidateCalls).toBe(1);
+        return (async () => {
+          cancelled = await cancelPendingSideConversationHandoffs({
+            agentId: "main",
+            intentId: "intent-1",
+            parentSessionKey: parentKey,
+            storePath,
+          });
+          return () => ({
+            tools: f.session.agent.state.tools.slice(),
+            systemPrompt: f.session.agent.state.systemPrompt,
+          });
+        })();
+      },
+    });
+
+    expect(cancelled).toBe(1);
+    expect(revalidateCalls).toBe(2);
+    expect(releaseCalls).toBe(1);
+    expect(providerPrompts).toHaveLength(0);
+    const terminal = f.session.messages.at(-1) as
+      | { role?: string; stopReason?: string; errorMessage?: string }
+      | undefined;
+    expect(terminal?.role).toBe("assistant");
+    expect(terminal?.stopReason).toBe("error");
+    expect(terminal?.errorMessage).toContain("cancelled before the provider request");
+    expect(JSON.stringify(f.session.messages)).not.toContain(handoffMarker);
+
+    const queue = readQueue();
+    expect(queue.pending).toHaveLength(0);
+    expect(queue.dispatching).toBeUndefined();
+    expect(queue.delivered).toBeUndefined();
+
+    // The next user message sends normally (nothing left to hand off).
+    const nextRun = await fixture();
+    const nextAssembly = await nextRun.assemble();
+    expect(nextAssembly.handoffRevalidate).toBeUndefined();
+    await nextRun.submit(nextAssembly);
+    expect(providerPrompts).toHaveLength(1);
+    expect(providerPrompts[0]).toContain("Hello");
+    expect(providerPrompts[0]).not.toContain(handoffMarker);
+  });
+
+  it("keeps a dispatched request when reopen lands after the provider was called", async () => {
+    await seedPendingHandoff();
+    const f = await fixture();
+    const assembly = await f.assemble();
+    const providerPrompts: string[] = [];
+    let cancellation: Promise<number> | undefined;
+    streamMocks.streamSimple.mockImplementation((model: Model, context) => {
+      // Reopen starts after the request has been handed to the provider.
+      providerPrompts.push(JSON.stringify(context.messages));
+      cancellation = cancelPendingSideConversationHandoffs({
+        agentId: "main",
+        intentId: "intent-1",
+        parentSessionKey: parentKey,
+        storePath,
+      });
+      return createAssistantResultStream(createAssistant(model, [{ type: "text", text: "done" }]));
+    });
+
+    await f.submit(assembly);
+
+    expect(await cancellation).toBe(1);
+    expect(providerPrompts).toHaveLength(1);
+    expect(providerPrompts[0]).toContain(handoffMarker);
+    const queue = readQueue();
+    expect(queue.pending).toHaveLength(0);
+    expect(queue.dispatching).toBeUndefined();
+    // The provider already received it, so the turn is not retried or failed.
+    const terminal = f.session.messages.at(-1) as { stopReason?: string } | undefined;
+    expect(terminal?.stopReason).not.toBe("error");
+  });
+
+  it("keeps ordinary no-handoff turns unchanged", async () => {
+    const f = await fixture();
+    const assembly = await f.assemble();
+    expect(assembly.handoffRevalidate).toBeUndefined();
+    expect(assembly.handoffFreeModelPrompt).toBeUndefined();
+    const providerPrompts: string[] = [];
+    streamMocks.streamSimple.mockImplementation((model: Model, context) => {
+      providerPrompts.push(JSON.stringify(context.messages));
+      return createAssistantResultStream(createAssistant(model, [{ type: "text", text: "done" }]));
+    });
+    await f.submit(assembly);
+    expect(providerPrompts).toHaveLength(1);
+    expect(providerPrompts[0]).toContain("Hello");
   });
 
   it.each([

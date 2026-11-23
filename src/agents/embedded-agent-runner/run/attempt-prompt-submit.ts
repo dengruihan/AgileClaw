@@ -289,6 +289,19 @@ export async function submitEmbeddedAttemptPrompt(input: {
       // assembly may claim model-only context, but its delivery receipt commits
       // here so a pre-send failure leaves it pending for the next user message.
       const dispatchProviderRequest = async (request: Parameters<StreamFn>[1]) => {
+        // Last owner check before the provider request. Real persistence and
+        // restoration awaits run after the prompt projection, so a reopen can
+        // still land here; never send the already-projected block once the claim
+        // is gone. The request is not rebuilt: this window aborts pre-dispatch.
+        if (foregroundRequest && !primaryRequestDispatched && handoffActive) {
+          const wasActive = await handoffActive;
+          const stillActive = wasActive && handoffRevalidate ? await handoffRevalidate() : true;
+          if (!stillActive) {
+            throw new Error(
+              "The side-conversation handoff was cancelled before the provider request; the message was not sent. Retry the message.",
+            );
+          }
+        }
         const stream = await baseStreamFn(model, request, options);
         if (foregroundRequest && !primaryRequestDispatched) {
           primaryRequestDispatched = true;
