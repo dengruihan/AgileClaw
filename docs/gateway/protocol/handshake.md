@@ -150,7 +150,7 @@ satisfy `operator.read` (including `operator.write` and `operator.admin`). A
 reconnecting evaluates the new hello's grants.
 The deprecated `canvasHostUrl` / `canvasCapability` / `node.canvas.capability.refresh`
 path is not supported; use plugin surfaces.
-The `sessions.observer.ask` method was removed; use `sessions.companion.ask`.
+The `sessions.observer.ask` method was removed; side questions run as hidden child sessions through `sideConversations.*` and `chat.send`.
 The snapshot's optional `appliedConfigHash` is the resolved source-config revision
 accepted by the active Gateway runtime. Clients can compare it with
 `config.get.configRevisionHash` to determine whether a newer saved config still

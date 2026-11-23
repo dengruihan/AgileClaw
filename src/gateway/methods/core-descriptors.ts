@@ -461,17 +461,6 @@ export const CORE_GATEWAY_METHOD_SPECS = [
   ["session.reactions.set", "sessions-reactions", "operator.write", "2026.9"],
   ["session.reactions.list", "sessions-reactions", "operator.read", "2026.9"],
   ["session.typing", "sessions-suggestions", "operator.write", "2026.7"],
-  // Companion state is process-local and its runner is hard-restricted to
-  // read-only workspace and exact-session tools.
-  ["sessions.companion.ask", "session-companion-rpc", "operator.read", "2026.7"],
-  ["sessions.companion.state", "session-companion-rpc", "operator.read", "2026.7"],
-  [
-    "sessions.companion.reset",
-    "session-companion-rpc",
-    "operator.write",
-    "2026.7",
-    CONTROL_PLANE_WRITE,
-  ],
   ["memory.search", "memory-search", "operator.read", "2026.7"],
   ["skills.proposals.events.list", "skills", "operator.read", "2026.7"],
   ["skills.proposals.evaluate", "skills", "operator.admin", "2026.7", CONTROL_PLANE_WRITE],

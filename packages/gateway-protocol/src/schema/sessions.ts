@@ -1,7 +1,6 @@
 // Gateway Protocol schema module defines protocol validation shapes.
 import type { Static } from "typebox";
 import { Type } from "typebox";
-import { SESSION_COMPANION_SELECTION_CONTEXT_MAX_CHARS } from "../session-companion-contract.js";
 import { closedObject } from "./closed-object.js";
 import { ErrorShapeSchema } from "./frames.js";
 import { HumanMentionsSchema } from "./human-mentions.js";
@@ -134,51 +133,6 @@ export const SessionsObserverVisibilityParamsSchema = closedObject({
 
 /** Acknowledges a connection's observer visibility declaration. */
 export const SessionsObserverVisibilityResultSchema = closedObject({
-  ok: Type.Literal(true),
-});
-
-/** One bounded question/answer exchange in the ephemeral session companion. */
-export const SessionCompanionExchangeSchema = closedObject({
-  question: Type.String({ minLength: 1, maxLength: 400 }),
-  answer: Type.String({ minLength: 1, maxLength: 1200 }),
-  ts: Type.Integer({ minimum: 0 }),
-});
-
-/** Asks the read-only companion about one session and its workspace. */
-export const SessionsCompanionAskParamsSchema = closedObject({
-  sessionKey: NonEmptyString,
-  agentId: Type.Optional(NonEmptyString),
-  question: Type.String({ minLength: 1, maxLength: 400 }),
-  selectionContext: Type.Optional(
-    Type.String({ minLength: 1, maxLength: SESSION_COMPANION_SELECTION_CONTEXT_MAX_CHARS }),
-  ),
-  attachments: Type.Optional(ChatAttachmentsSchema),
-});
-
-/** Companion answer returned only to the requesting operator. */
-export const SessionsCompanionAskResultSchema = closedObject({
-  answer: Type.String({ minLength: 1, maxLength: 1200 }),
-  ts: Type.Integer({ minimum: 0 }),
-});
-
-/** Selects the in-memory companion thread for one session. */
-export const SessionsCompanionStateParamsSchema = closedObject({
-  sessionKey: NonEmptyString,
-  agentId: Type.Optional(NonEmptyString),
-});
-
-/** Current bounded exchanges for one session companion thread. */
-export const SessionsCompanionStateResultSchema = closedObject({
-  exchanges: Type.Array(SessionCompanionExchangeSchema, { maxItems: 24 }),
-});
-
-/** Selects the in-memory companion thread to clear. */
-export const SessionsCompanionResetParamsSchema = closedObject(
-  SessionsCompanionStateParamsSchema.properties,
-);
-
-/** Acknowledges clearing one companion thread. */
-export const SessionsCompanionResetResultSchema = closedObject({
   ok: Type.Literal(true),
 });
 
@@ -803,13 +757,6 @@ export type SessionsObserverVisibilityParams = Static<
 export type SessionsObserverVisibilityResult = Static<
   typeof SessionsObserverVisibilityResultSchema
 >;
-export type SessionCompanionExchange = Static<typeof SessionCompanionExchangeSchema>;
-export type SessionsCompanionAskParams = Static<typeof SessionsCompanionAskParamsSchema>;
-export type SessionsCompanionAskResult = Static<typeof SessionsCompanionAskResultSchema>;
-export type SessionsCompanionStateParams = Static<typeof SessionsCompanionStateParamsSchema>;
-export type SessionsCompanionStateResult = Static<typeof SessionsCompanionStateResultSchema>;
-export type SessionsCompanionResetParams = Static<typeof SessionsCompanionResetParamsSchema>;
-export type SessionsCompanionResetResult = Static<typeof SessionsCompanionResetResultSchema>;
 export type SessionsRewindParams = Static<typeof SessionsRewindParamsSchema>;
 export type SessionsForkParams = Static<typeof SessionsForkParamsSchema>;
 export type SessionsRewindResult = Static<typeof SessionsRewindResultSchema>;

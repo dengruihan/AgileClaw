@@ -871,13 +871,6 @@ const policyTestWatches: readonly PolicyTestWatch[] = [
       "src/state/openclaw-state.worker.ts",
     ],
   },
-  {
-    testFile: "src/gateway/session-companion-context.test.ts",
-    watchGlobs: [
-      "src/config/sessions/session-transcript-projection-publication.worker.ts",
-      "src/config/sessions/session-transcript-reconcile.worker.ts",
-    ],
-  },
   ...[
     "src/gateway/session-history.subagent-visibility.test.ts",
     "src/gateway/session-transcript-readers.markers.test.ts",

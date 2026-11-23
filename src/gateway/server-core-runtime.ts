@@ -224,7 +224,6 @@ export async function startGatewayCoreRuntime(input: {
       ]),
     );
   const {
-    sessionCompanion,
     sessionObserver,
     sessionActivitySummaries,
     channelAdmissionAudit,
@@ -516,7 +515,6 @@ export async function startGatewayCoreRuntime(input: {
       reloadPlugins: reloadAttachedGatewayPlugins,
     },
     startEarlyRuntime,
-    sessionCompanion,
     sessionObserver,
     sessionActivitySummaries,
     channelAdmissionAudit,

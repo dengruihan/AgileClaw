@@ -446,7 +446,7 @@ export abstract class ChatPaneRetainedPresentation extends ChatPaneBoard {
     if (!presented) {
       this.dashboardPresentationActivation = undefined;
       this.retainedProgressCard = undefined;
-      this.syncSessionCompanionPresentation(false);
+      this.syncSideChatPresentation(false);
       this.activeSessionResources.sync(null);
       if (this.state) {
         cancelChatModelRecovery(this.state);

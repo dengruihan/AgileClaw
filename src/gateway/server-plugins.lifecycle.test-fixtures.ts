@@ -218,7 +218,7 @@ export async function writeInstanceBindingProbePlugin(
     api.registerGatewayMethod("${INSTANCE_BINDING_PROBE_METHOD}", ({ context, respond }) => {
       respond(true, {
         registryId,
-        sessionsId: coordinator.identify(context.sessionCompanion),
+        sessionsId: coordinator.identify(context.sessionObserver),
         placementId: coordinator.identify(context.workerSessionPlacementService),
         ...(reportReloadSettlement ? { reloadSettled: context.isConfigReloadSettled() } : {}),
       });

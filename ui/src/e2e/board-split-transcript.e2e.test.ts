@@ -408,7 +408,6 @@ describeControlUiE2e("Board split transcript restore", () => {
         "chat.history",
         "chat.metadata",
         "chat.startup",
-        "sessions.companion.ask",
       ],
       methodResponses: {
         "board.get": boardSnapshot(),

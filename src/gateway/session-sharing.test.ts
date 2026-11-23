@@ -251,7 +251,6 @@ describe("session sharing policy", () => {
           "talk.session.create",
           "talk.session.steer",
           "taskSuggestions.create",
-          "sessions.companion.reset",
           "wake",
         ]) {
           expect(
@@ -272,13 +271,7 @@ describe("session sharing policy", () => {
             context: { getRuntimeConfig: () => cfg } as GatewayRequestContext,
           }).error,
         ).toMatchObject({ details: { code: "SESSION_PARTICIPATION_REQUIRED" } });
-        for (const method of [
-          "chat.history",
-          "chat.startup",
-          "chat.metadata",
-          "sessions.companion.ask",
-          "sessions.companion.state",
-        ]) {
+        for (const method of ["chat.history", "chat.startup", "chat.metadata"]) {
           expect(
             resolveSessionMutationAuthorization({
               client: viewer,
@@ -456,9 +449,6 @@ describe("session sharing policy", () => {
         ["sessions.files.list", { sessionKey: foreignKey }],
         ["sessions.files.get", { sessionKey: foreignKey }],
         ["sessions.branches.list", { sessionKey: foreignKey }],
-        ["sessions.companion.ask", { sessionKey: foreignKey }],
-        ["sessions.companion.reset", { sessionKey: foreignKey }],
-        ["sessions.companion.state", { sessionKey: foreignKey }],
         ["artifacts.list", { sessionKey: foreignKey }],
         ["session.suggestions.list", { sessionKey: foreignKey }],
         ["session.typing", { sessionKey: foreignKey }],

@@ -135,38 +135,6 @@ describe("session observer", () => {
     );
   });
 
-  it("resolves an explicit global alias to its agent-scoped companion snapshot", () => {
-    const config = {
-      gateway: { controlUi: { sessionObserver: true } },
-      session: { scope: "global" as const },
-      agents: {
-        defaults: { utilityModel: "openai/gpt-test" },
-        entries: { main: {}, work: {} },
-      },
-    } satisfies OpenClawConfig;
-    const harness = createHarness({ subscribe: false, config });
-    harness.subscribers.subscribe("conn-work", "agent:work:global")?.commit();
-    declareObserverVisibility(harness.observer, "conn-work");
-
-    emitEvent(
-      harness,
-      "lifecycle",
-      { phase: "start" },
-      { runId: "run-work", sessionKey: "global", agentId: "work" },
-    );
-    emitEvent(
-      harness,
-      "tool",
-      { phase: "start", name: "read", args: { path: "src/work.ts" } },
-      { runId: "run-work", sessionKey: "global", agentId: "work" },
-    );
-
-    const snapshot = harness.observer.getCompanionSnapshot("agent:work:main");
-    expect(snapshot.agentId).toBe("work");
-    expect(snapshot.runId).toBe("run-work");
-    expect(snapshot.notes).not.toHaveLength(0);
-  });
-
   it("terminalizes a preamble-only digest without a utility model", async () => {
     const harness = createHarness({
       subscribe: false,
@@ -293,7 +261,6 @@ describe("session observer", () => {
     expect(harness.completeModel).toHaveBeenCalledOnce();
 
     harness.observer.setConnectionVisibility("conn-1", false);
-    expect(harness.observer.getCompanionSnapshot("agent:main:session-1").notes).toEqual([]);
     addToolNotes(harness);
     await vi.advanceTimersByTimeAsync(12_000);
     expect(harness.completeModel).toHaveBeenCalledOnce();

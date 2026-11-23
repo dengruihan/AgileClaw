@@ -2636,7 +2636,6 @@ describe("canonical session message recovery", () => {
   });
 
   it("drops pre-reset live and pending messages before accepting a new session turn", () => {
-    const retireSessionCompanion = vi.fn();
     const pendingUser = {
       role: "user",
       content: [{ type: "text", text: "Pending before reset" }],
@@ -2646,9 +2645,6 @@ describe("canonical session message recovery", () => {
       connected: false,
       chatMessages: [pendingUser],
     });
-    (
-      state as ChatPageHost & { retireSessionCompanion: typeof retireSessionCompanion }
-    ).retireSessionCompanion = retireSessionCompanion;
     const deliverUser = (id: string, text: string) =>
       handlePageGatewayEvent(state, {
         type: "event",
@@ -2676,7 +2672,6 @@ describe("canonical session message recovery", () => {
       },
     });
     expect(state.chatMessages).toEqual([]);
-    expect(retireSessionCompanion).toHaveBeenCalledExactlyOnceWith(state.sessionKey, "main");
 
     deliverUser("post-reset-live", "Live after reset");
     expect(state.chatMessages).toHaveLength(1);
@@ -2686,7 +2681,6 @@ describe("canonical session message recovery", () => {
   });
 
   it("does not clear the selected transcript when another agent resets", () => {
-    const retireSessionCompanion = vi.fn();
     const selectedUser = {
       role: "user",
       content: [{ type: "text", text: "Keep this agent's conversation" }],
@@ -2696,10 +2690,6 @@ describe("canonical session message recovery", () => {
       connected: false,
       chatMessages: [selectedUser],
     });
-    (
-      state as ChatPageHost & { retireSessionCompanion: typeof retireSessionCompanion }
-    ).retireSessionCompanion = retireSessionCompanion;
-
     handlePageGatewayEvent(state, {
       type: "event",
       event: "sessions.changed",
@@ -2711,7 +2701,6 @@ describe("canonical session message recovery", () => {
     });
 
     expect(state.chatMessages).toEqual([selectedUser]);
-    expect(retireSessionCompanion).toHaveBeenCalledExactlyOnceWith("agent:other:main", "other");
   });
 
   it("retires current checkout presentation for a structural event", () => {

@@ -144,5 +144,4 @@ export type ChatPageHost = ChatHost &
     handleOpenImage: (item: ImageLightboxItem, requestVersion?: number) => void;
     handleCloseImage: () => void;
     announceSessionSwitch?: (sessionKey: string, label: string) => void;
-    retireSessionCompanion?: (sessionKey: string, agentId?: string | null) => void;
   };

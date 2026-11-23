@@ -104,11 +104,6 @@ function scenario(): ControlUiMockGatewayScenario {
         additions: 4,
         deletions: 2,
       },
-      "sessions.companion.ask": {
-        answer: "The mobile side chat stayed inside its panel.",
-        ts: Date.UTC(2026, 7, 16, 12, 0),
-      },
-      "sessions.companion.state": { exchanges: [] },
       "sessions.files.list": {
         browser: {
           path: "ui/src/pages/chat",

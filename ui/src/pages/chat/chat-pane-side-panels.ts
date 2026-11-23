@@ -17,7 +17,6 @@ import { releaseChatAttachmentPayloads } from "./attachment-payload-store.ts";
 import { sendSessionObserverVisibility } from "./chat-observer.ts";
 import { ChatPaneBase } from "./chat-pane-base.ts";
 import { requestChatSend } from "./chat-send-request.ts";
-import { ChatSessionCompanionThreads } from "./chat-session-companion.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { resolveChatAgentId, selectedChatSessionRow } from "./chat-state-route.ts";
 import { ChatAttachmentReadLifecycle } from "./components/chat-attachment-reads.ts";
@@ -38,9 +37,9 @@ import {
 } from "./sidebar-layout.ts";
 
 export abstract class ChatPaneSidePanels extends ChatPaneBase {
-  protected sessionCompanionFocusGeneration = 0;
-  private sessionCompanionPresented = false;
-  protected sessionCompanionFocusRequest?: () => boolean;
+  protected sideChatFocusGeneration = 0;
+  private sideChatPresented = false;
+  protected sideChatFocusRequest?: () => boolean;
   /**
    * The Gateway connection owns one registry per parent; every pane bound to
    * the same client reads and observes that same view. The pane keeps only the
@@ -50,11 +49,6 @@ export abstract class ChatPaneSidePanels extends ChatPaneBase {
   private sideConversationStoreClient: GatewayBrowserClient | null = null;
   private sideConversationStoreCleanup: (() => void) | null = null;
   private sideConversationSubmitPending = false;
-  // Legacy companion threads stay instantiated for their retire/clear hooks;
-  // M205 retires the module once no shipped path references it.
-  protected readonly sessionCompanionThreads = new ChatSessionCompanionThreads(() => {
-    this.requestUpdate();
-  });
   protected sideConversationDraft = "";
   protected sideConversationAttachments: ChatAttachment[] = [];
   protected readonly sideConversationAttachmentReads = new ChatAttachmentReadLifecycle(() =>
@@ -134,29 +128,27 @@ export abstract class ChatPaneSidePanels extends ChatPaneBase {
     );
   }
 
-  protected syncSessionCompanionPresentation(presented: boolean): void {
+  protected syncSideChatPresentation(presented: boolean): void {
     if (
-      this.sessionCompanionPresented === presented &&
-      (presented || this.sessionCompanionFocusRequest === undefined)
+      this.sideChatPresented === presented &&
+      (presented || this.sideChatFocusRequest === undefined)
     ) {
       return;
     }
-    this.sessionCompanionPresented = presented;
+    this.sideChatPresented = presented;
     if (presented && this.state) {
-      this.sessionCompanionFocusRequest ??= this.captureSessionCompanionFocus(
-        this.state,
-      ).requestFocus;
+      this.sideChatFocusRequest ??= this.captureSideChatFocus(this.state).requestFocus;
     } else {
-      this.sessionCompanionFocusGeneration += 1;
-      this.sessionCompanionFocusRequest = undefined;
+      this.sideChatFocusGeneration += 1;
+      this.sideChatFocusRequest = undefined;
     }
   }
 
-  private captureSessionCompanionFocus(pageState: ChatPageHost) {
+  private captureSideChatFocus(pageState: ChatPageHost) {
     const sessionKey = pageState.sessionKey;
     const agentId = resolveChatAgentId(pageState);
     const generation = this.connectionGeneration;
-    const focusGeneration = this.sessionCompanionFocusGeneration;
+    const focusGeneration = this.sideChatFocusGeneration;
     const composer = getChatComposerState(this.presentationId);
     const editRevision = composer.editRevision;
     const draft = pageState.chatMessage;
@@ -165,10 +157,10 @@ export abstract class ChatPaneSidePanels extends ChatPaneBase {
       pageState.sessionKey === sessionKey &&
       resolveChatAgentId(pageState) === agentId &&
       this.connectionGeneration === generation &&
-      this.sessionCompanionFocusGeneration === focusGeneration &&
+      this.sideChatFocusGeneration === focusGeneration &&
       composer.editRevision === editRevision &&
       pageState.chatMessage === draft &&
-      this.sessionCompanionPresented &&
+      this.sideChatPresented &&
       (this.ownerDocument.activeElement === this.ownerDocument.body ||
         this.contains(this.ownerDocument.activeElement)) &&
       this.isConnected &&
@@ -176,8 +168,8 @@ export abstract class ChatPaneSidePanels extends ChatPaneBase {
       this.visuallyPresented &&
       this.presented;
     const requestFocus = () => {
-      if (this.sessionCompanionFocusRequest === requestFocus) {
-        this.sessionCompanionFocusRequest = undefined;
+      if (this.sideChatFocusRequest === requestFocus) {
+        this.sideChatFocusRequest = undefined;
         this.requestUpdate();
       }
       return ownsFocus();
@@ -375,12 +367,12 @@ export abstract class ChatPaneSidePanels extends ChatPaneBase {
   };
 
   protected async openSideConversation(pageState: ChatPageHost, question: string): Promise<void> {
-    const { ownsFocus, requestFocus } = this.captureSessionCompanionFocus(pageState);
-    this.sessionCompanionFocusRequest = requestFocus;
+    const { ownsFocus, requestFocus } = this.captureSideChatFocus(pageState);
+    this.sideChatFocusRequest = requestFocus;
     this.requestUpdate();
     await this.submitSideConversationQuestion(question);
     if (ownsFocus()) {
-      this.sessionCompanionFocusRequest = requestFocus;
+      this.sideChatFocusRequest = requestFocus;
       this.requestUpdate();
     }
   }

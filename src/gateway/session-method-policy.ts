@@ -42,9 +42,6 @@ const SESSION_TARGET_POLICY_BY_METHOD = new Map<string, SessionTargetPolicy>([
   ["sessions.assignOwner", { fields: ["key"], required: true }],
   // This changes a personal list preference, not the shared session.
   ["sessions.setInvolvement", { fields: ["key"], readOnly: true }],
-  ["sessions.companion.ask", { fields: ["sessionKey"], readOnly: true }],
-  ["sessions.companion.reset", { fields: ["sessionKey"], required: true }],
-  ["sessions.companion.state", { fields: ["sessionKey"], readOnly: true }],
   ["sessions.compact", { fields: ["key"], required: true }],
   ["sessions.create", { fields: ["key", "parentSessionKey"] }],
   ["sessions.messages.subscribe", { fields: ["key"], required: true }],
@@ -105,8 +102,6 @@ const DIRECT_SESSION_READ_METHODS = new Set([
   "sessions.get",
   "sessions.preview",
   "sessions.branches.list",
-  "sessions.companion.ask",
-  "sessions.companion.state",
   "sessions.diff",
   "sessions.files.get",
   "sessions.files.assets",

@@ -192,7 +192,6 @@ export const gatewayDatabaseWorkerTestFiles = [
   "src/gateway/server/ws-connection/message-handler.worker.test.ts",
   "src/gateway/session-activity-summaries.retry.test.ts",
   "src/gateway/session-activity-summaries.test.ts",
-  "src/gateway/session-companion-runtime.test.ts",
   "src/gateway/session-create-atomic-initialization.test.ts",
   "src/gateway/session-create-preparation.test.ts",
   "src/gateway/session-delivery-clock-jump.integration.test.ts",

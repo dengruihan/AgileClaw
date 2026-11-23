@@ -106,7 +106,6 @@ type GatewayRequestContextRuntime = Pick<
     sessionObserver: NonNullable<GatewayRequestContext["sessionObserver"]>;
     sessionActivitySummaries?: GatewayRequestContext["sessionActivitySummaries"];
     channelAdmissionAudit?: GatewayRequestContext["channelAdmissionAudit"];
-    sessionCompanion: NonNullable<GatewayRequestContext["sessionCompanion"]>;
     isConnectionActive: NonNullable<GatewayRequestContext["isConnectionActive"]>;
     clients: GatewayClientRegistry;
     gatewayTls: Pick<GatewayCoreRuntime["gatewayTls"], "enabled" | "fingerprintSha256">;
@@ -283,7 +282,6 @@ export function createGatewayRequestContext(
     },
     controlUiSessionPullRequests: runtimeState.controlUiSessionPullRequests,
     sessionViewerPresence: runtimeState.sessionViewerPresence,
-    sessionCompanion: runtime.sessionCompanion,
     sessionObserver,
     sessionActivitySummaries,
     channelAdmissionAudit: runtime.channelAdmissionAudit,
