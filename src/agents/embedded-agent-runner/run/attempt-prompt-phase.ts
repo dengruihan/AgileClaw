@@ -182,8 +182,11 @@ export async function runEmbeddedAttemptPromptPhase(
       setLeasedSteering: (lease) => {
         leasedSteering = lease;
       },
+      setHandoffRelease: (release) => {
+        // Ownership transfers inside assembly, before any later step can throw.
+        releaseHandoffClaim = release;
+      },
     });
-    releaseHandoffClaim = promptAssembly.handoffRelease;
     systemPromptText = sessionRuntimeState.systemPromptText;
     if (prepared.toolCatalog.emptyExplicitToolAllowlistError) {
       setFailure(prepared.toolCatalog.emptyExplicitToolAllowlistError, "precheck");
@@ -475,6 +478,12 @@ export async function runEmbeddedAttemptPromptPhase(
           : {}),
         ...(promptAssembly.handoffRelease
           ? { onPrimaryModelNotDispatched: promptAssembly.handoffRelease }
+          : {}),
+        ...(promptAssembly.handoffRevalidate
+          ? { handoffRevalidate: promptAssembly.handoffRevalidate }
+          : {}),
+        ...(promptAssembly.handoffFreeModelPrompt !== undefined
+          ? { handoffFreeModelPrompt: promptAssembly.handoffFreeModelPrompt }
           : {}),
         onSteeringAcknowledged: () => {
           leasedSteering = undefined;

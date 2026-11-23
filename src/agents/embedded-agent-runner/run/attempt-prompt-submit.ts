@@ -112,6 +112,14 @@ export async function submitEmbeddedAttemptPrompt(input: {
   onPrimaryModelDispatched?: () => Promise<void> | void;
   /** Runs once when this submission ends without ever dispatching the request. */
   onPrimaryModelNotDispatched?: () => Promise<void> | void;
+  /**
+   * Revalidates model-only handoff context at the dispatch boundary. False drops
+   * the handoff from this request (releasing it); a rejection fails the prompt
+   * before dispatch so pending context is never sent stale.
+   */
+  handoffRevalidate?: () => Promise<boolean>;
+  /** The assembled model prompt without the handoff block. */
+  handoffFreeModelPrompt?: string;
   onSteeringAcknowledged: () => void;
   persistToolResultProjections: () => Promise<void>;
   prependContext?: string;
@@ -481,10 +489,32 @@ export async function submitEmbeddedAttemptPrompt(input: {
   });
 
   let captureCurrentPromptForModel = false;
+  const handoffRevalidate = input.handoffRevalidate;
+  let handoffActive: Promise<boolean> | undefined;
+  const resolveHandoffModelPrompt = async (): Promise<string | undefined> => {
+    if (!handoffRevalidate) {
+      return undefined;
+    }
+    handoffActive ??= (async () => {
+      const active = await handoffRevalidate();
+      if (!active) {
+        // Reopen/another run withdrew the claim after assembly: release the
+        // receipt so pending context is not consumed by this request.
+        await input.onPrimaryModelNotDispatched?.();
+      }
+      return active;
+    })();
+    if (await handoffActive) {
+      return undefined;
+    }
+    // Send the exact assembled prompt without the withdrawn block.
+    return input.handoffFreeModelPrompt ?? input.transcriptPrompt;
+  };
   const cleanupModelPromptTransform = installModelPromptTransform({
     session: activeSession,
     transcriptPrompt: input.transcriptPrompt,
     modelPrompt: input.modelPrompt,
+    ...(handoffRevalidate ? { resolveModelPrompt: resolveHandoffModelPrompt } : {}),
     prependContext: input.prependContext,
     appendContext: input.appendContext,
     shouldCapturePrompt: () => captureCurrentPromptForModel,

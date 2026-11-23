@@ -70,6 +70,9 @@ const HANDOFF_COUNT_CAP = 100;
 /** Same-run retries reuse one claim; terminal cleanup happens by eviction. */
 const HANDOFF_CLAIM_CACHE_MAX = 256;
 
+/** Dispatch proofs for cleanup receipts; only this process can vouch for them. */
+const HANDOFF_DISPATCHED_RUNS_MAX = 1_024;
+
 type HandoffScope = { agentId: string; sessionKey: string; storePath: string };
 
 type ClaimPhase = "claimed" | "dispatched" | "released";
@@ -80,6 +83,17 @@ type CachedHandoffClaim = {
 };
 
 const claimsByRun = new Map<string, CachedHandoffClaim>();
+const dispatchedRuns = new Set<string>();
+
+function markHandoffDispatchedRun(runId: string): void {
+  if (dispatchedRuns.size >= HANDOFF_DISPATCHED_RUNS_MAX) {
+    const oldest = dispatchedRuns.values().next().value;
+    if (oldest !== undefined) {
+      dispatchedRuns.delete(oldest);
+    }
+  }
+  dispatchedRuns.add(runId);
+}
 
 /** One drained reminder batch plus its delivery and pre-send rollback receipts. */
 export type SideConversationHandoffPromptClaim = {
@@ -89,6 +103,14 @@ export type SideConversationHandoffPromptClaim = {
   commit: () => Promise<void>;
   /** Rolls the claim receipt back when the provider request was never sent. */
   release: () => Promise<void>;
+  /**
+   * Rechecks at the dispatch boundary that this run still owns a live claim.
+   *
+   * Returns false after reopen/another run removed the receipts; throws when the
+   * queue cannot be read so the caller aborts before dispatch instead of sending
+   * a stale block.
+   */
+  revalidate: () => Promise<boolean>;
 };
 
 /** What a close recorded on the parent row. */
@@ -99,9 +121,10 @@ export type SideConversationHandoffEnsureResult =
   | { status: "no-checkout" }
   | { status: "missing-parent" };
 
-/** Drop every claim; only a test fixture resets the process-wide cache. */
+/** Drop every claim and dispatch proof; only a test fixture resets them (restart). */
 export function clearSideConversationHandoffClaimsForTest(): void {
   claimsByRun.clear();
+  dispatchedRuns.clear();
 }
 
 function rememberClaim(runId: string, claim: CachedHandoffClaim): void {
@@ -191,7 +214,9 @@ async function persistClaim(params: {
       params.scope,
       (entry: InternalSessionEntry) => {
         const queue = readSideConversationHandoffQueue(entry);
-        let reconciled = reconcileSideConversationHandoffDispatch(queue, params.runId);
+        let reconciled = reconcileSideConversationHandoffDispatch(queue, params.runId, (runId) =>
+          dispatchedRuns.has(runId),
+        );
         if (reconciled.pending.length === 0) {
           reconciled = clearSideConversationHandoffDropped(reconciled);
           plan = { notices: [], droppedCount: 0, droppedSequences: [] };
@@ -328,6 +353,7 @@ async function clearEmptyQueue(params: { runId: string; scope: HandoffScope }): 
         const queue = reconcileSideConversationHandoffDispatch(
           readSideConversationHandoffQueue(entry),
           params.runId,
+          (runId) => dispatchedRuns.has(runId),
         );
         const next =
           queue.pending.length === 0 ? clearSideConversationHandoffDropped(queue) : queue;
@@ -364,6 +390,7 @@ function buildClaim(inputs: ClaimInputs): SideConversationHandoffPromptClaim {
         return;
       }
       phase = "dispatched";
+      markHandoffDispatchedRun(inputs.runId);
       inputs.onDelivered();
       try {
         await patchSessionEntryCore(
@@ -396,28 +423,70 @@ function buildClaim(inputs: ClaimInputs): SideConversationHandoffPromptClaim {
       }
       phase = "released";
       inputs.onReleased();
-      try {
-        await patchSessionEntryCore(
-          inputs.scope,
-          (entry: InternalSessionEntry) => {
-            const queue = readSideConversationHandoffQueue(entry);
-            const next = releaseSideConversationHandoffDispatch(queue, inputs.runId);
-            if (next === queue) {
-              return null;
-            }
-            return { ...entry, sideConversationHandoffs: next };
-          },
-          { replaceEntry: true, skipMaintenance: true },
-        );
-      } catch (error) {
-        // A receipt that survives this write is treated as delivered by the next
-        // run (no repeat); the alternative would resend the same reminder.
-        log.warn(
-          `side conversation handoff release failed for ${inputs.scope.sessionKey}: ${formatError(error)}`,
-        );
+      await releaseReceipt({ runId: inputs.runId, scope: inputs.scope });
+    },
+    async revalidate() {
+      if (phase !== "claimed") {
+        return false;
       }
+      const active = await isClaimStillActive({
+        runId: inputs.runId,
+        scope: inputs.scope,
+        sequences: inputs.sequences,
+      });
+      if (active) {
+        return true;
+      }
+      phase = "released";
+      inputs.onReleased();
+      await releaseReceipt({ runId: inputs.runId, scope: inputs.scope });
+      return false;
     },
   };
+}
+
+/** Clear this run's receipt; a leftover receipt is restored as pending by the next run. */
+async function releaseReceipt(params: { runId: string; scope: HandoffScope }): Promise<void> {
+  try {
+    await patchSessionEntryCore(
+      params.scope,
+      (entry: InternalSessionEntry) => {
+        const queue = readSideConversationHandoffQueue(entry);
+        const next = releaseSideConversationHandoffDispatch(queue, params.runId);
+        if (next === queue) {
+          return null;
+        }
+        return { ...entry, sideConversationHandoffs: next };
+      },
+      { replaceEntry: true, skipMaintenance: true },
+    );
+  } catch (error) {
+    // The receipt becomes an orphan: the next run restores it as pending instead
+    // of treating it as delivered.
+    log.warn(
+      `side conversation handoff release failed for ${params.scope.sessionKey}: ${formatError(error)}`,
+    );
+  }
+}
+
+/** True only while this run's receipt exists and every claimed notice is pending. */
+async function isClaimStillActive(params: {
+  runId: string;
+  scope: HandoffScope;
+  sequences: readonly number[];
+}): Promise<boolean> {
+  // Read errors propagate: the caller aborts before dispatch and keeps pending.
+  const entry = loadSessionEntryReadOnly({ ...params.scope, readConsistency: "latest" });
+  if (!entry) {
+    return false;
+  }
+  const queue = readSideConversationHandoffQueue(entry);
+  const receipt = queue.dispatching;
+  if (!receipt || receipt.runId !== params.runId) {
+    return false;
+  }
+  const pendingSequences = new Set(queue.pending.map((notice) => notice.sequence));
+  return params.sequences.every((sequence) => pendingSequences.has(sequence));
 }
 
 /**

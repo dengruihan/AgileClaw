@@ -8,7 +8,10 @@ import {
 import type { InternalSessionEntry } from "../../../config/sessions/types.js";
 import type { Model } from "../../../llm/types.js";
 import { readSideConversationHandoffQueue } from "../../../sessions/side-conversation-handoff-queue.js";
-import { clearSideConversationHandoffClaimsForTest } from "../../../sessions/side-conversation-handoff.js";
+import {
+  cancelPendingSideConversationHandoffs,
+  clearSideConversationHandoffClaimsForTest,
+} from "../../../sessions/side-conversation-handoff.js";
 import { closeOpenClawAgentDatabasesAsync } from "../../../state/openclaw-agent-db.js";
 import { closeStateDatabaseForTest } from "../../../test-utils/database-cleanup.js";
 import { prepareSystemAgentRunAdmission } from "../../admitted-run-context.js";
@@ -105,6 +108,7 @@ function readPending(): number {
 type Fixture = {
   attempt: EmbeddedRunAttemptParams;
   assemble: () => ReturnType<typeof prepareEmbeddedAttemptPromptAssembly>;
+  releasedClaims: Array<(() => Promise<void>) | undefined>;
   submit: (
     assembly: Awaited<ReturnType<typeof prepareEmbeddedAttemptPromptAssembly>>,
     promptActiveSession?: Parameters<typeof submitEmbeddedAttemptPrompt>[0]["promptActiveSession"],
@@ -114,9 +118,13 @@ type Fixture = {
 
 async function fixture(
   overrides: Partial<EmbeddedRunAttemptParams> = {},
-  options: { isRawModelRun?: boolean } = {},
+  options: {
+    applyPromptBuildToolsAllow?: () => string[];
+    isRawModelRun?: boolean;
+  } = {},
 ): Promise<Fixture> {
   const runId = `handoff-${++sequence}`;
+  const releasedClaims: Array<(() => Promise<void>) | undefined> = [];
   const { session, sessionManager, modelRegistry } = await createTestSession();
   session.setActiveToolsByName([]);
   const admission = prepareSystemAgentRunAdmission({}, runId, "main", "handoff-prompt-test");
@@ -159,9 +167,12 @@ async function fixture(
       runtimeModel: testModel.id,
       systemPromptText: "Base system prompt",
       runAbortSignal: new AbortController().signal,
-      applyPromptBuildToolsAllow: () => [],
+      applyPromptBuildToolsAllow: options.applyPromptBuildToolsAllow ?? (() => []),
       setActiveSessionSystemPrompt: () => {},
       setLeasedSteering: () => {},
+      setHandoffRelease: (release) => {
+        releasedClaims.push(release);
+      },
     });
   const submit = async (
     assembly: Awaited<ReturnType<typeof prepareEmbeddedAttemptPromptAssembly>>,
@@ -192,8 +203,12 @@ async function fixture(
         }),
       ...(assembly.handoffDispatch ? { onPrimaryModelDispatched: assembly.handoffDispatch } : {}),
       ...(assembly.handoffRelease ? { onPrimaryModelNotDispatched: assembly.handoffRelease } : {}),
+      ...(assembly.handoffRevalidate ? { handoffRevalidate: assembly.handoffRevalidate } : {}),
+      ...(assembly.handoffFreeModelPrompt !== undefined
+        ? { handoffFreeModelPrompt: assembly.handoffFreeModelPrompt }
+        : {}),
     });
-  return { attempt, assemble, submit, session };
+  return { attempt, assemble, releasedClaims, submit, session };
 }
 
 describe("side conversation next-message handoff", () => {
@@ -262,6 +277,85 @@ describe("side conversation next-message handoff", () => {
     expect(retryAssembly.effectivePrompt.startsWith(handoffMarker)).toBe(true);
     await retryRun.submit(retryAssembly);
     expect(readPending()).toBe(0);
+  });
+
+  it("writes no receipt when a tool-policy step fails after prompt work starts", async () => {
+    await seedPendingHandoff();
+    const failing = await fixture(
+      {},
+      {
+        applyPromptBuildToolsAllow: () => {
+          throw new Error("post-claim tool policy failed");
+        },
+      },
+    );
+    await expect(failing.assemble()).rejects.toThrow("post-claim tool policy failed");
+    expect(failing.releasedClaims).toEqual([]);
+    expect(readPending()).toBe(1);
+    expect(readQueue().dispatching).toBeUndefined();
+
+    // The next real user message still delivers the reminder exactly once.
+    const nextRun = await fixture();
+    const assembly = await nextRun.assemble();
+    expect(assembly.effectivePrompt.startsWith(handoffMarker)).toBe(true);
+    await nextRun.submit(assembly);
+    expect(readPending()).toBe(0);
+    expect(readQueue().delivered?.["intent-1"]).toBeDefined();
+  });
+
+  it("transfers claim release ownership before the assembly returns", async () => {
+    await seedPendingHandoff();
+    const f = await fixture();
+    await f.assemble();
+    expect(f.releasedClaims).toHaveLength(1);
+    expect(f.releasedClaims[0]).toBeTypeOf("function");
+    await f.releasedClaims[0]!();
+    expect(readPending()).toBe(1);
+    expect(readQueue().dispatching).toBeUndefined();
+  });
+
+  it("drops the handoff at the provider boundary when reopen cancels it after assembly", async () => {
+    await seedPendingHandoff();
+    const f = await fixture();
+    const assembly = await f.assemble();
+    expect(assembly.effectivePrompt.startsWith(handoffMarker)).toBe(true);
+    expect(assembly.handoffFreeModelPrompt).toBe("Hello");
+    expect(assembly.handoffRevalidate).toBeTypeOf("function");
+
+    expect(
+      await cancelPendingSideConversationHandoffs({
+        agentId: "main",
+        intentId: "intent-1",
+        parentSessionKey: parentKey,
+        storePath,
+      }),
+    ).toBe(1);
+
+    const providerPrompts: string[] = [];
+    let revalidateCalls = 0;
+    const originalRevalidate = assembly.handoffRevalidate!;
+    const instrumented = {
+      ...assembly,
+      handoffRevalidate: async () => {
+        revalidateCalls += 1;
+        return await originalRevalidate();
+      },
+    };
+    streamMocks.streamSimple.mockImplementation((model: Model, context) => {
+      providerPrompts.push(JSON.stringify(context.messages));
+      return createAssistantResultStream(createAssistant(model, [{ type: "text", text: "done" }]));
+    });
+    await f.submit(instrumented);
+
+    expect(revalidateCalls).toBeGreaterThan(0);
+
+    expect(providerPrompts).toHaveLength(1);
+    expect(providerPrompts[0]).not.toContain(handoffMarker);
+    expect(providerPrompts[0]).toContain("Hello");
+    const queue = readQueue();
+    expect(queue.pending).toHaveLength(0);
+    expect(queue.dispatching).toBeUndefined();
+    expect(queue.delivered).toBeUndefined();
   });
 
   it.each([

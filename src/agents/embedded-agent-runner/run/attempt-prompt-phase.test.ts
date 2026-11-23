@@ -89,13 +89,16 @@ describe("runEmbeddedAttemptPromptPhase", () => {
   it("releases an undispatched handoff claim when prompt preparation fails", async () => {
     const f = createFixture();
     const release = vi.fn(async () => {});
-    mocks.preparePromptAssembly.mockImplementation(async (input) => ({
-      ...createPromptAssemblyResult(input),
-      effectivePrompt: "hello",
-      effectiveTranscriptPrompt: "hello",
-      handoffDispatch: vi.fn(),
-      handoffRelease: release,
-    }));
+    mocks.preparePromptAssembly.mockImplementation(async (input) => {
+      input.setHandoffRelease?.(release);
+      return {
+        ...createPromptAssemblyResult(input),
+        effectivePrompt: "hello",
+        effectiveTranscriptPrompt: "hello",
+        handoffDispatch: vi.fn(),
+        handoffRelease: release,
+      };
+    });
     mocks.preparePromptContext.mockImplementation(() => {
       throw new Error("context preparation failed");
     });

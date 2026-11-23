@@ -259,18 +259,24 @@ export function beginSideConversationHandoffDispatch(
 }
 
 /**
- * Treat another run's receipt as delivered: nothing may be injected again.
+ * Resolve another run's receipt.
  *
- * This is the no-repeat reconciliation for a delivery write that failed after
- * the provider dispatch (or for a run that died between claim and dispatch).
+ * A receipt is only delivery evidence when this process observed its dispatch.
+ * Without that proof (restart, or a claim that never dispatched) it is an orphan:
+ * the pending notices are restored and nothing is ever recorded as delivered, so
+ * the next user message can still deliver them.
  */
 export function reconcileSideConversationHandoffDispatch(
   queue: SideConversationHandoffQueue,
   currentRunId: string,
+  isDispatched: (runId: string) => boolean,
 ): SideConversationHandoffQueue {
   const receipt = queue.dispatching;
   if (!receipt || receipt.runId === currentRunId) {
     return queue;
+  }
+  if (!isDispatched(receipt.runId)) {
+    return { ...queue, dispatching: undefined };
   }
   const sequences = new Set(receipt.sequences);
   const droppedSequences = new Set(receipt.droppedSequences);

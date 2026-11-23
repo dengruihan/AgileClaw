@@ -105,6 +105,8 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
   prepareSystemPrompt?: (currentSystemPrompt: string) => Promise<string>;
   setActiveSessionSystemPrompt: (systemPrompt: string) => void;
   setLeasedSteering: (lease: EmbeddedAttemptSteeringLease) => void;
+  /** Receives claim-release ownership the moment a handoff receipt is written. */
+  setHandoffRelease?: (release: (() => Promise<void>) | undefined) => void;
 }) {
   const { attempt } = input;
   // Capture runtime ownership before hook/steering awaits; explicit scopes stay pinned.
@@ -164,22 +166,6 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
         messages: promptBuildMessages,
         hookCtx,
         hookRunner: input.hookRunner,
-      });
-
-  // A closed side conversation's reminder belongs only to the parent's own next
-  // external user message. The claim is run-scoped (identical retries) and its
-  // delivery is committed by the dispatch seam, never while assembling.
-  const handoffClaim = preserveExactPrompt
-    ? undefined
-    : await claimSideConversationHandoffPrompt({
-        runId: attempt.runId,
-        sessionKey: attempt.sessionKey,
-        sessionTarget: attempt.sessionTarget,
-        trigger: attempt.trigger,
-        ...(attempt.internalEvents?.length ? { hasInternalEvents: true } : {}),
-        ...(attempt.operation ? { operation: attempt.operation } : {}),
-        ...(attempt.inputProvenance ? { inputProvenance: attempt.inputProvenance } : {}),
-        ...(attempt.skipPreparedUserTurnMessage ? { skipPreparedUserTurnMessage: true } : {}),
       });
 
   let leasedSteering: EmbeddedAttemptSteeringLease | undefined;
@@ -328,7 +314,6 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
   const promptBuildPrependContext = joinHookContext(
     hookResult?.prependContext,
     authorizedHookResult?.prependContext,
-    handoffClaim?.prependContext,
   );
   const promptBuildAppendContext = joinHookContext(
     hookResult?.appendContext,
@@ -444,6 +429,33 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
       ? resolveHeartbeatSummaryForAgent(attempt.config, input.sessionAgentId)
       : undefined;
 
+  // Claim only after every fallible assembly step, so a hook, tool-policy, or
+  // system-prompt failure never leaves a receipt behind. Ownership transfers
+  // immediately; the block is prepended last (closest to the user text) so the
+  // dispatch boundary can drop exactly this block if reopen cancels it.
+  const handoffClaim = preserveExactPrompt
+    ? undefined
+    : await claimSideConversationHandoffPrompt({
+        runId: attempt.runId,
+        sessionKey: attempt.sessionKey,
+        sessionTarget: attempt.sessionTarget,
+        trigger: attempt.trigger,
+        ...(attempt.internalEvents?.length ? { hasInternalEvents: true } : {}),
+        ...(attempt.operation ? { operation: attempt.operation } : {}),
+        ...(attempt.inputProvenance ? { inputProvenance: attempt.inputProvenance } : {}),
+        ...(attempt.skipPreparedUserTurnMessage ? { skipPreparedUserTurnMessage: true } : {}),
+      });
+  const effectivePromptWithoutHandoff = effectivePrompt;
+  try {
+    if (handoffClaim) {
+      input.setHandoffRelease?.(handoffClaim.release);
+      effectivePrompt = `${handoffClaim.prependContext}\n\n${effectivePrompt}`;
+    }
+  } catch (error) {
+    await handoffClaim?.release();
+    throw error;
+  }
+
   return {
     decisionPrefilter,
     assertHostActive,
@@ -454,7 +466,13 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
     effectiveTranscriptPrompt,
     originContext,
     ...(handoffClaim
-      ? { handoffDispatch: handoffClaim.commit, handoffRelease: handoffClaim.release }
+      ? {
+          handoffDispatch: handoffClaim.commit,
+          handoffFreeModelPrompt: effectivePromptWithoutHandoff,
+          handoffPrependContext: handoffClaim.prependContext,
+          handoffRelease: handoffClaim.release,
+          handoffRevalidate: handoffClaim.revalidate,
+        }
       : {}),
     transcriptLeafId,
     heartbeatSummary,

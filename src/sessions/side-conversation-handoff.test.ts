@@ -673,6 +673,87 @@ describe("side conversation handoff delivery", () => {
     });
   });
 
+  it("restores an orphan receipt as pending after a restart instead of delivering it", async () => {
+    await withOpenClawTestState({ label: "handoff-orphan-restart" }, async (state) => {
+      const repo = await createRepository(state);
+      const storePath = path.join(state.root, "sessions.json");
+      const parent = await seedParent({ storePath, repo });
+      const child = await addChildWorktree({
+        repo,
+        stateRoot: state.root,
+        env: state.env,
+        childKey: "agent:main:child-orphan",
+        branch: "side-orphan",
+        ownerId: "agent:main:child-orphan",
+      });
+      await fs.writeFile(path.join(child.path, "work.txt"), "work\n");
+      const closedChild = childEntry({
+        childKey: "agent:main:child-orphan",
+        intentId: "intent-orphan",
+        ordinal: 1,
+        worktree: { id: child.id, branch: child.branch, repoRoot: repo },
+      });
+      await ensureParentHandoff({
+        child: closedChild,
+        childSessionKey: "agent:main:child-orphan",
+        parent,
+        storePath,
+      });
+
+      // Claim, then restart before any dispatch/commit/release evidence exists.
+      const crashed = await claimSideConversationHandoffPrompt({
+        runId: "run-crash-before-dispatch",
+        ...turn(storePath),
+      });
+      expect(crashed?.prependContext).toContain("[Side conversation handoff]");
+      clearSideConversationHandoffClaimsForTest();
+
+      // The orphan receipt is not delivery evidence: nothing was delivered, and
+      // the reminder is still pending for the next user message.
+      expect(readQueue(storePath).delivered).toBeUndefined();
+      expect(
+        await ensureParentHandoff({
+          child: closedChild,
+          childSessionKey: "agent:main:child-orphan",
+          parent,
+          storePath,
+        }),
+      ).toEqual({ status: "already-recorded" });
+      expect(readQueue(storePath).delivered).toBeUndefined();
+
+      const nextRun = await claimSideConversationHandoffPrompt({
+        runId: "run-after-restart",
+        ...turn(storePath),
+      });
+      expect(nextRun?.prependContext).toContain("[Side conversation handoff]");
+      const claimed = readQueue(storePath);
+      expect(claimed.pending).toHaveLength(1);
+      expect(claimed.dispatching?.runId).toBe("run-after-restart");
+      expect(claimed.delivered).toBeUndefined();
+
+      await nextRun!.commit();
+      expect(readQueue(storePath).pending).toHaveLength(0);
+      expect(readQueue(storePath).delivered?.["intent-orphan"]).toBeDefined();
+
+      // After reopen, a close retry records again instead of being blocked by a
+      // phantom delivery record.
+      await cancelPendingSideConversationHandoffs({
+        agentId: "main",
+        intentId: "intent-orphan",
+        parentSessionKey: parentKey,
+        storePath,
+      });
+      expect(
+        await ensureParentHandoff({
+          child: closedChild,
+          childSessionKey: "agent:main:child-orphan",
+          parent,
+          storePath,
+        }),
+      ).toEqual({ status: "recorded" });
+    });
+  });
+
   it("does not absorb a close that lands during an empty run's retries", async () => {
     await withOpenClawTestState({ label: "handoff-negative" }, async (state) => {
       const repo = await createRepository(state);
