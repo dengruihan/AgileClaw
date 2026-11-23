@@ -88,8 +88,15 @@ transcript is never written back to the parent.
 
 The snapshot is frozen at creation time:
 
-- A parent message that was still streaming or had not finished writing does not
-  appear, even if the parent run completes a moment later.
+- Text and reasoning prefixes already written by a parent run are captured as
+  model-only reference context; the projection does not wait for a terminal stop
+  reason.
+- Incomplete work still follows the drop rules above: assistant turns that
+  stopped `aborted` or `error`, and tool rounds whose calls lack settled
+  results, are omitted.
+- Only what existed at creation is copied. Streaming text that was not persisted
+  then never appears, and later text is not appended even if the parent run
+  completes a moment later.
 - The parent's uncommitted working-tree changes are not copied.
 - Later parent messages, compactions, or model changes do not update the child.
 
@@ -109,7 +116,9 @@ Every side conversation tries to start with its own managed worktree:
   own `HEAD`.
 - The parent's uncommitted edits are never copied into the child.
 - Repository setup scripts (`.openclaw/worktree-setup.sh`) do not run for a
-  side conversation. Starting a new worktree remains an explicit admin action.
+  side conversation. Creating the side-conversation worktree is implicit for an
+  `operator.write` caller; only a worktree started with setup remains an
+  explicit admin action.
 
 When the parent has no usable local Git source, the child shares the parent's
 workspace and the UI shows why:
@@ -164,7 +173,7 @@ Reopening is allowed only from `closed`. It restores a retired checkout before
 changing state and never starts a run. If the checkout cannot be restored, the
 conversation stays closed and the error says so; restore the repository or
 start a new side conversation instead. Reopen also cancels that child's pending
-next-message reminder.
+next-message reminder, but only while it has not been dispatched.
 
 ### Merge
 
@@ -197,7 +206,8 @@ may still want the files.
 
 Abandon refuses a conversation that already merged, and it refuses when the
 branch has landed in Git but the merge state was not recorded. In that case,
-retry **Merge** to record the landing commit first.
+retry **Merge** to record the landing commit; the child then finishes as
+`merged` and cannot be abandoned.
 
 ### Delete
 
@@ -236,8 +246,11 @@ session:
   summarized as a count rather than dropped silently.
 
 The parent composer shows a handoff chip with the pending count. **Cancel**
-reopens the newest closed child and withdraws its reminder. Reopening any child
-cancels that child's reminder; a later close records a new one.
+reopens the newest closed child and withdraws its reminder only while that
+reminder is still undelivered. Reopening any child cancels only its pending,
+undispatched reminder; once a turn has dispatched the reminder to the provider,
+the prepended context cannot be recalled. Closing that child again records a new
+reminder for the next user message.
 
 There is no automatic review, merge, or follow-up run. The reminder exists only
 to tell the model that closed side work may matter to the next request.
@@ -283,7 +296,7 @@ connection. TUI stays on the ephemeral BTW path by design. See
 | `sideConversations.create`  | `operator.write` | Create or reuse one hidden child from a parent and intent id.    |
 | `sideConversations.list`    | `operator.read`  | List a parent's registered children and cleanup state.           |
 | `sideConversations.close`   | `operator.write` | Quiesce and keep a child; records the next-message reminder.     |
-| `sideConversations.reopen`  | `operator.write` | Restore a closed child and cancel its reminder.                  |
+| `sideConversations.reopen`  | `operator.write` | Restore a closed child and cancel its undelivered reminder.      |
 | `sideConversations.merge`   | `operator.write` | Merge the child's committed branch into the parent checkout.     |
 | `sideConversations.abandon` | `operator.write` | Drop the conversation and keep its branch and checkout.          |
 | `sideConversations.delete`  | `operator.write` | Delete a settled child with snapshot-protected checkout cleanup. |
@@ -306,7 +319,7 @@ reason, so a client can render the same strip the Control UI shows.
 | Merge reports a dirty parent, dirty child, detached parent, or merge in progress | Commit, stash, check out a branch, or finish the other merge, then retry. Nothing was merged.                                                                                           |
 | Merge reports a conflict                                                         | Resolve the listed paths in a normal Git flow, commit the child work, and retry.                                                                                                        |
 | Merge reports it landed but state was not recorded                               | Retry merge to record the landing commit; the branch is not merged twice.                                                                                                               |
-| Abandon reports the branch already merged                                        | Retry merge to record it, then abandon if you still want to drop the conversation.                                                                                                      |
+| Abandon reports the branch already merged                                        | Retry merge to record it; that finishes the lifecycle as merged. A merged child cannot be abandoned.                                                                                    |
 | Delete reports active work or cleanup pending                                    | Retry after the run settles. A deleted child reports leftover cleanup in the parent's list; preserved checkouts name their branch and path.                                             |
 | Parent delete or archive reports a partial result                                | Settle the named child, then retry the parent action. A delete keeps the parent and unprocessed children intact; an archive may already have committed the parent and earlier children. |
 
@@ -314,7 +327,7 @@ reason, so a client can render the same strip the Control UI shows.
 
 <CardGroup cols={2}>
   <Card title="BTW side questions" href="/tools/btw" icon="comments">
-    One-shot side questions on channels, the TUI, and the Control UI.
+    Detached side questions on channels and the TUI; the Control UI opens a side conversation.
   </Card>
   <Card title="Slash commands" href="/tools/slash-commands" icon="terminal">
     Command routing and `/btw` aliases by surface.
