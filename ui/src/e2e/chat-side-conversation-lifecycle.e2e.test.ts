@@ -100,9 +100,9 @@ suite.define(() => {
         .nth(1)
         .locator(".agent-chat__composer-shell textarea");
       await expect(childComposer).toBeVisible();
-      const draft = await childComposer.inputValue();
-      expect(draft).toContain(passage);
-      expect(draft).toContain("Check the rollback steps.");
+      // The route draft lands on a pane commit; retry until it is applied.
+      await expect(childComposer).toHaveValue(/Review the deployment checklist/);
+      await expect(childComposer).toHaveValue(/Check the rollback steps\./);
       // Selection only stages a draft; nothing is sent to any session.
       expect((await gateway.getRequests("chat.send")).length).toBe(0);
       await page.screenshot({ path: path.join(artifactDir, "selection-child-draft.png") });

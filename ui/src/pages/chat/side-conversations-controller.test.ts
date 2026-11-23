@@ -3,6 +3,7 @@ import type {
   SideConversationSummary,
   SideConversationsListResult,
 } from "../../../../packages/gateway-protocol/src/index.js";
+import { createDeferred } from "../../../../test/helpers/promise.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { ChatSideConversations, sideConversationsFor } from "./side-conversations-controller.ts";
 
@@ -87,6 +88,82 @@ describe("ChatSideConversations", () => {
       parentSessionKey: "agent:main:run",
       agentId: "main",
     });
+  });
+
+  it("ignores a list response that started before a newer transition", async () => {
+    const staleList = createDeferred<SideConversationsListResult>();
+    let listCount = 0;
+    const gateway = client((method) => {
+      if (method === "sideConversations.list") {
+        listCount += 1;
+        return listCount === 1
+          ? staleList.promise
+          : Promise.resolve(
+              listResult([conversation({ sessionKey: "child", state: "closed", updatedAt: 30 })]),
+            );
+      }
+      return Promise.resolve({
+        ok: true,
+        conversation: conversation({ sessionKey: "child", state: "closed", updatedAt: 20 }),
+      });
+    });
+    const controller = new ChatSideConversations();
+    const loading = controller.load("agent:main:run", gateway, "main");
+
+    await controller.close({
+      parentSessionKey: "agent:main:run",
+      sessionKey: "child",
+      client: gateway,
+      agentId: "main",
+    });
+    expect(controller.view("agent:main:run", "main")?.conversations[0]).toMatchObject({
+      state: "closed",
+      updatedAt: 20,
+    });
+
+    // The list snapshot was produced before the close and must not undo it.
+    staleList.resolve(
+      listResult([conversation({ sessionKey: "child", state: "open", updatedAt: 10 })]),
+    );
+    await loading;
+    expect(controller.view("agent:main:run", "main")?.conversations[0]).toMatchObject({
+      state: "closed",
+      updatedAt: 20,
+    });
+
+    // The fence covers that snapshot only; a later read is authoritative again.
+    await controller.load("agent:main:run", gateway, "main", { force: true });
+    expect(controller.view("agent:main:run", "main")?.conversations[0]?.updatedAt).toBe(30);
+  });
+
+  it("ignores a list response that started before a newer create", async () => {
+    const staleList = createDeferred<SideConversationsListResult>();
+    let listCount = 0;
+    const created = conversation({ sessionKey: "child", updatedAt: 20 });
+    const gateway = client((method) => {
+      if (method === "sideConversations.list") {
+        listCount += 1;
+        return listCount === 1 ? staleList.promise : Promise.resolve(listResult([created]));
+      }
+      return Promise.resolve({ ok: true, created: true, conversation: created });
+    });
+    const controller = new ChatSideConversations();
+    const loading = controller.load("agent:main:run", gateway, "main");
+
+    await controller.create({
+      parentSessionKey: "agent:main:run",
+      client: gateway,
+      agentId: "main",
+    });
+    expect(
+      controller.view("agent:main:run", "main")?.conversations.map((row) => row.sessionKey),
+    ).toEqual(["child"]);
+
+    staleList.resolve(listResult([]));
+    await loading;
+    expect(
+      controller.view("agent:main:run", "main")?.conversations.map((row) => row.sessionKey),
+    ).toEqual(["child"]);
   });
 
   it("starts a child once and merges the reply into the cached list", async () => {

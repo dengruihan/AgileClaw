@@ -37,6 +37,12 @@ type ParentEntry = {
   connectionKey: string | null;
   pending: Set<string>;
   notices: Map<string, string>;
+  /**
+   * Advances whenever a create or lifecycle result replaces cached state. A list
+   * response captured before that change describes an older authority and must
+   * not overwrite it, even if it resolves later.
+   */
+  mutationRevision: number;
 };
 
 function parentKey(parentSessionKey: string, agentId?: string | null): string {
@@ -53,6 +59,7 @@ function emptyEntry(): ParentEntry {
     connectionKey: null,
     pending: new Set(),
     notices: new Map(),
+    mutationRevision: 0,
   };
 }
 
@@ -131,6 +138,9 @@ export class ChatSideConversations {
       return;
     }
     const token = Symbol(trimmed);
+    // Any mutation that lands after this point owns a newer authority than the
+    // snapshot this request is about to read.
+    const revision = entry.mutationRevision;
     entry.token = token;
     entry.connectionKey = connectionKey;
     entry.loading = true;
@@ -140,12 +150,20 @@ export class ChatSideConversations {
         parentSessionKey: trimmed,
         ...(agentId ? { agentId } : {}),
       });
-      if (this.entries.get(parentKey(trimmed, agentId)) !== entry || entry.token !== token) {
+      if (
+        this.entries.get(parentKey(trimmed, agentId)) !== entry ||
+        entry.token !== token ||
+        entry.mutationRevision !== revision
+      ) {
         return;
       }
       this.applyListResult(entry, result);
     } catch (error) {
-      if (this.entries.get(parentKey(trimmed, agentId)) !== entry || entry.token !== token) {
+      if (
+        this.entries.get(parentKey(trimmed, agentId)) !== entry ||
+        entry.token !== token ||
+        entry.mutationRevision !== revision
+      ) {
         return;
       }
       entry.error = formatUiError(error);
@@ -200,6 +218,7 @@ export class ChatSideConversations {
           ),
           result.conversation,
         ]);
+        entry.mutationRevision += 1;
         entry.error = null;
         this.notify();
       }
@@ -289,6 +308,7 @@ export class ChatSideConversations {
           ),
           next.conversation,
         ]);
+        entry.mutationRevision += 1;
         entry.error = null;
         if (next.notice) {
           entry.notices.set(sessionKey, next.notice);
