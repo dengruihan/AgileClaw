@@ -51,7 +51,8 @@ export type SessionLifecycleMutationOperation =
   | "cron-cleanup"
   | "rollover"
   | "acp-spawn-cleanup"
-  | "side-merge";
+  | "side-merge"
+  | "side-abandon";
 type Phase =
   | "admission"
   | "activation"

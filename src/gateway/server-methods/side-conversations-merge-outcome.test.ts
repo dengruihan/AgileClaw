@@ -3,14 +3,20 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, expect, test, vi } from "vitest";
+import { ErrorCodes, errorShape } from "../../../packages/gateway-protocol/src/index.js";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
 import { managedWorktrees } from "../../agents/worktrees/service.js";
 import { getRuntimeConfig } from "../../config/config.js";
 import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
+import {
+  isSessionLifecycleMutationActive,
+  runExclusiveSessionLifecycleMutation,
+} from "../../sessions/session-lifecycle-admission.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
 import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { initializeRepository } from "../server.sessions.create.projects.test-support.js";
+import { SessionMutationAuthorizationChangedError } from "../session-mutation-authorization-error.js";
 import { testState } from "../test-helpers.js";
 import {
   directSessionReq,
@@ -112,6 +118,23 @@ function readEntry(storePath: string, sessionKey: string) {
 function mergeCommitDetail(error: { details?: unknown } | undefined): string | undefined {
   const details = error?.details as { mergeCommit?: string } | undefined;
   return details?.mergeCommit;
+}
+
+async function waitForMutation(
+  scope: string,
+  identities: string[],
+  timeoutMs = 5_000,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (isSessionLifecycleMutationActive(scope, identities)) {
+      return true;
+    }
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 10);
+    });
+  }
+  return false;
 }
 
 async function createMergedFixture(intentId: string) {
@@ -235,5 +258,134 @@ test(
       conversation: { state: "merged" },
     });
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+  },
+);
+
+test(
+  "typed authority loss after Git keeps its canonical error and reports the landed commit",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath, sessionKey } =
+      await createMergedFixture("intent-typed-authority");
+    const context = createDirectChatContext({
+      chatAbortControllers: new Map(),
+      chatQueuedTurns: new Map(),
+    });
+    const authorityError = new SessionMutationAuthorizationChangedError(
+      errorShape(ErrorCodes.FORBIDDEN, "Session access changed", {
+        details: { code: "SESSION_ACCESS_CHANGED" },
+      }),
+    );
+    let thrown = false;
+
+    const result = await mergePersistentSideConversation({
+      cfg: getRuntimeConfig(),
+      context,
+      parentSessionKey: parentKey,
+      sessionKey,
+      assertCurrent: () => {
+        if (mockState.mergedCommit && !thrown) {
+          thrown = true;
+          throw authorityError;
+        }
+      },
+    });
+    expect(result.ok).toBe(false);
+    const landed = mockState.mergedCommit;
+    if (!result.ok) {
+      // Canonical code/message stay intact; the accepted write is reconciled.
+      expect(result.error.code).toBe(ErrorCodes.FORBIDDEN);
+      expect(result.error.message).toBe("Session access changed");
+      expect(result.error.details).toMatchObject({
+        code: "SESSION_ACCESS_CHANGED",
+        mergeCommit: landed,
+      });
+      expect(result.error.retryable).toBe(true);
+    }
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+    expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+
+    const retried = await directSessionReq<{
+      alreadyMerged: boolean;
+      mergeCommit?: string;
+      conversation: { state: string };
+    }>("sideConversations.merge", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
+    expect(retried.payload).toMatchObject({
+      alreadyMerged: true,
+      mergeCommit: landed,
+      conversation: { state: "merged" },
+    });
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(landed);
+  },
+);
+
+test(
+  "a merge queued behind a long mutation settles on abort without moving HEAD",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath, sessionKey } = await createMergedFixture("intent-queued-abort");
+    const parent = readEntry(storePath, parentKey)!;
+    let releaseGate: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve;
+    });
+    const holder = runExclusiveSessionLifecycleMutation("patch", {
+      scope: storePath,
+      identities: [parentKey, parent.sessionId],
+      run: async () => {
+        await gate;
+      },
+    });
+    const activated = await waitForMutation(storePath, [parentKey]);
+    expect(activated).toBe(true);
+    const context = createDirectChatContext({
+      chatAbortControllers: new Map(),
+      chatQueuedTurns: new Map(),
+    });
+
+    try {
+      const controller = new AbortController();
+      const pending = mergePersistentSideConversation({
+        cfg: getRuntimeConfig(),
+        context,
+        parentSessionKey: parentKey,
+        sessionKey,
+        assertCurrent: () => {},
+        signal: controller.signal,
+      });
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 100);
+      });
+      const headBefore = await git(workspace, "rev-parse", "HEAD");
+      controller.abort();
+      const settlement = await Promise.race([
+        pending.then(
+          () => "resolved",
+          (error: unknown) => error,
+        ),
+        new Promise<"timeout">((resolve) => {
+          setTimeout(() => resolve("timeout"), 2000);
+        }),
+      ]);
+      // The queued request settles at abort time instead of waiting for the holder.
+      expect(settlement).not.toBe("timeout");
+      expect(settlement).not.toBe("resolved");
+      expect(await git(workspace, "rev-parse", "HEAD")).toBe(headBefore);
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+    } finally {
+      releaseGate();
+      await holder;
+    }
+
+    // The lane is usable again for a later merge.
+    const retried = await directSessionReq<{
+      alreadyMerged: boolean;
+      mergeCommit?: string;
+      conversation: { state: string };
+    }>("sideConversations.merge", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(retried.ok, JSON.stringify(retried.error)).toBe(true);
+    expect(retried.payload?.conversation.state).toBe("merged");
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(retried.payload?.mergeCommit);
   },
 );

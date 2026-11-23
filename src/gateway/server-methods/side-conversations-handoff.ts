@@ -7,6 +7,7 @@
  * that retires the child's checkout, through the snapshot-protected removal
  * owner shared with the parent fence.
  */
+import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import {
   ErrorCodes,
   errorShape,
@@ -89,6 +90,8 @@ export async function mergePersistentSideConversation(params: {
   parentSessionKey: string;
   sessionKey: string;
   assertCurrent: () => void;
+  /** Caller cancellation; a request queued behind another mutation settles at abort. */
+  signal?: AbortSignal;
 }): Promise<MergeSideConversationResult> {
   const preflight = await resolveSideConversationChildTarget(params);
   if (!preflight.ok) {
@@ -104,6 +107,7 @@ export async function mergePersistentSideConversation(params: {
   return await runExclusiveSessionLifecycleMutation("side-merge", {
     scope: target.storePath,
     identities,
+    ...(params.signal ? { signal: params.signal } : {}),
     // No store mutex is nested: this is the same lifecycle lane that delete and
     // archive acquire, and every release happens in the owner's finally.
     run: async () => await mergeSideConversationInLane(params),
@@ -117,6 +121,7 @@ async function mergeSideConversationInLane(params: {
   parentSessionKey: string;
   sessionKey: string;
   assertCurrent: () => void;
+  signal?: AbortSignal;
 }): Promise<MergeSideConversationResult> {
   const sessionKey = params.sessionKey.trim();
   // The preflight only selected the lane identities; revalidate the exact pair
@@ -164,6 +169,18 @@ async function mergeSideConversationInLane(params: {
         ...(landed ? { mergeCommit: landed } : {}),
         alreadyMerged: true,
       },
+    };
+  }
+  if (target.entry.archivedAt !== undefined) {
+    // Archive can commit the parent before it retires every child. A live,
+    // unarchived child must never write into an archived parent, and no retry
+    // could ever record that write, so refuse before any Git work.
+    return {
+      ok: false,
+      error: errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        `The parent session is archived; restore it before merging side conversation ${sessionKey}.`,
+      ),
     };
   }
   if (marker.state === "abandoned") {
@@ -283,7 +300,10 @@ async function mergeSideConversationInLane(params: {
     });
   } catch (error) {
     if (isRequiredMergeAuthorityError(error)) {
-      throw error;
+      return {
+        ok: false,
+        error: withMergeOutcome(error.error, merged.value.commit),
+      };
     }
     metadataFailure = error;
   }
@@ -324,9 +344,22 @@ async function mergeSideConversationInLane(params: {
   };
 }
 
-/** Authority loss keeps its canonical protocol error; every other failure reconciles the write. */
-function isRequiredMergeAuthorityError(error: unknown): boolean {
+/** Authority loss keeps its canonical code/message but still reports the landed write. */
+function isRequiredMergeAuthorityError(
+  error: unknown,
+): error is SessionMutationAuthorizationChangedError {
   return error instanceof SessionMutationAuthorizationChangedError;
+}
+
+function withMergeOutcome(error: ErrorShape, mergeCommit: string): ErrorShape {
+  return {
+    ...error,
+    details: {
+      ...(isRecord(error.details) ? error.details : {}),
+      mergeCommit,
+    },
+    retryable: true,
+  };
 }
 
 function mergeOutcomePendingError(
@@ -341,7 +374,13 @@ function mergeOutcomePendingError(
   );
 }
 
-/** Abandon keeps the branch, checkout, and uncommitted files; it only records the state. */
+/**
+ * Abandon keeps the branch, checkout, and uncommitted files; it only records state.
+ *
+ * It shares the parent/child lifecycle lane with merge, delete, and archive, so a
+ * paused merge cannot be abandoned underneath or leave an unreconcilable landed
+ * write. The pair is re-resolved after the lane is acquired.
+ */
 export async function abandonPersistentSideConversation(params: {
   cfg: OpenClawConfig;
   context: GatewayRequestContext;
@@ -350,12 +389,44 @@ export async function abandonPersistentSideConversation(params: {
   sessionKey: string;
   assertCurrent: () => void;
 }): Promise<SideConversationResult<SideConversationSummary>> {
+  const preflight = await resolveSideConversationChildTarget(params);
+  if (!preflight.ok) {
+    return preflight;
+  }
+  const { target, child } = preflight.value;
+  const identities = [
+    target.canonicalKey,
+    target.entry.sessionId,
+    params.sessionKey.trim(),
+    child.sessionId,
+  ].filter((identity): identity is string => typeof identity === "string" && identity.length > 0);
+  return await runExclusiveSessionLifecycleMutation("side-abandon", {
+    scope: target.storePath,
+    identities,
+    run: async () => await abandonSideConversationInLane(params),
+  });
+}
+
+async function abandonSideConversationInLane(params: {
+  cfg: OpenClawConfig;
+  context: GatewayRequestContext;
+  agentId?: string;
+  parentSessionKey: string;
+  sessionKey: string;
+  assertCurrent: () => void;
+}): Promise<SideConversationResult<SideConversationSummary>> {
+  const sessionKey = params.sessionKey.trim();
   const resolved = await resolveSideConversationChildTarget(params);
   if (!resolved.ok) {
-    return resolved;
+    return {
+      ok: false,
+      error: errorShape(
+        ErrorCodes.INVALID_REQUEST,
+        `Side conversation ${sessionKey} or its parent changed before the abandon; nothing was changed.`,
+      ),
+    };
   }
   const { target, registration, child, marker } = resolved.value;
-  const sessionKey = params.sessionKey.trim();
   if (marker.state === "merged") {
     return {
       ok: false,

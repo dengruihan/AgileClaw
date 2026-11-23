@@ -173,6 +173,7 @@ export const sideConversationHandlers: GatewayRequestHandlers = {
       ...(params.agentId ? { agentId: params.agentId } : {}),
       parentSessionKey: params.parentSessionKey,
       sessionKey: params.sessionKey,
+      ...(options.signal ? { signal: options.signal } : {}),
       assertCurrent: () => {
         requestAuthority.assertCurrent();
         sessionMutationAuthorization?.assertCurrent();

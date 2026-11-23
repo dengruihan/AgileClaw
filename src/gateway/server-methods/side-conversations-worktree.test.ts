@@ -16,6 +16,7 @@ import {
 import { getRuntimeConfig } from "../../config/config.js";
 import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
+import { createDirectChatContext } from "../server-chat.agent-events.test-helpers.js";
 import { initializeRepository } from "../server.sessions.create.projects.test-support.js";
 import { testState } from "../test-helpers.js";
 import {
@@ -24,6 +25,7 @@ import {
   setupGatewaySessionsHandlerTestHarness,
 } from "../test/server-sessions.test-helpers.js";
 import { disposeSessionReadContexts } from "./sessions-read-cache.test-support.js";
+import type { GatewayRequestContext } from "./types.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
@@ -129,6 +131,24 @@ async function installPausingGitWrapper(root: string): Promise<{
       process.env.PATH = previousPath;
     },
   };
+}
+
+/** Reports a worker turn claim only once the caller's condition turns true mid-archive. */
+function latePlacementContext(isActive: (sessionId: string) => boolean): GatewayRequestContext {
+  return createDirectChatContext({
+    chatAbortControllers: new Map(),
+    chatQueuedTurns: new Map(),
+    workerSessionPlacementService: {
+      getMany: (sessionIds: string[]) =>
+        new Map(
+          sessionIds
+            .filter((sessionId) => isActive(sessionId))
+            .map((sessionId) => [sessionId, { turnClaim: { sessionId, runId: "late-run" } }]),
+        ),
+      listPendingWorkspaceResultsAsync: async () => [],
+      waitForTurnClaimRelease: async () => true,
+    } as never,
+  });
 }
 
 function isPending(result: Promise<unknown>): Promise<boolean> {
@@ -890,5 +910,121 @@ test(
     expect(await git(workspace, "cat-file", "-p", `${retired.snapshotRef}:draft.txt`)).toContain(
       "abandoned archive draft",
     );
+  },
+);
+
+test(
+  "abandon during a paused merge waits for the lane and is refused after the merge",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const { sessionKey } = await createSide("intent-paused-abandon");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "feature.txt"), "paused abandon feature\n");
+    await git(record.path, "add", "feature.txt");
+    await git(record.path, "commit", "-m", "paused abandon feature");
+
+    const wrapperRoot = tempDirs.make("openclaw-side-paused-abandon-");
+    const wrapper = await installPausingGitWrapper(wrapperRoot);
+    const order: string[] = [];
+    try {
+      const mergePromise = directSessionReq<{ mergeCommit?: string }>(
+        "sideConversations.merge",
+        { parentSessionKey: parentKey, sessionKey },
+        { client },
+      ).then((result) => {
+        order.push("merge");
+        return result;
+      });
+      await waitForPath(wrapper.marker);
+
+      const abandonPromise = directSessionReq(
+        "sideConversations.abandon",
+        { parentSessionKey: parentKey, sessionKey },
+        { client },
+      ).then((result) => {
+        order.push("abandon");
+        return result;
+      });
+      // The abandon must not commit while the merge lane is held.
+      await expect(isPending(abandonPromise)).resolves.toBe(true);
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("open");
+
+      await fs.writeFile(wrapper.releasePath, "release");
+      const merged = await mergePromise;
+      const abandoned = await abandonPromise;
+      expect(merged.ok, JSON.stringify(merged.error)).toBe(true);
+      expect(merged.payload?.mergeCommit).toBe(await git(workspace, "rev-parse", "HEAD"));
+      // Merge-then-abandon is the only reachable order: the abandon is visibly refused.
+      expect(order).toEqual(["merge", "abandon"]);
+      expect(abandoned.ok).toBe(false);
+      expect(abandoned.error?.message).toContain("merged");
+      expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("merged");
+    } finally {
+      wrapper.restore();
+    }
+  },
+);
+
+test(
+  "a child stranded by a partial parent archive cannot merge into the archived parent",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const parent = readEntry(storePath, parentKey)!;
+    const first = await createSide("intent-partial-archive-first");
+    const second = await createSide("intent-partial-archive-second");
+    const secondChild = readEntry(storePath, second.sessionKey)!;
+
+    // A turn claim that appears after the parent preflight commits the archive
+    // partially: the parent is archived while the second child stays unarchived.
+    let lateClaim = true;
+    const context = latePlacementContext(
+      (sessionId) =>
+        lateClaim &&
+        sessionId === secondChild.sessionId &&
+        readEntry(storePath, first.sessionKey)?.archivedAt !== undefined,
+    );
+    const archived = await directSessionReq<{
+      parentArchived?: boolean;
+      archivedKeys?: string[];
+      remainingSideConversations?: Array<{ key: string; code: string }>;
+      partial?: boolean;
+    }>(
+      "sessions.patch",
+      { key: parentKey, archived: true, expectedSessionId: parent.sessionId },
+      { client, context },
+    );
+    expect(archived.ok, JSON.stringify(archived.error)).toBe(true);
+    expect(archived.payload).toMatchObject({
+      parentArchived: true,
+      archivedKeys: [first.sessionKey],
+      remainingSideConversations: [{ key: second.sessionKey, code: "CHILD_ACTIVE" }],
+      partial: true,
+    });
+    lateClaim = false;
+
+    expect(readEntry(storePath, parentKey)?.archivedAt).toBeTruthy();
+    expect(readEntry(storePath, second.sessionKey)?.archivedAt).toBeUndefined();
+    expect(readEntry(storePath, second.sessionKey)?.sideConversation?.state).toBe("open");
+
+    // Settle the child's committed work, then attempt the merge.
+    const secondRecord = managedWorktrees.findLiveByOwner("session", second.sessionKey)!;
+    await fs.writeFile(path.join(secondRecord.path, "late.txt"), "late child work\n");
+    await git(secondRecord.path, "add", "late.txt");
+    await git(secondRecord.path, "commit", "-m", "late child work");
+    const headBefore = await git(workspace, "rev-parse", "HEAD");
+
+    const merged = await directSessionReq(
+      "sideConversations.merge",
+      { parentSessionKey: parentKey, sessionKey: second.sessionKey },
+      { client },
+    );
+    expect(merged.ok).toBe(false);
+    expect(merged.error?.message).toContain("parent session is archived");
+    // Pre-Git refusal: the parent checkout is untouched and the child stays open.
+    expect(await git(workspace, "rev-parse", "HEAD")).toBe(headBefore);
+    expect(await git(workspace, "status", "--porcelain")).toBe("");
+    expect(readEntry(storePath, second.sessionKey)?.sideConversation?.state).toBe("open");
   },
 );
