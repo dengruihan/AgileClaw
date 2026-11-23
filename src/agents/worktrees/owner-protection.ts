@@ -67,6 +67,13 @@ export function createManagedWorktreeOwnerPolicy(
       if (!entry || entry.archivedAt !== undefined) {
         return "retired";
       }
+      if (entry.sideConversation) {
+        // A live registered side conversation owns its checkout until explicit
+        // delete or the parent's delete/archive fence retires the row. Its
+        // uncommitted edits are the conversation's only copy, and reopen promises
+        // the same environment, so automatic idle and limit cleanup never apply.
+        return "active";
+      }
       const activityAt = Math.max(entry?.lastInteractionAt ?? 0, entry?.updatedAt ?? 0);
       return activityAt > 0 && now() - activityAt <= IDLE_GC_MS ? "active" : "idle";
     } catch {

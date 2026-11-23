@@ -104,6 +104,11 @@ export function resolveSideConversationWorktreeState(params: {
   entry: InternalSessionEntry | undefined;
   parentEntry: InternalSessionEntry | undefined;
 }): SideConversationWorktreeState {
+  // A remote binding means the recorded checkout is not where this conversation
+  // runs. Never present a leftover live child record as its isolated worktree.
+  if (runsOnRemoteNode(params.parentEntry) || runsOnRemoteNode(params.entry)) {
+    return { kind: "skipped", reason: "remote-exec" };
+  }
   const record = readLiveWorktree(params.entry);
   const branch =
     normalizeOptionalString(record?.branch) ??

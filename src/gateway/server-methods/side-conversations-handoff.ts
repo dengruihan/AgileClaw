@@ -17,6 +17,7 @@ import {
 import {
   buildSideConversationMergeMessage,
   mergeSideConversationBranch,
+  resolveLandedSideConversationMerge,
   type SideConversationMergeFailure,
 } from "../../agents/worktrees/side-conversation-merge.js";
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
@@ -27,6 +28,7 @@ import {
   resolveSideConversationChildCheckout,
   resolveSideConversationParentCheckout,
 } from "../../sessions/side-conversation-worktree.js";
+import { SessionMutationAuthorizationChangedError } from "../session-mutation-authorization-error.js";
 import { prepareSessionLifecycleDrain } from "./sessions-lifecycle-drain.js";
 import { deleteRegisteredSideConversationChild } from "./side-conversations-fence.js";
 import type { SideConversationResult } from "./side-conversations-replay.js";
@@ -91,7 +93,29 @@ export async function mergePersistentSideConversation(params: {
       target,
     });
   if (marker.state === "merged") {
-    return { ok: true, value: { conversation: summarize(child), alreadyMerged: true } };
+    // A completed replay names the same landing commit when the checkout still
+    // resolves it; the branch is never merged a second time.
+    const childCheckout = resolveSideConversationChildCheckout(child);
+    const parentCheckout = resolveSideConversationParentCheckout({
+      cfg: params.cfg,
+      agentId: target.agentId,
+      parentEntry: target.entry,
+    });
+    const landed =
+      parentCheckout && childCheckout.branch
+        ? await resolveLandedSideConversationMerge({
+            parentCheckoutPath: parentCheckout.path,
+            childBranch: childCheckout.branch,
+          }).catch(() => undefined)
+        : undefined;
+    return {
+      ok: true,
+      value: {
+        conversation: summarize(child),
+        ...(landed ? { mergeCommit: landed } : {}),
+        alreadyMerged: true,
+      },
+    };
   }
   if (marker.state === "abandoned") {
     return {
@@ -165,7 +189,8 @@ export async function mergePersistentSideConversation(params: {
     return { ok: false, error: mergeFailureToError(merged.error) };
   }
   const now = Date.now();
-  let patched: InternalSessionEntry | null;
+  let patched: InternalSessionEntry | null = null;
+  let metadataFailure: unknown;
   try {
     patched = await commitSideConversationState({
       agentId: target.agentId,
@@ -188,19 +213,27 @@ export async function mergePersistentSideConversation(params: {
       },
     });
   } catch (error) {
-    if (error instanceof SideConversationBusyError) {
-      return { ok: false, error: busyErrorShape(sessionKey, "merge") };
+    if (isRequiredMergeAuthorityError(error)) {
+      throw error;
     }
-    throw error;
+    metadataFailure = error;
+  }
+  // Git already landed. Every metadata/guard/storage failure must report that
+  // accepted write and its safe retry instead of an ambiguous generic error.
+  if (metadataFailure !== undefined) {
+    return {
+      ok: false,
+      error: mergeOutcomePendingError(
+        sessionKey,
+        merged.value.commit,
+        formatErrorMessage(metadataFailure),
+      ),
+    };
   }
   if (!patched) {
     return {
       ok: false,
-      error: errorShape(
-        ErrorCodes.UNAVAILABLE,
-        `Side conversation ${sessionKey} merged at ${merged.value.commit}, but its state changed before the merge could be recorded. Retry the merge to record it.`,
-        { retryable: true, details: { mergeCommit: merged.value.commit } },
-      ),
+      error: mergeOutcomePendingError(sessionKey, merged.value.commit),
     };
   }
   await mirrorSideConversationState({
@@ -216,10 +249,27 @@ export async function mergePersistentSideConversation(params: {
     ok: true,
     value: {
       conversation: summarize(patched),
-      ...(merged.value.alreadyMerged ? {} : { mergeCommit: merged.value.commit }),
+      mergeCommit: merged.value.commit,
       alreadyMerged: merged.value.alreadyMerged,
     },
   };
+}
+
+/** Authority loss keeps its canonical protocol error; every other failure reconciles the write. */
+function isRequiredMergeAuthorityError(error: unknown): boolean {
+  return error instanceof SessionMutationAuthorizationChangedError;
+}
+
+function mergeOutcomePendingError(
+  sessionKey: string,
+  mergeCommit: string,
+  detail?: string,
+): ErrorShape {
+  return errorShape(
+    ErrorCodes.UNAVAILABLE,
+    `Side conversation ${sessionKey} merged at ${mergeCommit}, but recording the merge state failed${detail ? ` (${detail})` : ""}. Retry the merge to record it; the parent branch is not moved again.`,
+    { retryable: true, details: { mergeCommit } },
+  );
 }
 
 /** Abandon keeps the branch, checkout, and uncommitted files; it only records the state. */

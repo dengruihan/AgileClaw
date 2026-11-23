@@ -12,12 +12,15 @@
  * registered children inside the parent's existing lifecycle fence using the
  * storage primitives directly, so no second lifecycle mutex is nested.
  */
+import { existsSync } from "node:fs";
 import {
   ErrorCodes,
   errorShape,
+  type ErrorShape,
   type SideConversationState,
   type SideConversationSummary,
 } from "../../../packages/gateway-protocol/src/index.js";
+import { getRegistryWorktree } from "../../agents/worktrees/registry.js";
 import { loadSessionEntry } from "../../config/sessions/session-accessor.js";
 import {
   buildSideConversationSessionKey,
@@ -31,6 +34,10 @@ import type { SideConversationSnapshotFacts } from "../../config/sessions/side-c
 import type { InternalSessionEntry } from "../../config/sessions/types.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import { formatErrorMessage } from "../../infra/errors.js";
+import {
+  SessionWorktreeLifecycleError,
+  synchronizeSessionWorktreeArchive,
+} from "../../sessions/session-worktree-lifecycle.js";
 import { resolveFrozenParentSessionSelection } from "../session-create-model-selection.js";
 import { createGatewaySession } from "../session-create-service.js";
 import { resolveOperatorSessionCreation } from "../session-creation-provenance.js";
@@ -49,6 +56,7 @@ import {
 } from "./side-conversations-replay.js";
 import {
   SideConversationBusyError,
+  assertSideConversationIdle,
   busyErrorShape,
   changedErrorShape,
   commitSideConversationState,
@@ -469,6 +477,22 @@ export async function listPersistentSideConversations(params: {
   };
 }
 
+/** A failed restore is visible and keeps the conversation closed, never open-shared. */
+function worktreeRestoreError(error: unknown, sessionKey: string): ErrorShape {
+  const detail = formatErrorMessage(error);
+  const reason = error instanceof SessionWorktreeLifecycleError ? error.reason : undefined;
+  if (reason === "session-changed" || reason === "owner-mismatch") {
+    return errorShape(
+      ErrorCodes.INVALID_REQUEST,
+      `Side conversation ${sessionKey} could not restore its checkout: ${detail}`,
+    );
+  }
+  return errorShape(
+    ErrorCodes.UNAVAILABLE,
+    `Side conversation ${sessionKey} stays closed because its checkout could not be restored: ${detail}`,
+  );
+}
+
 /** Close only quiesces the hidden child; transcript, branch, and worktree stay intact. */
 async function transitionSideConversation(params: {
   cfg: OpenClawConfig;
@@ -522,6 +546,53 @@ async function transitionSideConversation(params: {
         `side conversation ${sessionKey} is ${state} and cannot change state`,
       ),
     };
+  }
+
+  if (params.nextState === "open") {
+    // Reopen promises the same environment. Restore a retired checkout through
+    // the canonical worktree lifecycle before the state changes, and never open
+    // as a shared session when the promised checkout cannot come back.
+    try {
+      assertSideConversationIdle({
+        agentId: target.agentId,
+        assertCurrent: params.assertCurrent,
+        child,
+        context: params.context,
+        sessionKey,
+        storePath: target.storePath,
+        target,
+      });
+    } catch (error) {
+      if (error instanceof SideConversationBusyError) {
+        return { ok: false, error: busyErrorShape(sessionKey, "reopen") };
+      }
+      throw error;
+    }
+    const worktreeId = child.worktree?.id;
+    if (worktreeId) {
+      try {
+        await synchronizeSessionWorktreeArchive({
+          archived: false,
+          entry: child,
+          scope: { agentId: target.agentId, sessionKey, storePath: target.storePath },
+          commitGuard: params.assertCurrent,
+          assertRestoreAllowed: params.assertCurrent,
+        });
+      } catch (error) {
+        return { ok: false, error: worktreeRestoreError(error, sessionKey) };
+      }
+      // A live record whose checkout disappeared is not the promised environment.
+      const record = getRegistryWorktree(process.env, worktreeId);
+      if (!record || !existsSync(record.path)) {
+        return {
+          ok: false,
+          error: errorShape(
+            ErrorCodes.UNAVAILABLE,
+            `Side conversation ${sessionKey} stays closed because its checkout is unavailable. Restore the repository checkout or start a new side conversation.`,
+          ),
+        };
+      }
+    }
   }
 
   // The drain's admission hold stays open through the marker commit so a new

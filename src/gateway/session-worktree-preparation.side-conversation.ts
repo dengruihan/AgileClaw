@@ -64,6 +64,12 @@ export async function prepareSideConversationWorktreeCreation(params: {
       ),
     );
   }
+  if (hasRemoteExecutionBinding(parentEntry)) {
+    // A remote parent's tools never run in a host checkout. Materializing a local
+    // worktree here would derive from an unrelated repository, so the child keeps
+    // the parent's shared roots and reports the remote-exec degradation.
+    return sharedParentRoots(cfg, params.agentId, parentEntry);
+  }
   const parentCheckout = resolveSideConversationParentCheckout({
     cfg,
     agentId: params.agentId,
@@ -113,13 +119,7 @@ export async function prepareSideConversationWorktreeCreation(params: {
   commitGuard();
   if (!workspace || !insideGitCheckout(workspace)) {
     // Shared, not isolated: the child keeps the parent's ordinary cwd when it has one.
-    const roots = resolveSessionWorkspaceRoots(cfg, params.agentId, parentEntry);
-    const spawnedCwd = normalizeOptionalString(roots.diffCwd);
-    const sessionRoot = normalizeOptionalString(roots.root);
-    return ok({
-      ...(spawnedCwd ? { spawnedCwd } : {}),
-      ...(sessionRoot ? { sessionRoot } : {}),
-    });
+    return sharedParentRoots(cfg, params.agentId, parentEntry);
   }
   // Pin the parent's committed HEAD. A parent checkout that is not reachable from
   // the selected repository falls back to that repository's own HEAD.
@@ -160,6 +160,27 @@ export async function prepareSideConversationWorktreeCreation(params: {
       : {}),
   });
   return prepared;
+}
+
+/** Node-executed parents own no host checkout, so their child shares the recorded roots. */
+export function hasRemoteExecutionBinding(
+  entry: Pick<InternalSessionEntry, "execHost" | "execNode"> | undefined,
+): boolean {
+  return entry?.execHost === "node" || Boolean(normalizeOptionalString(entry?.execNode));
+}
+
+function sharedParentRoots(
+  cfg: OpenClawConfig,
+  agentId: string,
+  parentEntry: InternalSessionEntry,
+): Result<PreparedGatewaySessionLifecycle, ErrorShape> {
+  const roots = resolveSessionWorkspaceRoots(cfg, agentId, parentEntry);
+  const spawnedCwd = normalizeOptionalString(roots.diffCwd);
+  const sessionRoot = normalizeOptionalString(roots.root);
+  return ok({
+    ...(spawnedCwd ? { spawnedCwd } : {}),
+    ...(sessionRoot ? { sessionRoot } : {}),
+  });
 }
 
 /** Custody for a parent whose own checkout is gone but whose repository root remains. */

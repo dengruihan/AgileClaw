@@ -110,6 +110,76 @@ async function isAncestor(
   return err(failure("merge-failed", `git merge-base failed: ${result.stderr.trim()}`));
 }
 
+/**
+ * Oldest merge commit on the parent branch that names the child commit as a
+ * direct parent. This is the landing commit of an earlier attempt, so a retry
+ * can report the original merge instead of a fresh (nonexistent) one.
+ */
+async function findLandedMergeCommit(
+  checkoutPath: string,
+  childHead: string,
+  parentHead: string,
+): Promise<string | undefined> {
+  const result = await runGit(checkoutPath, [
+    "rev-list",
+    "--parents",
+    "--merges",
+    `${childHead}..${parentHead}`,
+  ]);
+  if (result.termination !== "exit" || result.code !== 0) {
+    return undefined;
+  }
+  let landed: string | undefined;
+  // rev-list is newest first; the last direct-parent match is the original landing merge.
+  for (const line of result.stdout.split("\n")) {
+    const [commit, ...parents] = line.trim().split(/\s+/).filter(Boolean);
+    if (commit && parents.includes(childHead)) {
+      landed = commit;
+    }
+  }
+  return landed;
+}
+
+/**
+ * Resolve the commit that already contains a merged side-conversation branch.
+ *
+ * Used by the replay path so a completed merge reports the same landing commit
+ * as the call that created it.
+ */
+export async function resolveLandedSideConversationMerge(params: {
+  parentCheckoutPath: string;
+  childBranch: string;
+}): Promise<string | undefined> {
+  const parentHead = await commitAt(
+    params.parentCheckoutPath,
+    "HEAD",
+    "merge-failed",
+    "parent checkout has no committed HEAD",
+  );
+  if (!parentHead.ok) {
+    return undefined;
+  }
+  const childHead = await commitAt(
+    params.parentCheckoutPath,
+    params.childBranch,
+    "child-branch-missing",
+    "side conversation branch is missing",
+  );
+  if (!childHead.ok) {
+    return undefined;
+  }
+  const already = await isAncestor(params.parentCheckoutPath, childHead.value, parentHead.value);
+  if (!already.ok || !already.value) {
+    return undefined;
+  }
+  const landed = await findLandedMergeCommit(
+    params.parentCheckoutPath,
+    childHead.value,
+    parentHead.value,
+  );
+  return landed ?? childHead.value;
+}
+
 type MergeTreeInspection =
   | { status: "clean" }
   | { status: "conflict"; paths: string[] }
@@ -262,7 +332,12 @@ export async function mergeSideConversationBranch(params: {
     return already;
   }
   if (already.value) {
-    return ok({ commit: childHead.value, alreadyMerged: true });
+    const landed = await findLandedMergeCommit(
+      parentCheckoutPath,
+      childHead.value,
+      parentHead.value,
+    );
+    return ok({ commit: landed ?? childHead.value, alreadyMerged: true });
   }
 
   const inspected = await inspectMergeTree(parentCheckoutPath, parentHead.value, childHead.value);

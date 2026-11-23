@@ -197,10 +197,33 @@ export const SideConversationsTransitionResultSchema = closedObject({
 export const SideConversationsMergeResultSchema = closedObject({
   ok: Type.Literal(true),
   conversation: SideConversationSummarySchema,
-  /** Merge commit created by this call; absent when the branch was already merged. */
+  /**
+   * Commit that contains the merged branch: the merge commit created by this
+   * call, or the original landing commit when the branch was already merged.
+   */
   mergeCommit: Type.Optional(NonEmptyString),
   alreadyMerged: Type.Boolean(),
 });
+
+/**
+ * Bounded server-owned worktree preservation reasons.
+ *
+ * Mirrors `WORKTREE_PRESERVATION_REASONS` in the session-delete owner; this
+ * module cannot import that one at runtime because it already imports this
+ * module. A schema test pins the two lists to the same vocabulary.
+ */
+export const SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS = [
+  "owner-mismatch",
+  "busy",
+  "foreign-lock",
+  "snapshot-failed",
+  "cleanup-failed",
+] as const;
+
+export const SideConversationWorktreePreservationReasonSchema = Type.Enum(
+  SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS,
+  { type: "string" },
+);
 
 export const SideConversationsDeleteResultSchema = closedObject({
   ok: Type.Literal(true),
@@ -213,10 +236,10 @@ export const SideConversationsDeleteResultSchema = closedObject({
   /** Present when cleanup refused to retire the checkout; it stays on disk as reported. */
   worktreePreserved: Type.Optional(
     closedObject({
+      id: NonEmptyString,
       branch: NonEmptyString,
       path: NonEmptyString,
-      /** Server-owned preservation reason from the worktree removal owner. */
-      reason: Type.String(),
+      reason: SideConversationWorktreePreservationReasonSchema,
     }),
   ),
 });

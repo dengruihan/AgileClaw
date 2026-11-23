@@ -1,4 +1,6 @@
+import { Value } from "typebox/value";
 import { afterEach, expect, test, vi } from "vitest";
+import { SideConversationsDeleteResultSchema } from "../../../packages/gateway-protocol/src/index.js";
 import { getRuntimeConfig } from "../../config/config.js";
 import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
@@ -184,4 +186,31 @@ test("archive returns preserved child worktrees in the patch result", async () =
     "wt-archive-child",
   ]);
   expect(readEntry(storePath, childKey)?.archivedAt).toBeTruthy();
+});
+
+test("explicit preserved delete answers with a schema-valid handler payload", async () => {
+  const { storePath } = await createSessionStoreDir();
+  await createParent(storePath);
+  const childKey = await createSide(storePath, "preserved-delete", "wt-preserved-delete");
+  const abandoned = await directSessionReq(
+    "sideConversations.abandon",
+    { parentSessionKey: parentKey, sessionKey: childKey },
+    { client },
+  );
+  expect(abandoned.ok, JSON.stringify(abandoned.error)).toBe(true);
+
+  const deleted = await directSessionReq<{
+    ok: true;
+    sessionKey: string;
+    deleted: true;
+    worktreePreserved?: { id: string; branch: string; path: string; reason: string };
+  }>("sideConversations.delete", { parentSessionKey: parentKey, sessionKey: childKey }, { client });
+  expect(deleted.ok, JSON.stringify(deleted.error)).toBe(true);
+  expect(deleted.payload?.worktreePreserved).toMatchObject({
+    id: "wt-preserved-delete",
+    branch: expect.stringContaining("branch-"),
+    path: "/preserved/wt-preserved-delete",
+    reason: "busy",
+  });
+  expect(Value.Check(SideConversationsDeleteResultSchema, deleted.payload)).toBe(true);
 });

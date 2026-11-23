@@ -1,6 +1,6 @@
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
-import { SessionsDeleteResultSchema } from "./sessions-delete.js";
+import { SessionsDeleteResultSchema, WORKTREE_PRESERVATION_REASONS } from "./sessions-delete.js";
 import { SessionsListParamsSchema } from "./sessions-list.js";
 import {
   SideConversationsListResultSchema,
@@ -13,6 +13,7 @@ import {
   SideConversationsMergeParamsSchema,
   SideConversationsMergeResultSchema,
   SIDE_CONVERSATION_MAX_INTENT_ID_LENGTH,
+  SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS,
   SIDE_CONVERSATION_MAX_LISTED,
   SIDE_CONVERSATION_MAX_PER_PARENT,
 } from "./side-conversations.js";
@@ -234,7 +235,23 @@ describe("side conversation protocol schemas", () => {
       Value.Check(SideConversationsMergeResultSchema, {
         ok: true,
         conversation: { ...summary, state: "merged" },
+        mergeCommit: "b".repeat(40),
         alreadyMerged: true,
+      }),
+    ).toBe(true);
+    // Handler-shaped payload: preserved deletion carries the worktree identity.
+    expect(
+      Value.Check(SideConversationsDeleteResultSchema, {
+        ok: true,
+        sessionKey: childSessionKey,
+        deleted: true,
+        worktreePreserved: {
+          id: "wt-1",
+          branch: "openclaw/side-1",
+          path: "/tmp/wt-1",
+          reason: "busy",
+        },
+        cleanupPending: [{ key: childSessionKey, code: "CHILD_ACTIVE", message: "active" }],
       }),
     ).toBe(true);
     expect(
@@ -243,9 +260,25 @@ describe("side conversation protocol schemas", () => {
         sessionKey: childSessionKey,
         deleted: true,
         worktreePreserved: { branch: "openclaw/side-1", path: "/tmp/wt-1", reason: "busy" },
-        cleanupPending: [{ key: childSessionKey, code: "CHILD_ACTIVE", message: "active" }],
       }),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      Value.Check(SideConversationsDeleteResultSchema, {
+        ok: true,
+        sessionKey: childSessionKey,
+        deleted: true,
+        worktreePreserved: {
+          id: "wt-1",
+          branch: "openclaw/side-1",
+          path: "/tmp/wt-1",
+          reason: "made-up",
+        },
+      }),
+    ).toBe(false);
+  });
+
+  it("keeps the side delete preservation vocabulary aligned with session delete", () => {
+    expect(SIDE_CONVERSATION_WORKTREE_PRESERVATION_REASONS).toEqual(WORKTREE_PRESERVATION_REASONS);
   });
 
   it("lists hidden side rows only on request", () => {

@@ -6,8 +6,13 @@ import { afterEach, expect, test, vi } from "vitest";
 import { useAutoCleanupTempDirTracker } from "../../../test/helpers/temp-dir.js";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.js";
 import { runGit } from "../../agents/worktrees/git.js";
+import { createManagedWorktreeOwnerPolicy } from "../../agents/worktrees/owner-protection.js";
 import { getRegistryWorktree } from "../../agents/worktrees/registry.js";
-import { managedWorktrees } from "../../agents/worktrees/service.js";
+import {
+  IDLE_GC_MS,
+  ManagedWorktreeService,
+  managedWorktrees,
+} from "../../agents/worktrees/service.js";
 import { getRuntimeConfig } from "../../config/config.js";
 import { loadSessionEntry, patchSessionEntryCore } from "../../config/sessions/session-accessor.js";
 import { closeOpenClawStateDatabaseForTest } from "../../state/openclaw-state-db.js";
@@ -224,7 +229,8 @@ test(
     }>("sideConversations.merge", { parentSessionKey: parentKey, sessionKey }, { client });
     expect(replayed.ok, JSON.stringify(replayed.error)).toBe(true);
     expect(replayed.payload?.alreadyMerged).toBe(true);
-    expect(replayed.payload?.mergeCommit).toBeUndefined();
+    // A replay reports the original landing commit; the parent never moves again.
+    expect(replayed.payload?.mergeCommit).toBe(mergeCommit);
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(mergeCommit);
 
     const abandoned = await directSessionReq(
@@ -478,5 +484,206 @@ test(
       "child work\n",
     );
     expect(await git(workspace, "rev-parse", "HEAD")).toBe(baseCommit);
+  },
+);
+
+test(
+  "a remote-exec parent never materializes a host checkout even from a Git cwd",
+  { timeout: 60_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    await patchSessionEntryCore(
+      { agentId: "main", sessionKey: parentKey, storePath },
+      (current) => ({ ...current, execHost: "node" as const, execNode: "node-1" }),
+      { replaceEntry: true, skipMaintenance: true },
+    );
+
+    const { sessionKey, conversation } = await createSide("intent-remote-parent");
+    expect(conversation.isolation).toEqual({ filesystem: "shared", externalState: "shared" });
+    expect(conversation.worktree).toBeUndefined();
+    expect(conversation.worktreeSkipped).toBe("remote-exec");
+    expect(managedWorktrees.findLiveByOwner("session", sessionKey)).toBeUndefined();
+    const child = readEntry(storePath, sessionKey)!;
+    expect(child.worktree).toBeUndefined();
+    expect(child.spawnedCwd).toBe(workspace);
+
+    // A leftover live child record never overrides the remote binding's shared fact.
+    const head = await git(workspace, "rev-parse", "HEAD");
+    const stale = await managedWorktrees.create({
+      ownerKind: "session",
+      ownerId: sessionKey,
+      repoRoot: workspace,
+      baseRef: head,
+      checkoutCommit: head,
+    });
+    await patchSessionEntryCore(
+      { agentId: "main", sessionKey, storePath },
+      (current) => ({
+        ...current,
+        worktree: {
+          id: stale.id,
+          branch: stale.branch,
+          repoRoot: workspace,
+          canonicalWorkspaceDir: workspace,
+        },
+      }),
+      { replaceEntry: true, skipMaintenance: true },
+    );
+    const listed = await directSessionReq<{
+      sideConversations: Array<{
+        worktree?: unknown;
+        worktreeSkipped?: string;
+        isolation: { filesystem: string };
+      }>;
+    }>("sideConversations.list", { parentSessionKey: parentKey }, { client });
+    expect(listed.ok, JSON.stringify(listed.error)).toBe(true);
+    expect(listed.payload?.sideConversations[0]).toMatchObject({
+      worktreeSkipped: "remote-exec",
+      isolation: { filesystem: "shared" },
+    });
+    expect(listed.payload?.sideConversations[0]?.worktree).toBeUndefined();
+  },
+);
+
+test(
+  "owner protection keeps a closed checkout through idle GC while normal sessions still collect",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const { sessionKey } = await createSide("intent-gc-protected");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "draft.txt"), "protected draft\n");
+    const closed = await directSessionReq(
+      "sideConversations.close",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(closed.ok, JSON.stringify(closed.error)).toBe(true);
+    const childHead = await git(record.path, "rev-parse", "HEAD");
+
+    // A normal idle session worktree is still collected by the same policy.
+    const plainKey = "agent:main:dashboard:plain-gc";
+    const plainCreated = await directSessionReq(
+      "sessions.create",
+      { key: plainKey, agentId: "main", model: "anthropic/claude-opus-4-6" },
+      { client, context: modelCatalogContext() },
+    );
+    expect(plainCreated.ok, JSON.stringify(plainCreated.error)).toBe(true);
+    await patchSessionEntryCore(
+      { agentId: "main", sessionKey: plainKey, storePath },
+      (current) => ({ ...current, updatedAt: 1, lastInteractionAt: 1 }),
+      { replaceEntry: true, skipMaintenance: true },
+    );
+    const head = await git(workspace, "rev-parse", "HEAD");
+    const plain = await managedWorktrees.create({
+      ownerKind: "session",
+      ownerId: plainKey,
+      repoRoot: workspace,
+      baseRef: head,
+      checkoutCommit: head,
+    });
+
+    const advancedNow = Date.now() + IDLE_GC_MS + 60_000;
+    const cfg = getRuntimeConfig();
+    const policy = createManagedWorktreeOwnerPolicy(cfg, () => advancedNow);
+    expect(policy.shouldProtectOwner("session", sessionKey)).toBe(true);
+    expect(policy.shouldRemoveOwner("session", sessionKey)).toBe(false);
+    expect(policy.shouldProtectOwner("session", plainKey)).toBe(false);
+
+    const service = new ManagedWorktreeService({
+      env: process.env,
+      getConfig: getRuntimeConfig,
+      now: () => advancedNow,
+    });
+    const gc = await service.gc({
+      shouldProtectOwner: policy.shouldProtectOwner,
+      shouldRemoveOwner: policy.shouldRemoveOwner,
+    });
+    expect(gc.removed).toContain(plain.id);
+    expect(gc.removed).not.toContain(record.id);
+    expect(managedWorktrees.findLiveById(record.id)?.path).toBe(record.path);
+    expect(await fs.readFile(path.join(record.path, "draft.txt"), "utf8")).toBe(
+      "protected draft\n",
+    );
+    expect(await git(record.path, "rev-parse", "HEAD")).toBe(childHead);
+    expect(await git(record.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(record.branch);
+
+    const reopened = await directSessionReq<{
+      conversation: { state: string; worktree?: { path: string } };
+    }>("sideConversations.reopen", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(reopened.ok, JSON.stringify(reopened.error)).toBe(true);
+    expect(reopened.payload?.conversation.state).toBe("open");
+    expect(reopened.payload?.conversation.worktree?.path).toBe(record.path);
+    expect(await fs.readFile(path.join(record.path, "draft.txt"), "utf8")).toBe(
+      "protected draft\n",
+    );
+  },
+);
+
+test(
+  "reopen restores a retired checkout from its removal snapshot",
+  { timeout: 90_000 },
+  async () => {
+    await createGitFixture();
+    const { sessionKey } = await createSide("intent-reopen-restore");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "draft.txt"), "restored draft\n");
+    const childHead = await git(record.path, "rev-parse", "HEAD");
+    const closed = await directSessionReq(
+      "sideConversations.close",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(closed.ok, JSON.stringify(closed.error)).toBe(true);
+
+    const removed = await managedWorktrees.remove({ id: record.id, reason: "test-retirement" });
+    expect(removed.removed).toBe(true);
+    expect(getRegistryWorktree(process.env, record.id)?.snapshotRef).toBeTruthy();
+    await expect(fs.stat(path.join(record.path, "draft.txt"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+
+    const reopened = await directSessionReq<{
+      conversation: { state: string; worktree?: { id: string; path: string } };
+    }>("sideConversations.reopen", { parentSessionKey: parentKey, sessionKey }, { client });
+    expect(reopened.ok, JSON.stringify(reopened.error)).toBe(true);
+    expect(reopened.payload?.conversation.state).toBe("open");
+    expect(reopened.payload?.conversation.worktree).toMatchObject({
+      id: record.id,
+      path: record.path,
+    });
+    expect(await fs.readFile(path.join(record.path, "draft.txt"), "utf8")).toBe("restored draft\n");
+    expect(await git(record.path, "rev-parse", "HEAD")).toBe(childHead);
+    expect(await git(record.path, "rev-parse", "--abbrev-ref", "HEAD")).toBe(record.branch);
+  },
+);
+
+test(
+  "reopen stays closed with a visible failure when the snapshot is gone",
+  { timeout: 90_000 },
+  async () => {
+    const { workspace, storePath } = await createGitFixture();
+    const { sessionKey } = await createSide("intent-reopen-failed");
+    const record = managedWorktrees.findLiveByOwner("session", sessionKey)!;
+    await fs.writeFile(path.join(record.path, "draft.txt"), "lost draft\n");
+    const closed = await directSessionReq(
+      "sideConversations.close",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(closed.ok, JSON.stringify(closed.error)).toBe(true);
+    const removed = await managedWorktrees.remove({ id: record.id, reason: "test-retirement" });
+    expect(removed.removed).toBe(true);
+    const snapshotRef = getRegistryWorktree(process.env, record.id)!.snapshotRef!;
+    await git(workspace, "update-ref", "-d", snapshotRef);
+
+    const reopened = await directSessionReq<{ conversation: { state: string } }>(
+      "sideConversations.reopen",
+      { parentSessionKey: parentKey, sessionKey },
+      { client },
+    );
+    expect(reopened.ok).toBe(false);
+    expect(reopened.error?.message).toContain("stays closed");
+    expect(readEntry(storePath, sessionKey)?.sideConversation?.state).toBe("closed");
   },
 );
