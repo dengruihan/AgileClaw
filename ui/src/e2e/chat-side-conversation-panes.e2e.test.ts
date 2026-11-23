@@ -164,11 +164,10 @@ suite.define(() => {
       );
       await expect(page.locator(".sidebar-recent-session--active")).toHaveCount(1);
 
+      const sendsBeforeBtw = (await gateway.getRequests("chat.send")).length;
       await enterSideCommand(page, "/btw second?");
-      const sends = (await gateway.getRequests("chat.send")).map(
-        (request) => (request.params as { sessionKey?: unknown }).sessionKey,
-      );
-      const secondChildKey = String(sends.at(-1));
+      const secondSend = await gateway.waitForRequest("chat.send", { after: sendsBeforeBtw });
+      const secondChildKey = String((secondSend.params as { sessionKey?: unknown }).sessionKey);
       expect(secondChildKey).not.toBe(firstChildKey);
       await expect(page.locator("openclaw-chat-pane")).toHaveCount(3);
       await expect.poll(() => page.url()).toContain(secondChildKey.split(":").slice(2).join("/"));
