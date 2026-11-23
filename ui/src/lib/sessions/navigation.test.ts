@@ -225,6 +225,59 @@ describe("resolveSessionNavigation", () => {
     expect(navigation.selectedSession).toBeUndefined();
   });
 
+  it("selects the visible parent for a hidden side-conversation child route", () => {
+    const parent = {
+      key: "agent:main:run",
+      kind: "direct" as const,
+      label: "Release review",
+      updatedAt: 100,
+    };
+    const childKey = "agent:main:dashboard:side-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const navigation = resolveSessionNavigation({
+      result: sessionsResult([parent, { key: "agent:main:main", kind: "direct", updatedAt: 90 }]),
+      resultAgentId: "main",
+      sessionKey: childKey,
+      activeSession: {
+        key: childKey,
+        kind: "direct",
+        sideConversation: {
+          parentSessionKey: parent.key,
+          intentId: "intent-one",
+          ordinal: 1,
+          state: "open",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      },
+    });
+
+    expect(navigation.currentSessionKey).toBe(parent.key);
+    expect(navigation.activeRowKey).toBe(parent.key);
+    expect(navigation.selectedSession?.key).toBe(parent.key);
+    expect(navigation.visibleSessions.map((row) => row.key)).toEqual([
+      "agent:main:run",
+      "agent:main:main",
+    ]);
+  });
+
+  it("does not synthesize a session row for a side-conversation child without its parent", () => {
+    const rows = [
+      { key: "agent:main:run", kind: "direct" as const, updatedAt: 100 },
+      { key: "agent:main:main", kind: "direct" as const, updatedAt: 90 },
+    ];
+    const childKey = "agent:main:dashboard:side-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    const navigation = resolveSessionNavigation({
+      result: sessionsResult(rows),
+      resultAgentId: "main",
+      sessionKey: childKey,
+    });
+
+    expect(navigation.currentSessionKey).toBe(childKey);
+    expect(navigation.visibleSessions.map((row) => row.key)).toEqual(rows.map((row) => row.key));
+    expect(navigation.activeRowKey).toBeNull();
+    expect(navigation.selectedSession).toBeUndefined();
+  });
+
   it("keeps a deep-linked session ahead of every returned active row", () => {
     const navigation = resolveSessionNavigation({
       result: sessionsResult(
