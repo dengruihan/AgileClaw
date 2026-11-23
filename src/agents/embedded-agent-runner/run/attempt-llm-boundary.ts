@@ -410,6 +410,13 @@ export function installModelPromptTransform(params: {
   };
   transcriptPrompt: string;
   modelPrompt?: string;
+  /**
+   * Resolved once immediately before the active user text is replaced. Returning
+   * undefined keeps `modelPrompt`; a rejection fails the prompt before its
+   * provider request. Used to drop model-only context that was cancelled after
+   * assembly without touching the transcript/user bytes.
+   */
+  resolveModelPrompt?: () => Promise<string | undefined>;
   prependContext?: string;
   appendContext?: string;
   shouldCapturePrompt: () => boolean;
@@ -417,7 +424,11 @@ export function installModelPromptTransform(params: {
   const modelPrompt = params.modelPrompt;
   const hasPromptContext =
     Boolean(params.prependContext?.trim()) || Boolean(params.appendContext?.trim());
-  if ((!modelPrompt?.trim() || modelPrompt === params.transcriptPrompt) && !hasPromptContext) {
+  if (
+    (!modelPrompt?.trim() || modelPrompt === params.transcriptPrompt) &&
+    !hasPromptContext &&
+    !params.resolveModelPrompt
+  ) {
     return () => undefined;
   }
   const agent = params.session.agent;
@@ -464,13 +475,17 @@ export function installModelPromptTransform(params: {
       );
       userIndex = matches.length === 1 ? (matches[0] ?? -1) : -1;
     }
+    const resolvedModelPrompt = params.resolveModelPrompt
+      ? await params.resolveModelPrompt()
+      : undefined;
+    const activeModelPrompt = resolvedModelPrompt ?? modelPrompt;
     const promptMessages = replaceUserTextPrompt({
       messages,
       userIndex,
       transcriptText: params.transcriptPrompt,
       replace: (text) => {
-        if (modelPrompt?.trim() && text === params.transcriptPrompt) {
-          return modelPrompt;
+        if (activeModelPrompt?.trim() && text === params.transcriptPrompt) {
+          return activeModelPrompt;
         }
         if (!hasPromptContext) {
           return undefined;

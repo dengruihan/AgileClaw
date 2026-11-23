@@ -14,6 +14,7 @@ import {
 } from "../../../infra/heartbeat-summary.js";
 import type { getGlobalHookRunner } from "../../../plugins/hook-runner-global.js";
 import { buildInterSessionPromptContext } from "../../../sessions/input-provenance.js";
+import { claimSideConversationHandoffPrompt } from "../../../sessions/side-conversation-handoff.js";
 import { joinPresentTextSegments } from "../../../shared/text/join-segments.js";
 import { resolveAdmittedRunActiveAssertion } from "../../admitted-run-context.js";
 import { DEFAULT_CONTEXT_TOKENS } from "../../defaults.js";
@@ -104,6 +105,8 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
   prepareSystemPrompt?: (currentSystemPrompt: string) => Promise<string>;
   setActiveSessionSystemPrompt: (systemPrompt: string) => void;
   setLeasedSteering: (lease: EmbeddedAttemptSteeringLease) => void;
+  /** Receives claim-release ownership the moment a handoff receipt is written. */
+  setHandoffRelease?: (release: (() => Promise<void>) | undefined) => void;
 }) {
   const { attempt } = input;
   // Capture runtime ownership before hook/steering awaits; explicit scopes stay pinned.
@@ -426,6 +429,33 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
       ? resolveHeartbeatSummaryForAgent(attempt.config, input.sessionAgentId)
       : undefined;
 
+  // Claim only after every fallible assembly step, so a hook, tool-policy, or
+  // system-prompt failure never leaves a receipt behind. Ownership transfers
+  // immediately; the block is prepended last (closest to the user text) so the
+  // dispatch boundary can drop exactly this block if reopen cancels it.
+  const handoffClaim = preserveExactPrompt
+    ? undefined
+    : await claimSideConversationHandoffPrompt({
+        runId: attempt.runId,
+        sessionKey: attempt.sessionKey,
+        sessionTarget: attempt.sessionTarget,
+        trigger: attempt.trigger,
+        ...(attempt.internalEvents?.length ? { hasInternalEvents: true } : {}),
+        ...(attempt.operation ? { operation: attempt.operation } : {}),
+        ...(attempt.inputProvenance ? { inputProvenance: attempt.inputProvenance } : {}),
+        ...(attempt.skipPreparedUserTurnMessage ? { skipPreparedUserTurnMessage: true } : {}),
+      });
+  const effectivePromptWithoutHandoff = effectivePrompt;
+  try {
+    if (handoffClaim) {
+      input.setHandoffRelease?.(handoffClaim.release);
+      effectivePrompt = `${handoffClaim.prependContext}\n\n${effectivePrompt}`;
+    }
+  } catch (error) {
+    await handoffClaim?.release();
+    throw error;
+  }
+
   return {
     decisionPrefilter,
     assertHostActive,
@@ -435,6 +465,15 @@ export async function prepareEmbeddedAttemptPromptAssembly(input: {
     promptBuildAppendContext,
     effectiveTranscriptPrompt,
     originContext,
+    ...(handoffClaim
+      ? {
+          handoffDispatch: handoffClaim.commit,
+          handoffFreeModelPrompt: effectivePromptWithoutHandoff,
+          handoffPrependContext: handoffClaim.prependContext,
+          handoffRelease: handoffClaim.release,
+          handoffRevalidate: handoffClaim.revalidate,
+        }
+      : {}),
     transcriptLeafId,
     heartbeatSummary,
     leasedSteering,

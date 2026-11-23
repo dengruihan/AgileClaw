@@ -1,4 +1,5 @@
 import type { StreamFn } from "openclaw/plugin-sdk/agent-core";
+import { formatErrorMessage } from "../../../infra/errors.js";
 import type { ImageContent } from "../../../llm/types.js";
 import type { createTrajectoryRuntimeRecorder } from "../../../trajectory/runtime.js";
 import type { Agent, AgentMessage } from "../../runtime/index.js";
@@ -11,6 +12,7 @@ import {
 import type { AgentSession } from "../../sessions/index.js";
 import { withSessionManagerWrite } from "../../sessions/session-manager-write-admission.js";
 import { ackPendingAgentSteeringItems } from "../../subagents/registry/subagent-registry.js";
+import { log } from "../logger.js";
 import {
   declarePromptHistoryRewrite,
   recordAggregateTruncation,
@@ -102,6 +104,22 @@ export async function submitEmbeddedAttemptPrompt(input: {
     | undefined;
   /** Observes only the first admitted foreground dispatch, not preflight/compaction. */
   onPrimaryModelRequest?: (tools: NonNullable<Parameters<StreamFn>[1]["tools"]>) => void;
+  /**
+   * Runs once after the first admitted foreground provider request is actually
+   * dispatched (the stream call returned), never for preflight or compaction.
+   * Failures are logged: accepted sends must not become ambiguous results.
+   */
+  onPrimaryModelDispatched?: () => Promise<void> | void;
+  /** Runs once when this submission ends without ever dispatching the request. */
+  onPrimaryModelNotDispatched?: () => Promise<void> | void;
+  /**
+   * Revalidates model-only handoff context at the dispatch boundary. False drops
+   * the handoff from this request (releasing it); a rejection fails the prompt
+   * before dispatch so pending context is never sent stale.
+   */
+  handoffRevalidate?: () => Promise<boolean>;
+  /** The assembled model prompt without the handoff block. */
+  handoffFreeModelPrompt?: string;
   onSteeringAcknowledged: () => void;
   persistToolResultProjections: () => Promise<void>;
   prependContext?: string;
@@ -135,6 +153,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
       : undefined;
 
   let primaryRequestObserved = false;
+  let primaryRequestDispatched = false;
   const installProviderPromptHistoryTransform = (): (() => void) => {
     const baseStreamFn = activeSession.agent.streamFn;
     const basePrepareNextTurn = activeSession.agent.prepareNextTurnWithContext;
@@ -266,6 +285,34 @@ export async function submitEmbeddedAttemptPrompt(input: {
         primaryRequestObserved = true;
         input.onPrimaryModelRequest?.(requestContext.tools ?? []);
       }
+      // The provider request is dispatched only when this call returns. Prompt
+      // assembly may claim model-only context, but its delivery receipt commits
+      // here so a pre-send failure leaves it pending for the next user message.
+      const dispatchProviderRequest = async (request: Parameters<StreamFn>[1]) => {
+        // Last owner check before the provider request. Real persistence and
+        // restoration awaits run after the prompt projection, so a reopen can
+        // still land here; never send the already-projected block once the claim
+        // is gone. The request is not rebuilt: this window aborts pre-dispatch.
+        if (foregroundRequest && !primaryRequestDispatched && handoffActive) {
+          const wasActive = await handoffActive;
+          const stillActive = wasActive && handoffRevalidate ? await handoffRevalidate() : true;
+          if (!stillActive) {
+            throw new Error(
+              "The side-conversation handoff was cancelled before the provider request; the message was not sent. Retry the message.",
+            );
+          }
+        }
+        const stream = await baseStreamFn(model, request, options);
+        if (foregroundRequest && !primaryRequestDispatched) {
+          primaryRequestDispatched = true;
+          try {
+            await input.onPrimaryModelDispatched?.();
+          } catch (error) {
+            log.warn(`primary model dispatch observer failed: ${formatErrorMessage(error)}`);
+          }
+        }
+        return stream;
+      };
       // Real next model-call boundary: atomically install background material
       // after settled tool results, durable in the transcript, visible to this
       // dispatch and to the live loop context from the next turn on.
@@ -296,7 +343,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "authority-revoked",
             );
-            return await baseStreamFn(model, requestContext, options);
+            return await dispatchProviderRequest(requestContext);
           }
           const assertCurrent = () => {
             options?.signal?.throwIfAborted();
@@ -322,7 +369,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "installation-failed-or-revoked",
             );
-            return await baseStreamFn(model, requestContext, options);
+            return await dispatchProviderRequest(requestContext);
           }
           // Re-assert after the install await: revoked material stays recorded in
           // the transcript but never joins the request or the live loop context.
@@ -333,8 +380,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
               "dropped",
               "authority-revoked-after-install",
             );
-            const stream = await baseStreamFn(model, requestContext, options);
-            return stream;
+            return await dispatchProviderRequest(requestContext);
           }
           markAttemptTurnContextCarriers(input.turnContextRunId, admitted, "installed");
           submittedCarriers = admitted;
@@ -367,7 +413,7 @@ export async function submitEmbeddedAttemptPrompt(input: {
       }
       let stream;
       try {
-        stream = await baseStreamFn(model, requestContext, options);
+        stream = await dispatchProviderRequest(requestContext);
       } catch (error) {
         markAttemptTurnContextCarriers(
           input.turnContextRunId,
@@ -456,10 +502,32 @@ export async function submitEmbeddedAttemptPrompt(input: {
   });
 
   let captureCurrentPromptForModel = false;
+  const handoffRevalidate = input.handoffRevalidate;
+  let handoffActive: Promise<boolean> | undefined;
+  const resolveHandoffModelPrompt = async (): Promise<string | undefined> => {
+    if (!handoffRevalidate) {
+      return undefined;
+    }
+    handoffActive ??= (async () => {
+      const active = await handoffRevalidate();
+      if (!active) {
+        // Reopen/another run withdrew the claim after assembly: release the
+        // receipt so pending context is not consumed by this request.
+        await input.onPrimaryModelNotDispatched?.();
+      }
+      return active;
+    })();
+    if (await handoffActive) {
+      return undefined;
+    }
+    // Send the exact assembled prompt without the withdrawn block.
+    return input.handoffFreeModelPrompt ?? input.transcriptPrompt;
+  };
   const cleanupModelPromptTransform = installModelPromptTransform({
     session: activeSession,
     transcriptPrompt: input.transcriptPrompt,
     modelPrompt: input.modelPrompt,
+    ...(handoffRevalidate ? { resolveModelPrompt: resolveHandoffModelPrompt } : {}),
     prependContext: input.prependContext,
     appendContext: input.appendContext,
     shouldCapturePrompt: () => captureCurrentPromptForModel,
@@ -497,6 +565,15 @@ export async function submitEmbeddedAttemptPrompt(input: {
       input.onSteeringAcknowledged();
     }
   } finally {
+    // A submission that never reached the provider keeps its model-only context
+    // pending instead of consuming a delivery receipt.
+    if (!primaryRequestDispatched) {
+      try {
+        await input.onPrimaryModelNotDispatched?.();
+      } catch (error) {
+        log.warn(`primary model non-dispatch observer failed: ${formatErrorMessage(error)}`);
+      }
+    }
     cleanupProviderPromptHistoryTransform();
     cleanupModelPromptTransform();
   }

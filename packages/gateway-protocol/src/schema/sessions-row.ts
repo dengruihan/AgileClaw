@@ -182,6 +182,8 @@ export const SessionRowSchema = Type.Object(
     /** Hidden side-conversation membership; the parent row exposes only the count. */
     sideConversation: Type.Optional(SideConversationRowMarkerSchema),
     sideConversationCount: Type.Optional(Type.Integer({ minimum: 0 })),
+    /** Pending next-message handoffs from closed side conversations. */
+    handoffCount: Type.Optional(Type.Integer({ minimum: 0 })),
     forkedFromParent: Type.Optional(Type.Boolean()),
     spawnDepth: Type.Optional(Type.Number()),
     subagentRole: Type.Optional(Type.Union([Type.Literal("orchestrator"), Type.Literal("leaf")])),

@@ -435,6 +435,42 @@ describe("normalizeMessagesForLlmBoundary", () => {
     expect(input["__openclaw"].beforeAgentRunBlocked.prompt).toBe("secret prompt");
   });
 
+  it("resolves a model prompt override at the boundary and fails closed on rejection", async () => {
+    const messages = [user([{ type: "text", text: "visible transcript prompt" }], 1)];
+    let armed = false;
+    let resolveModelPrompt = async (): Promise<string | undefined> => "without context";
+    const session: {
+      agent: {
+        transformContext?: (
+          messages: AgentMessage[],
+          signal?: AbortSignal,
+        ) => Promise<AgentMessage[]>;
+      };
+    } = { agent: {} };
+    const cleanup = installModelPromptTransform({
+      session,
+      transcriptPrompt: "visible transcript prompt",
+      modelPrompt: "with context",
+      resolveModelPrompt: () => resolveModelPrompt(),
+      shouldCapturePrompt: () => armed,
+    });
+    armed = true;
+    const overridden = await session.agent.transformContext!(messages);
+    expect(contentOf(overridden[0])).toEqual([{ type: "text", text: "without context" }]);
+
+    resolveModelPrompt = async () => undefined;
+    const kept = await session.agent.transformContext!(messages);
+    expect(contentOf(kept[0])).toEqual([{ type: "text", text: "with context" }]);
+
+    resolveModelPrompt = async () => {
+      throw new Error("handoff revalidation unavailable");
+    };
+    await expect(session.agent.transformContext!(messages)).rejects.toThrow(
+      "handoff revalidation unavailable",
+    );
+    cleanup();
+  });
+
   it("replaces only the armed prompt and retains its projection through steering", async () => {
     const messages = [user([{ type: "text", text: "visible transcript prompt" }], 1)];
     const captured: AgentMessage[][] = [];
