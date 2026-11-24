@@ -70,7 +70,6 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     pendingProviders: catalog?.pendingProviders,
     configProviderIds: config.providerIds,
     configProviderDisplayNames: config.providerDisplayNames,
-    configProviderModelIds: config.providerModelIds,
     configApiKeyProviderIds: config.apiKeyProviderIds,
     configProviderAuthModes: config.providerAuthModes,
   });

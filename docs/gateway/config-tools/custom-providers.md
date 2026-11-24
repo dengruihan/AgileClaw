@@ -80,6 +80,8 @@ Configuring a custom/local provider `baseUrl` is also the narrow network trust d
     - `models.providers.*.authHeader`: force credential transport in the `Authorization` header when required.
     - `models.providers.*.baseUrl`: upstream API base URL.
     - `models.providers.*.displayName`: optional readable name shown instead of the label derived from the `models.providers` key. The key remains the identity used by `provider/model` references, auth profiles, and secret targets, so renaming changes only this leaf; blank or absent keeps the derived label. Settings → Models generates the key from the endpoint host and port (`custom-<host>[-<port>]`, suffixed `-2`, `-3` when taken) and never asks for it, while `openclaw onboard --custom-provider-id` and hand-authored config still set an explicit id that stays authoritative.
+    - `models.providers.*.icon`: optional stored brand icon id from the bundled set (`ProviderIcon-<id>.svg` in `ui/public/provider-icons/`): lowercase letters, digits, and hyphens, 1 to 32 characters. Settings → Models writes the icon matched from the provider name when the provider is saved, and a manual pick replaces it. Icon surfaces read only the stored value, so a later rename or a similar provider id never re-infers it.
+    - `models.providers.*.iconManual`: `true` when the icon is a user decision: a manual pick, or a manual removal when `icon` is absent. Renaming the provider leaves it untouched. With no stored `icon`, the provider shows its initial badge instead of the built-in exact-id icon.
     - `models.providers.*.headers`: extra static headers for proxy/tenant routing.
 
   </Accordion>

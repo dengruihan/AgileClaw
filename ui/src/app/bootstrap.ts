@@ -21,8 +21,10 @@ import { sessionRefFromPath } from "../app-session-route-paths.ts";
 import { createAgentIdentityCapability } from "../lib/agents/identity.ts";
 import { createAgentCapability } from "../lib/agents/index.ts";
 import { createChannelCapability } from "../lib/channels/index.ts";
+import { currentConfigObject } from "../lib/config/config-state-model.ts";
 import { createRuntimeConfigCapability } from "../lib/config/runtime-config-capability.ts";
 import { loadCurrentDeviceAuthToken } from "../lib/nodes/index.ts";
+import { registerProviderIconConfigSource } from "../lib/provider-icon-source.ts";
 import { createSessionCapability } from "../lib/sessions/index.ts";
 import { loadChatObserverDisplayPreference } from "../pages/chat/chat-observer-display.ts";
 import { sendSessionObserverVisibility } from "../pages/chat/chat-observer.ts";
@@ -292,6 +294,11 @@ export function bootstrapApplication(): ApplicationRuntime {
     ? subscribeBootRecordPersistence({ gateway, agents, sessions }, bootRecord)
     : undefined;
   const runtimeConfig = createRuntimeConfigCapability(gateway);
+  // Icon surfaces are lazy page components; they read the live config through
+  // this one registered reader instead of importing the config capability.
+  const stopProviderIconConfigSource = registerProviderIconConfigSource(() =>
+    currentConfigObject(runtimeConfig.state),
+  );
   const overlays = createApplicationOverlays(gateway, {
     connectionBootstrap,
     getActiveSessionKey: () => gateway.snapshot.sessionKey || undefined,
@@ -653,6 +660,7 @@ export function bootstrapApplication(): ApplicationRuntime {
       placementStartup.dispose();
       sessions.dispose();
       stopConfigWriteSuspension();
+      stopProviderIconConfigSource();
       runtimeConfig.dispose();
       overlays.dispose();
       theme.dispose();

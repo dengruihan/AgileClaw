@@ -333,6 +333,22 @@ const ModelProviderSchema = z.strictObject({
    * credential, and secret references use, and renaming never changes it.
    */
   displayName: z.string().min(1).optional(),
+  /**
+   * Brand icon id from the bundled provider icon set (`ProviderIcon-<id>.svg`).
+   * Written when the provider is saved or when the icon is picked manually, and
+   * read verbatim by icon surfaces, so later name edits never re-infer it.
+   */
+  icon: z
+    .string()
+    .min(1)
+    .max(32)
+    .regex(/^[a-z0-9-]+$/)
+    .optional(),
+  /**
+   * Marks `icon` as a user decision: a manual pick, or a manual removal when no
+   * icon is stored. Provider renames leave it untouched.
+   */
+  iconManual: z.boolean().optional(),
   /** API key or secret reference for this provider. */
   apiKey: SecretInputSchema.optional().register(sensitive),
   /** Authentication mode used when resolving credentials for this provider. */

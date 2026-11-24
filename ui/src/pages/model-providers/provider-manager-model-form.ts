@@ -8,10 +8,35 @@ const MODEL_INPUT_TYPES = ["text", "image", "audio", "video"] as const;
 
 const MODEL_COST_FIELDS = ["input", "output", "cacheRead", "cacheWrite"] as const;
 
+export type ModelCostField = (typeof MODEL_COST_FIELDS)[number];
+
 /** Canonical thinking levels a model entry can map to provider effort values. */
 const MODEL_THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
 
 export type ModelThinkingLevel = (typeof MODEL_THINKING_LEVELS)[number];
+
+/** Draft patch that records one thinking-level mapping; missing maps start empty. */
+export function modelThinkingLevelPatch(
+  draft: Record<string, unknown>,
+  level: ModelThinkingLevel,
+  value: string,
+): Record<string, unknown> {
+  const map = {
+    ...(isRecord(draft.thinkingLevelMap) ? draft.thinkingLevelMap : {}),
+    [level]: value,
+  };
+  return { thinkingLevelMap: map };
+}
+
+/** Draft patch that records one cost field; missing cost objects start empty. */
+export function modelCostFieldPatch(
+  draft: Record<string, unknown>,
+  key: ModelCostField,
+  value: string,
+): Record<string, unknown> {
+  const cost = { ...(isRecord(draft.cost) ? draft.cost : {}), [key]: value };
+  return { cost };
+}
 
 /** Canonical level ids as a string set, for filtering wire level options. */
 const MODEL_THINKING_LEVEL_IDS: ReadonlySet<string> = new Set(MODEL_THINKING_LEVELS);
@@ -173,7 +198,7 @@ export function providerModelForm(params: {
   inheritedInput?: readonly string[];
   /** Editing an existing row locks its ID; new entries choose their own. */
   lockId: boolean;
-  onCostField: (key: (typeof MODEL_COST_FIELDS)[number], value: string) => void;
+  onCostField: (key: ModelCostField, value: string) => void;
   onField: (patch: Record<string, unknown>) => void;
   /** Structural row add/remove/move reports the resulting level map. */
   onThinkingMap: (map: Record<string, unknown>) => void;

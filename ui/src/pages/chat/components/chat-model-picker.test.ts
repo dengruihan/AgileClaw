@@ -1,8 +1,9 @@
 /* @vitest-environment jsdom */
 
 import { render } from "lit";
-import { expect, it, vi } from "vitest";
+import { expect, it, onTestFinished, vi } from "vitest";
 import type { ChatThinkingSelectState } from "../../../lib/chat/thinking.ts";
+import { registerProviderIconConfigSource } from "../../../lib/provider-icon-source.ts";
 import type { ChatModelPickerOption } from "./chat-model-picker-options.ts";
 import { renderChatModelPicker } from "./chat-model-picker.ts";
 
@@ -144,4 +145,31 @@ it("groups providers in authored order without ranking the selection", () => {
       .querySelector<HTMLElement>('[data-chat-model-option="openai/third"]')
       ?.getAttribute("aria-selected"),
   ).toBe("true");
+});
+
+it("shows the saved brand icon on the trigger for a custom provider", () => {
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: { providers: { "custom-relay": { displayName: "Relay", icon: "mistral" } } },
+    })),
+  );
+  const container = document.createElement("div");
+  mount(
+    container,
+    [
+      {
+        provider: "custom-relay",
+        value: "custom-relay/model-a",
+        commitValue: "custom-relay/model-a",
+        label: "Model A",
+        isDefault: false,
+      },
+    ],
+    "custom-relay/model-a",
+  );
+  expect(
+    container
+      .querySelector("[data-chat-model-select] [data-provider-icon]")
+      ?.getAttribute("data-provider-icon"),
+  ).toBe("mistral");
 });

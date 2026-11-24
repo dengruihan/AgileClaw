@@ -682,6 +682,11 @@ const enSettings = {
       advanced: "Advanced configuration",
       providerName: "Name",
       providerNamePlaceholder: "Optional; blank shows a label generated from the endpoint",
+      icon: "Provider icon",
+      iconAutomatic: "Automatic",
+      iconNone: "No icon",
+      iconSearch: "Search icons",
+      iconNoMatches: "No icons match your search",
       keepKey: "Enter an API key",
       externalKey:
         "Environment and secret-reference keys are managed at their source and cannot be shown here.",

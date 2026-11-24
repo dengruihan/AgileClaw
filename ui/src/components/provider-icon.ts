@@ -1,94 +1,15 @@
 // Shared model-provider brand icon resolution and rendering for surfaces
 // that show provider rows (chat model picker, model providers settings page).
+// Providers store their chosen icon in config; this module only reads it,
+// applies the built-in exact-id mark, and renders the lettered fallback.
 // Icon assets live in ui/public/provider-icons/ProviderIcon-<name>.svg;
 // shared styles live under .provider-brand-icon in styles/components.css.
 import { html } from "lit";
 import { inferControlUiPublicAssetPath } from "../app/public-assets.ts";
 import { takeGraphemes } from "../lib/graphemes.ts";
+import { readProviderIconConfig } from "../lib/provider-icon-source.ts";
 import { icons } from "./icons.ts";
-
-const PROVIDER_ICON_NAMES = new Set([
-  "abacus",
-  "alibaba",
-  "amp",
-  "antigravity",
-  "arcee",
-  "augment",
-  "baseten",
-  "bedrock",
-  "byteplus",
-  "cerebras",
-  "chutes",
-  "claude",
-  "clawrouter",
-  "cloudflare",
-  "codebuff",
-  "codex",
-  "cohere",
-  "comfy",
-  "commandcode",
-  "copilot",
-  "crof",
-  "crossmodel",
-  "cursor",
-  "deepgram",
-  "deepinfra",
-  "deepseek",
-  "devin",
-  "doubao",
-  "elevenlabs",
-  "factory",
-  "fal",
-  "featherless",
-  "fireworks",
-  "gemini",
-  "grok",
-  "groq",
-  "huggingface",
-  "jetbrains",
-  "kilo",
-  "kimi",
-  "kiro",
-  "litellm",
-  "llamacpp",
-  "llmproxy",
-  "lmstudio",
-  "longcat",
-  "manus",
-  "meta",
-  "microsoft",
-  "mimo",
-  "minimax",
-  "mistral",
-  "novita",
-  "nvidia",
-  "ollama",
-  "opencode",
-  "opencodego",
-  "openrouter",
-  "perplexity",
-  "pi",
-  "pixverse",
-  "poe",
-  "qianfan",
-  "qoder",
-  "runway",
-  "sakana",
-  "stepfun",
-  "synthetic",
-  "t3chat",
-  "tencent",
-  "together",
-  "venice",
-  "vercel",
-  "vertexai",
-  "vllm",
-  "volcengine",
-  "warp",
-  "windsurf",
-  "zai",
-  "zed",
-]);
+import { isProviderIconId } from "./provider-icon-ids.ts";
 
 // Canonical provider id → icon asset name for providers whose brand mark ships
 // under a different slug than their catalog id.
@@ -167,36 +88,58 @@ export function providerIdFromModelRef(modelRef: string): string | null {
   return provider || null;
 }
 
-const MODEL_ID_ICON_KEYWORDS: Readonly<Record<string, string>> = {
-  glm: "zai",
-  zhipu: "zai",
-  zai: "zai",
-};
-
-/** Icon asset name for a provider id, optionally assisted by ordered model ids. */
-function resolveProviderIconName(
-  provider: string,
-  modelIds: readonly string[] = [],
-): string | null {
+/** Icon asset name for an exact provider id; null when no bundled mark matches. */
+function exactProviderIcon(provider: string): string | null {
   const normalized = provider.trim().toLowerCase();
   const icon = PROVIDER_ICON_ALIASES[normalized] ?? normalized;
-  if (PROVIDER_ICON_NAMES.has(icon)) {
-    return icon;
+  return isProviderIconId(icon) ? icon : null;
+}
+
+function knownProviderIcon(icon: string | null | undefined): string | null {
+  const normalized = icon?.trim().toLowerCase() ?? "";
+  return isProviderIconId(normalized) ? normalized : null;
+}
+
+export type ProviderBrandIconOptions = {
+  className?: string;
+  /**
+   * Explicit icon id that outranks saved config, for editor previews of an
+   * unsaved draft. `null` previews a draft with no icon.
+   */
+  icon?: string | null;
+  /** Letter-badge source that outranks the saved display name (editor draft). */
+  fallbackLabel?: string;
+};
+
+type ProviderBrandIconResolution = { icon: string | null; label: string };
+
+/**
+ * Saved icon, then exact provider id, then a letter badge. A manual removal
+ * (`iconManual` without `icon`) suppresses the provider-id mark so a rename
+ * cannot resurrect a brand the operator dropped.
+ */
+function resolveProviderBrandIcon(
+  provider: string,
+  options?: ProviderBrandIconOptions,
+): ProviderBrandIconResolution {
+  const saved = readProviderIconConfig(provider);
+  const label = options?.fallbackLabel?.trim() || saved?.displayName || provider;
+  if (options?.icon !== undefined) {
+    return { icon: knownProviderIcon(options.icon), label };
   }
-  for (const modelId of modelIds) {
-    const normalizedModelId = modelId.trim().toLowerCase();
-    for (const [keyword, modelIcon] of Object.entries(MODEL_ID_ICON_KEYWORDS)) {
-      if (normalizedModelId.includes(keyword)) {
-        return modelIcon;
-      }
-    }
+  const savedIcon = knownProviderIcon(saved?.icon);
+  if (savedIcon) {
+    return { icon: savedIcon, label };
   }
-  return null;
+  if (saved?.iconManual === true && !saved.icon) {
+    return { icon: null, label };
+  }
+  return { icon: exactProviderIcon(provider), label };
 }
 
 /** Whether a provider identity has a bundled brand mark. */
 export function hasProviderBrandIcon(provider: string): boolean {
-  return resolveProviderIconName(provider) !== null;
+  return resolveProviderBrandIcon(provider).icon !== null;
 }
 
 type CloudProfileIdentity = { providerId: string; providerDisplayId?: string };
@@ -284,17 +227,15 @@ export function renderProviderFallbackIcon(label: string, options?: { className?
 }
 
 /**
- * Brand icon span for a provider id; falls back to a lettered badge when no
- * brand or model-keyword match ships. `className` lets surfaces attach sizing.
+ * Brand icon span for a provider id. Resolution prefers a caller preview, then
+ * the icon saved in config, then the provider id's built-in mark, and finally
+ * the initial of the configured name. `className` lets surfaces attach sizing.
  */
-export function renderProviderBrandIcon(
-  provider: string,
-  options?: { className?: string; modelIds?: readonly string[] },
-) {
+export function renderProviderBrandIcon(provider: string, options?: ProviderBrandIconOptions) {
   const surfaceClass = options?.className ? ` ${options.className}` : "";
-  const icon = resolveProviderIconName(provider, options?.modelIds);
+  const { icon, label } = resolveProviderBrandIcon(provider, options);
   if (!icon) {
-    return renderProviderFallbackIcon(provider, options);
+    return renderProviderFallbackIcon(label, options);
   }
   return renderBrandIcon(
     inferControlUiPublicAssetPath(`provider-icons/ProviderIcon-${icon}.svg`),
