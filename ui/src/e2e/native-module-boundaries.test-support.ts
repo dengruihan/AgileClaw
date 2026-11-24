@@ -156,7 +156,9 @@ export function defineNativeModuleBoundaryTests(
       });
 
       await page.keyboard.press("ControlOrMeta+/");
-      const overlay = page.locator("openclaw-keyboard-shortcuts-dialog .dialog");
+      // Web Awesome's shadow root also renders a `dialog.dialog`, so target the
+      // shortcut overlay's own light-DOM panel.
+      const overlay = page.locator("openclaw-keyboard-shortcuts-dialog div.dialog");
       const overlayDialog = page.locator(
         "openclaw-keyboard-shortcuts-dialog openclaw-modal-dialog",
       );
@@ -222,7 +224,10 @@ export function defineNativeModuleBoundaryTests(
       );
 
       expect(overlayAnimationName).toBe("none");
-      expect(overlayDialogAnimationDuration).toBe("0s");
+      // The removed command palette special-cased its modal host to 0ms; the
+      // shortcuts dialog is a standard Web Awesome modal and keeps the theme's
+      // 150ms show animation.
+      expect(overlayDialogAnimationDuration).toBe("0.15s");
       expect(drawerAnimationName).toBe("none");
       expect(hoverCardMotion.animationDuration).toBe("0.14s");
       expect(hoverCardMotion.placement).toMatch(/^top(?:-|$)/u);
