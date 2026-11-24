@@ -201,6 +201,566 @@
       "count": 1,
       "kind": "object-property",
       "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Abacus.AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Alibaba Qwen"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Amazon Bedrock"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Amp"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Antigravity (Google)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Arcee AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Augment Code"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Baidu Qianfan"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Baseten"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "BytePlus"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Cerebras"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Chutes"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Claude (Anthropic)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "ClawRouter"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Cloudflare AI Gateway"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Codebuff"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Cohere"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "ComfyUI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "CommandCode"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Crof"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Crossmodel"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Cursor"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Deepgram"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "DeepInfra"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "DeepSeek"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Devin"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Doubao"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "ElevenLabs"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Factory"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "fal"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Featherless AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Fireworks AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Gemini (Google)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "GitHub Copilot"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Grok (xAI)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Groq"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Hugging Face"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "JetBrains"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Kilo Code"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Kimi (Moonshot)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Kiro (AWS)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "LiteLLM"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "llama.cpp"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "LLM Proxy"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "LM Studio"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "LongCat"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Manus"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Meta (Llama)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Microsoft"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "MiniMax"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Mistral AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Novita AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "NVIDIA"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Ollama"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "OpenAI (Codex)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "OpenCode"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "OpenCode Go"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "OpenRouter"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Perplexity"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Pi"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "PixVerse"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Poe"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Qoder"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Runway"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Sakana AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "StepFun"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Synthetic"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "T3 Chat"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Tencent Hunyuan"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Together AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Venice AI"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Vercel AI Gateway"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Vertex AI (Google)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "vLLM"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Volcengine"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Warp"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Windsurf"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Xiaomi MiMo"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Z.ai (GLM)"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
+      "path": "ui/src/components/provider-brand-rules.ts",
+      "text": "Zed"
+    },
+    {
+      "count": 1,
+      "kind": "object-property",
+      "name": "label",
       "path": "ui/src/components/provider-icon.ts",
       "text": "AWS"
     },

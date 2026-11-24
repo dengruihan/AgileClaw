@@ -16,7 +16,7 @@ import {
   listEffectiveModelAuthProviders,
 } from "../../lib/model-auth.ts";
 import type { ModelCatalogPresentation } from "../../lib/model-catalog-store.ts";
-import { providerModels } from "./provider-model-config.ts";
+import { readProviderIconConfigEntries } from "../../lib/provider-icon-source.ts";
 
 type ModelProviderAuthKind = "ok" | "expiring" | "expired" | "missing" | "api-key";
 
@@ -30,8 +30,6 @@ export type ModelProviderCard = {
   id: string;
   /** Exact config map key; provider ids are otherwise normalized for display/runtime use. */
   configKey?: string;
-  /** Configured model ids in config order for settings-page icon resolution. */
-  modelIds: string[];
   configAuthMode?: string;
   apiKeySupported?: boolean;
   /** Provider ids that own credentials merged into this card. */
@@ -58,7 +56,6 @@ type ModelProviderCardsInput = {
   configProviderIds?: string[] | null;
   /** Authored names keyed by the exact config key; absent keeps the derived label. */
   configProviderDisplayNames?: Record<string, string> | null;
-  configProviderModelIds?: Record<string, readonly string[]> | null;
   configApiKeyProviderIds?: string[] | null;
   configProviderAuthModes?: Record<string, string> | null;
 };
@@ -90,7 +87,6 @@ function ensureDraft(drafts: CardDraft[], id: string, displayName: string): Card
     card: {
       id,
       displayName,
-      modelIds: [],
       profiles: [],
       profileProviderIds: {},
       credentialProviderIds: [],
@@ -138,7 +134,6 @@ export function buildModelProviderCards(input: ModelProviderCardsInput): ModelPr
     if (id) {
       const card = ensureDraft(drafts, id, configuredLabel(provider, id)).card;
       card.configKey ??= provider;
-      card.modelIds.push(...(input.configProviderModelIds?.[provider] ?? []));
     }
   }
   for (const provider of input.configApiKeyProviderIds ?? []) {
@@ -355,7 +350,6 @@ function buildSelectableDefaultModels(
 
 export function readModelProviderConfig(config: Record<string, unknown> | null): {
   providerIds: string[];
-  providerModelIds: Record<string, string[]>;
   providerDisplayNames: Record<string, string>;
   apiKeyProviderIds: string[];
   providerAuthModes: Record<string, string>;
@@ -364,19 +358,12 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
   const models = asRecord(config?.models);
   const providers = asRecord(models?.providers);
   const providerIds = Object.keys(providers ?? {});
-  const providerModelIds = Object.fromEntries(
-    providerIds.map((provider) => [
-      provider,
-      providerModels(config, provider).flatMap((model) =>
-        typeof model.id === "string" ? [model.id] : [],
-      ),
-    ]),
-  );
+  // One parser owns the authored icon fields; this projection keeps the name
+  // table the settings page already consumes.
   const providerDisplayNames = Object.fromEntries(
-    Object.entries(providers ?? {}).flatMap(([provider, value]) => {
-      const name = asRecord(value)?.displayName;
-      return typeof name === "string" && name.trim() ? [[provider, name.trim()]] : [];
-    }),
+    Object.entries(readProviderIconConfigEntries(config)).flatMap(([provider, entry]) =>
+      entry.displayName ? [[provider, entry.displayName]] : [],
+    ),
   );
   const agents = asRecord(config?.agents);
   const defaults = asRecord(agents?.defaults);
@@ -393,7 +380,6 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
     : [];
   return {
     providerIds,
-    providerModelIds,
     providerDisplayNames,
     apiKeyProviderIds: Object.entries(providers ?? {})
       .filter(([, value]) => {

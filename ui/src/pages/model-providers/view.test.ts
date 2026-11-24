@@ -1,13 +1,31 @@
 /* @vitest-environment jsdom */
 
 import { render } from "lit";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { i18n } from "../../i18n/index.ts";
+import { registerProviderIconConfigSource } from "../../lib/provider-icon-source.ts";
 import { choosePickerValue, updatePickers } from "../../test-helpers/select-picker.ts";
 import { card, mount, props, text } from "./view.test-support.ts";
 import { renderModelProviders } from "./view.ts";
 
 type SegmentedGroup = HTMLElement & { disabled: boolean; value: string };
+
+it("shows a canonicalized provider's icon through its exact config key", () => {
+  // `claude-cli` keeps that config key while its card id canonicalizes to
+  // `anthropic`; the stored icon must follow the key the editor patches.
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: { providers: { "claude-cli": { icon: "mistral" } } },
+    })),
+  );
+  const container = mount(
+    props({
+      cards: [card({ id: "anthropic", configKey: "claude-cli", displayName: "Claude CLI" })],
+    }),
+  );
+  const mark = container.querySelector("[data-provider-select='claude-cli'] [data-provider-icon]");
+  expect(mark?.getAttribute("data-provider-icon")).toBe("mistral");
+});
 
 it("offers only decision models, even without a chat provider, and retains an unavailable selection", async () => {
   const onDecisionChange = vi.fn();
@@ -84,7 +102,7 @@ it("retains a saved unavailable model without offering it for another default se
   expect(onUtilityChange).toHaveBeenCalledExactlyOnceWith(null);
 });
 
-function button(container: Element, label: string): HTMLButtonElement | undefined {
+function findButton(container: Element, label: string): HTMLButtonElement | undefined {
   return [...container.querySelectorAll<HTMLButtonElement>("button")].find((entry) =>
     text(entry).includes(label),
   );
@@ -176,8 +194,8 @@ describe("renderModelProviders", () => {
     expect(text(container.querySelector("[data-provider-creation-blocked]"))).toContain(
       "Refresh and try again",
     );
-    for (const button of buttons) {
-      button.click();
+    for (const candidateButton of buttons) {
+      candidateButton.click();
     }
     expect(onCustomProvider).not.toHaveBeenCalled();
   });
@@ -359,7 +377,7 @@ describe("renderModelProviders", () => {
         ) ?? []),
       ].every((control) => control.disabled),
     ).toBe(true);
-    expect(button(defaults!, "Save")).toBeUndefined();
+    expect(findButton(defaults!, "Save")).toBeUndefined();
 
     const addForm = container.querySelector("[data-models-key-dialog]");
     expect(
@@ -410,10 +428,10 @@ describe("renderModelProviders", () => {
       ),
     ).toBe(true);
     expect(text(defaults)).not.toContain("operator.admin access");
-    button(addForm!, "Save provider")?.click();
+    findButton(addForm!, "Save provider")?.click();
     expect(onAddProvider).not.toHaveBeenCalled();
 
-    const cancel = button(addForm!, "Cancel");
+    const cancel = findButton(addForm!, "Cancel");
     expect(cancel?.disabled).toBe(false);
     cancel?.click();
     expect(onAddProviderToggle).toHaveBeenCalledOnce();

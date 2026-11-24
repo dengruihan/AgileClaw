@@ -7,6 +7,8 @@ import {
   appendPage,
   createEmptyModelProvidersRouteData,
   createHarness,
+  waitForProviders,
+  type ModelProvidersPageTestElement,
 } from "./model-providers-page.test-support.ts";
 import "./provider-manager.ts";
 
@@ -52,6 +54,61 @@ function applyPatch(
  */
 async function openDialog(config: DialogTestConfig, provider: string) {
   const harness = createHarness("main");
+  const { current, patches } = stubDialogConfig(harness, config);
+  const page = appendPage(harness.context);
+  harness.runtimeConfig.state.configForm = structuredClone(current);
+  const search = `?section=models&subsection=providers&provider=${provider}&view=models`;
+  page.routeData = {
+    ...createEmptyModelProvidersRouteData(harness.context),
+    provider,
+    catalogConfig: configRouteData({ pathname: "/settings/models", search, hash: "" }),
+  };
+  harness.notifyRuntimeConfig();
+  const manager = await waitForFast(() => {
+    const dialog = page.querySelector("openclaw-provider-manager");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.querySelector(".provider-manager__models-section")).not.toBeNull();
+    return dialog! as HTMLElement & { updateComplete: Promise<boolean> };
+  });
+  return {
+    harness,
+    manager,
+    page,
+    patches,
+    ...dialogControls(manager, patches, page),
+  };
+}
+
+/** Opens the new-provider editor, which writes the whole draft once on submit. */
+async function openCreateDialog(config: DialogTestConfig) {
+  const harness = createHarness("main");
+  const { current, patches } = stubDialogConfig(harness, config);
+  const page = appendPage(harness.context);
+  harness.runtimeConfig.state.configForm = structuredClone(current);
+  harness.notifyRuntimeConfig();
+  await waitForProviders(page);
+  (page as ModelProvidersPageTestElement & { managerIntent: unknown }).managerIntent = {
+    provider: "",
+    view: "create",
+  };
+  await page.updateComplete;
+  const manager = await waitForFast(() => {
+    const dialog = page.querySelector("openclaw-provider-manager");
+    expect(dialog).not.toBeNull();
+    expect(dialog!.querySelector(".provider-manager--inline")).not.toBeNull();
+    return dialog! as HTMLElement & { updateComplete: Promise<boolean> };
+  });
+  return {
+    harness,
+    manager,
+    page,
+    patches,
+    ...dialogControls(manager, patches, page),
+  };
+}
+
+/** Mutable config behind every dialog save; patches apply like merge-patch JSON. */
+function stubDialogConfig(harness: ReturnType<typeof createHarness>, config: DialogTestConfig) {
   const originalRequest = harness.request.getMockImplementation()!;
   const current: Record<string, unknown> = {
     agents: { defaults: { thinkingDefault: "low", fastModeDefault: "auto" } },
@@ -73,21 +130,14 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     }
     return originalRequest(method);
   });
-  const page = appendPage(harness.context);
-  harness.runtimeConfig.state.configForm = structuredClone(current);
-  const search = `?section=models&subsection=providers&provider=${provider}&view=models`;
-  page.routeData = {
-    ...createEmptyModelProvidersRouteData(harness.context),
-    provider,
-    catalogConfig: configRouteData({ pathname: "/settings/models", search, hash: "" }),
-  };
-  harness.notifyRuntimeConfig();
-  const manager = await waitForFast(() => {
-    const dialog = page.querySelector("openclaw-provider-manager");
-    expect(dialog).not.toBeNull();
-    expect(dialog!.querySelector(".provider-manager__models-section")).not.toBeNull();
-    return dialog!;
-  });
+  return { current, patches };
+}
+
+function dialogControls(
+  manager: Element,
+  patches: DialogPatchParams[],
+  page: ModelProvidersPageTestElement,
+) {
   const input = (name: string) => manager.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
   const setInput = (name: string, value: string) => {
     input(name).value = value;
@@ -111,7 +161,7 @@ async function openDialog(config: DialogTestConfig, provider: string) {
     await waitForFast(() => expect(manager.querySelector(".provider-manager--model")).toBeNull());
     await page.updateComplete;
   };
-  return { harness, manager, input, setInput, commitInput, save, patches, page };
+  return { input, setInput, commitInput, save };
 }
 
 function editButton(manager: Element, modelId: string): HTMLButtonElement {
@@ -122,6 +172,46 @@ function editButton(manager: Element, modelId: string): HTMLButtonElement {
   ].find((candidate) => candidate.getAttribute("aria-label") === "Edit model");
   expect(button).toBeDefined();
   return button!;
+}
+
+function iconPicker(manager: Element): Element {
+  const picker = manager.querySelector("openclaw-provider-icon-picker");
+  expect(picker).not.toBeNull();
+  return picker!;
+}
+
+function pickedIcon(manager: Element): string | null {
+  return (
+    iconPicker(manager)
+      .querySelector(".provider-icon-picker__trigger [data-provider-icon]")
+      ?.getAttribute("data-provider-icon") ?? null
+  );
+}
+
+function iconChoice(manager: Element, icon: string): HTMLButtonElement {
+  const button = iconPicker(manager).querySelector<HTMLButtonElement>(
+    `[data-provider-icon-choice="${icon}"]`,
+  );
+  expect(button, icon).not.toBeNull();
+  return button!;
+}
+
+function fixedIconChoice(manager: Element, label: string): HTMLButtonElement {
+  const button = [...iconPicker(manager).querySelectorAll<HTMLButtonElement>("button")].find(
+    (candidate) => candidate.getAttribute("aria-label") === label,
+  );
+  expect(button, label).toBeDefined();
+  return button!;
+}
+
+async function chooseIcon(
+  manager: Element,
+  button: HTMLButtonElement,
+  patches: DialogPatchParams[],
+): Promise<void> {
+  const previous = patches.length;
+  button.click();
+  await waitForFast(() => expect(patches.length).toBeGreaterThan(previous));
 }
 
 describe("provider manager dialog forms", () => {
@@ -506,34 +596,6 @@ describe("provider manager dialog forms", () => {
     });
   });
 
-  it.each(["GLM-4.6", "zhipu-chat"])(
-    "updates the provider icon from the current model draft id %s",
-    async (modelId) => {
-      const { manager, input, setInput } = await openDialog(
-        {
-          providers: { "custom-lab": { baseUrl: "https://example.test/v1", models: [] } },
-          catalog: [],
-        },
-        "custom-lab",
-      );
-      expect(manager.querySelector(".provider-manager__identity [data-provider-icon]")).toBeNull();
-      const add = [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
-        (candidate) => candidate.textContent?.trim() === "Add model",
-      );
-      expect(add).toBeDefined();
-      add!.click();
-      await waitForFast(() => expect(input("name")).not.toBeNull());
-      setInput("id", modelId);
-      await waitForFast(() =>
-        expect(
-          manager
-            .querySelector(".provider-manager__identity [data-provider-icon]")
-            ?.getAttribute("data-provider-icon"),
-        ).toBe("zai"),
-      );
-    },
-  );
-
   it("renames a custom provider through its display name without moving the config key", async () => {
     const { patches, commitInput, input } = await openDialog(
       {
@@ -601,6 +663,221 @@ describe("provider manager dialog forms", () => {
 
     expect(JSON.parse(String(patches[0]?.raw))).toEqual({
       models: { providers: { "custom-relay": { displayName: "公司内部模型" } } },
+    });
+  });
+
+  it("writes the matched icon when the provider name is saved", async () => {
+    const { patches, commitInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    await commitInput("displayName", "OpenAI 中转");
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: {
+        providers: { "custom-relay": { displayName: "OpenAI 中转", icon: "codex" } },
+      },
+    });
+  });
+
+  it("updates an automatic icon with the name and clears it when nothing matches", async () => {
+    const { patches, commitInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "OpenAI",
+            icon: "codex",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    await commitInput("displayName", "Claude 中转");
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: {
+        providers: { "custom-relay": { displayName: "Claude 中转", icon: "claude" } },
+      },
+    });
+
+    await commitInput("displayName", "内部中转");
+    expect(JSON.parse(String(patches[1]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: "内部中转", icon: null } } },
+    });
+  });
+
+  it("leaves a manual icon untouched by a rename", async () => {
+    const { patches, commitInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            icon: "mistral",
+            iconManual: true,
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    await commitInput("displayName", "OpenAI");
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: "OpenAI" } } },
+    });
+  });
+
+  it("keeps a manual no-icon choice across a rename", async () => {
+    const { patches, commitInput } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            iconManual: true,
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    await commitInput("displayName", "Anthropic");
+
+    expect(JSON.parse(String(patches[0]?.raw))).toEqual({
+      models: { providers: { "custom-relay": { displayName: "Anthropic" } } },
+    });
+  });
+
+  it("saves manual icon, automatic, and no-icon picker choices", async () => {
+    const { manager, patches } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "OpenAI",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+    const entryPatch = () =>
+      JSON.parse(String(patches.at(-1)!.raw)).models.providers["custom-relay"];
+
+    await chooseIcon(manager, iconChoice(manager, "mistral"), patches);
+    expect(entryPatch()).toEqual({ icon: "mistral", iconManual: true });
+
+    await chooseIcon(manager, fixedIconChoice(manager, "Automatic"), patches);
+    expect(entryPatch()).toEqual({ icon: "codex", iconManual: null });
+
+    await chooseIcon(manager, fixedIconChoice(manager, "No icon"), patches);
+    expect(entryPatch()).toEqual({ icon: null, iconManual: true });
+  });
+
+  it("previews the typed name in the picker before the name is committed", async () => {
+    const { manager, setInput, patches } = await openDialog(
+      {
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            displayName: "Relay",
+            models: [],
+          },
+        },
+        catalog: [],
+      },
+      "custom-relay",
+    );
+
+    expect(pickedIcon(manager)).toBeNull();
+    setInput("displayName", "Gemini Relay");
+    await manager.updateComplete;
+    expect(pickedIcon(manager)).toBe("gemini");
+    expect(patches).toHaveLength(0);
+  });
+
+  it("keeps the picker non-interactive without rename permission", async () => {
+    const { manager } = await openDialog(
+      {
+        providers: { anthropic: { displayName: "Anthropic", models: [] } },
+        catalog: [],
+      },
+      "anthropic",
+    );
+
+    expect(
+      iconPicker(manager).querySelector<HTMLButtonElement>(".provider-icon-picker__trigger")!
+        .disabled,
+    ).toBe(true);
+    expect(iconChoice(manager, "mistral").disabled).toBe(true);
+    // Without a Name field the trigger keeps the provider id's bundled mark.
+    expect(pickedIcon(manager)).toBe("claude");
+  });
+
+  it("writes the matched icon with a new provider's first save", async () => {
+    const { input, setInput, patches, save } = await openCreateDialog({
+      providers: {},
+      catalog: [],
+    });
+
+    setInput("baseUrl", "https://relay.example.test/v1");
+    setInput("displayName", "我的 GPT 中转");
+    input("displayName").dispatchEvent(new Event("change", { bubbles: true }));
+    await save();
+
+    const providers = JSON.parse(String(patches.at(-1)!.raw)).models.providers as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(Object.values(providers)[0]).toEqual({
+      baseUrl: "https://relay.example.test/v1",
+      api: "openai-completions",
+      displayName: "我的 GPT 中转",
+      icon: "codex",
+      models: [],
+    });
+  });
+
+  it("carries a manual icon picked before creation into the create patch", async () => {
+    const { manager, input, setInput, patches, save } = await openCreateDialog({
+      providers: {},
+      catalog: [],
+    });
+
+    setInput("baseUrl", "https://relay.example.test/v1");
+    setInput("displayName", "OpenAI 中转");
+    input("displayName").dispatchEvent(new Event("change", { bubbles: true }));
+    iconChoice(manager, "mistral").click();
+    await manager.updateComplete;
+    await save();
+
+    const providers = JSON.parse(String(patches.at(-1)!.raw)).models.providers as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(Object.values(providers)[0]).toMatchObject({
+      displayName: "OpenAI 中转",
+      icon: "mistral",
+      iconManual: true,
     });
   });
 });

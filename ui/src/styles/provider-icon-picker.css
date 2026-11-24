@@ -1,0 +1,136 @@
+openclaw-provider-icon-picker {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.provider-icon-picker__trigger {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--muted);
+}
+
+.provider-icon-picker__trigger:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text);
+}
+
+.provider-icon-picker__trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.provider-icon-picker__mark {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+}
+
+.provider-icon-picker__mark.provider-brand-icon--fallback {
+  font-size: 12px;
+}
+
+wa-popover.provider-icon-picker__popover {
+  --max-width: min(332px, calc(100vw - 24px));
+}
+
+wa-popover.provider-icon-picker__popover::part(body) {
+  width: min(332px, calc(100vw - 24px));
+  padding: 12px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--menu-radius);
+  background: var(--bg-elevated);
+  box-shadow: var(--overlay-shadow);
+}
+
+.provider-icon-picker__panel {
+  display: grid;
+  gap: 10px;
+}
+
+.provider-icon-picker__search {
+  min-width: 0;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.provider-icon-picker__fixed {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.provider-icon-picker__choice {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 42px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+}
+
+.provider-icon-picker__choice:hover:not(:disabled),
+.provider-icon-picker__choice:focus-visible,
+.provider-icon-picker__choice[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--bg-hover);
+}
+
+.provider-icon-picker__choice--fixed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: var(--text);
+  font-size: 12px;
+}
+
+.provider-icon-picker__fixed-glyph {
+  display: inline-flex;
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+  color: var(--muted);
+}
+
+.provider-icon-picker__fixed-glyph > svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.provider-icon-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 4px;
+  max-height: min(280px, 44vh);
+  overflow-y: auto;
+}
+
+.provider-icon-picker__choice-mark {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
+.provider-icon-picker__empty {
+  grid-column: 1 / -1;
+  padding: 12px;
+  color: var(--muted);
+  text-align: center;
+}

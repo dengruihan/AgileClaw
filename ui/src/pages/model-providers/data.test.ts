@@ -170,26 +170,6 @@ describe("buildModelProviderCards", () => {
     expect(cards[1]).toMatchObject({ hasAvailableModels: false });
   });
 
-  it.each([
-    { name: "is unavailable", models: null },
-    {
-      name: "contains dynamically discovered models",
-      models: [catalogEntry({ provider: "custom-zai", id: "glm-discovery" })],
-    },
-  ])("uses configured model ids for icons when the catalog $name", ({ models }) => {
-    const config = readModelProviderConfig({
-      models: { providers: { "custom-zai": { models: [{ id: "glm-configured" }] } } },
-    });
-    const cards = buildModelProviderCards({
-      ...EMPTY_INPUT,
-      models,
-      configProviderIds: config.providerIds,
-      configProviderModelIds: config.providerModelIds,
-    });
-
-    expect(firstCard(cards).modelIds).toEqual(["glm-configured"]);
-  });
-
   it("keeps provider-owned catalog failures when no model rows are usable", () => {
     const cards = buildModelProviderCards({
       ...EMPTY_INPUT,
@@ -435,11 +415,11 @@ describe("buildModelProviderCards", () => {
         "custom-relay-2": "我的中转站",
       },
     });
-    expect(cards.map((card) => card.configKey).toSorted()).toEqual([
-      "custom-other",
-      "custom-relay",
-      "custom-relay-2",
-    ]);
+    expect(
+      cards
+        .map((card) => card.configKey)
+        .toSorted((left, right) => (left ?? "").localeCompare(right ?? "")),
+    ).toEqual(["custom-other", "custom-relay", "custom-relay-2"]);
     expect(
       Object.fromEntries(cards.map((card) => [card.configKey ?? card.id, card.displayName])),
     ).toEqual({
@@ -508,7 +488,6 @@ describe("model provider configuration data", () => {
       }),
     ).toEqual({
       providerIds: ["openai", "anthropic"],
-      providerModelIds: { openai: [], anthropic: [] },
       providerDisplayNames: {},
       apiKeyProviderIds: ["openai"],
       providerAuthModes: {},

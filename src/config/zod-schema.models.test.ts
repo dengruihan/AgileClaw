@@ -77,6 +77,65 @@ describe("ModelsConfigSchema", () => {
     ).toBe(false);
   });
 
+  it("preserves an authored provider icon and manual flag", () => {
+    const parsed = ModelsConfigSchema.parse({
+      providers: {
+        "custom-relay": {
+          baseUrl: "https://relay.example.test/v1",
+          displayName: "Custom Relay",
+          icon: "cloudflare",
+          iconManual: true,
+          models: [{ id: "model-a", name: "Model A" }],
+        },
+      },
+    });
+    expect(parsed?.providers?.["custom-relay"]?.icon).toBe("cloudflare");
+    expect(parsed?.providers?.["custom-relay"]?.iconManual).toBe(true);
+  });
+
+  it("accepts a manual no-icon choice and rejects malformed icon ids", () => {
+    // `iconManual` without `icon` records the explicit "no icon" choice.
+    expect(
+      ModelsConfigSchema.safeParse({
+        providers: {
+          "custom-relay": {
+            baseUrl: "https://relay.example.test/v1",
+            iconManual: true,
+            models: [],
+          },
+        },
+      }).success,
+    ).toBe(true);
+    for (const icon of ["OpenAI", "open_ai", "", "a".repeat(33)]) {
+      expect(
+        ModelsConfigSchema.safeParse({
+          providers: {
+            "custom-relay": {
+              baseUrl: "https://relay.example.test/v1",
+              icon,
+              models: [],
+            },
+          },
+        }).success,
+      ).toBe(false);
+    }
+    // Icon ids are lowercase letters, digits, and hyphens; a leading digit or
+    // hyphen is valid even though every bundled asset currently starts with a letter.
+    for (const icon of ["4o", "-leading", "a".repeat(32)]) {
+      expect(
+        ModelsConfigSchema.safeParse({
+          providers: {
+            "custom-relay": {
+              baseUrl: "https://relay.example.test/v1",
+              icon,
+              models: [],
+            },
+          },
+        }).success,
+      ).toBe(true);
+    }
+  });
+
   it("accepts and preserves declared model compatibility settings", () => {
     const compat = {
       thinkingFormat: "deepseek",

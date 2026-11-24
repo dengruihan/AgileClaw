@@ -1,11 +1,9 @@
-import { isRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import type { ModelCatalogEntry, ModelCatalogResult, ModelsProbeResult } from "../../api/types.ts";
 import type { ApplicationContext } from "../../app/context.ts";
 import { showConfirmDialog } from "../../components/confirm-dialog.ts";
-import { icons } from "../../components/icons.ts";
-import { renderProviderBrandIcon } from "../../components/provider-icon.ts";
+import type { ProviderIconChoice } from "../../components/provider-brand-rules.ts";
 import "../../components/web-awesome.ts";
 import { t } from "../../i18n/index.ts";
 import { registerSettingsEnglish } from "../../i18n/locales/en-settings.ts";
@@ -18,11 +16,18 @@ import {
 } from "./config-mutation.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { ProviderCredentialController } from "./provider-credential-controller.ts";
+import {
+  applyProviderIconChoiceToEditor,
+  applyProviderNameToEditor,
+} from "./provider-editor-icon.ts";
 import { providerConnectionFields } from "./provider-manager-connection.ts";
+import { providerEditorHeader } from "./provider-manager-header.ts";
 import { providerModelDialog } from "./provider-manager-model-dialog.ts";
 import {
   createProviderModelEditorDraft,
   modelConfigEntry,
+  modelCostFieldPatch,
+  modelThinkingLevelPatch,
   providerModelForm,
 } from "./provider-manager-model-form.ts";
 import { providerModelsList } from "./provider-manager-models.ts";
@@ -259,20 +264,32 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.seededName = next;
       return false;
     }
-    const draft = { ...this.draft };
-    if (next) {
-      draft.displayName = next;
-    } else {
-      // A cleared name is not a value: dropping the leaf restores the derived label.
-      delete draft.displayName;
-    }
-    this.draft = draft;
+    // Saving the name also stores its automatic brand icon, unless the operator
+    // picked or removed one manually.
+    const update = applyProviderNameToEditor(this.draft, next);
+    this.draft = update.draft;
     // The touched leaf keeps the committed name alive across the re-render that an
     // unrelated config refresh triggers before the write settles.
-    this.touched.add("displayName");
-    this.nameDraft = next;
-    this.seededName = next;
+    for (const field of update.changedFields) {
+      this.touched.add(field);
+    }
+    this.nameDraft = update.name;
+    this.seededName = update.name;
     return true;
+  }
+
+  /** Manual picker choices persist through the connection auto-save; a new provider keeps them in its draft. */
+  private applyIconChoice(choice: ProviderIconChoice) {
+    const draft = applyProviderIconChoiceToEditor(this.draft, choice, this.touched);
+    if (!draft) {
+      return;
+    }
+    this.draft = draft;
+    if (this.intent?.view === "create" && !this.providerCreated) {
+      // The create write takes the whole draft once the endpoint is complete.
+      return;
+    }
+    this.armConnectionAutoSave(0);
   }
 
   private commitName() {
@@ -404,33 +421,19 @@ export class ProviderManager extends OpenClawLightDomElement {
       draft: this.modelDraft ?? {},
       inheritedInput: this.catalog.find((row) => row.id === this.modelDraft?.id)?.input,
       lockId: this.originalModelId !== undefined,
-      onCostField: (key, value) => this.setCostField(key, value),
+      onCostField: (key, value) => {
+        if (this.modelDraft) {
+          this.setModelFields(modelCostFieldPatch(this.modelDraft, key, value));
+        }
+      },
       onField: (patch) => this.setModelFields(patch),
       onThinkingMap: (map) => this.setModelFields({ thinkingLevelMap: map }),
-      onThinkingValue: (level, value) => this.setThinkingValue(level, value),
+      onThinkingValue: (level, value) => {
+        if (this.modelDraft) {
+          this.setModelFields(modelThinkingLevelPatch(this.modelDraft, level, value));
+        }
+      },
     });
-  }
-
-  private setThinkingValue(
-    level: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max",
-    value: string,
-  ) {
-    if (!this.modelDraft) {
-      return;
-    }
-    const map = {
-      ...(isRecord(this.modelDraft.thinkingLevelMap) ? this.modelDraft.thinkingLevelMap : {}),
-      [level]: value,
-    };
-    this.setModelFields({ thinkingLevelMap: map });
-  }
-
-  private setCostField(key: "input" | "output" | "cacheRead" | "cacheWrite", value: string) {
-    if (!this.modelDraft) {
-      return;
-    }
-    const cost = { ...(isRecord(this.modelDraft.cost) ? this.modelDraft.cost : {}), [key]: value };
-    this.setModelFields({ cost });
   }
 
   private renderModels() {
@@ -486,45 +489,6 @@ export class ProviderManager extends OpenClawLightDomElement {
     ${this.notice ? html`<div class="callout" role="status">${this.notice}</div>` : nothing}`;
   }
 
-  private renderHeaderMenu() {
-    const card = this.card;
-    // Deletion applies to authored entries only; the page owns that decision
-    // and the confirm/logout flow, so the menu just forwards the current card.
-    if (!card || this.canDeleteProvider?.(card) !== true) {
-      return nothing;
-    }
-    const actionsLabel = t("modelProviders.manager.providerActions", { name: card.displayName });
-    return html`
-      <wa-dropdown
-        placement="bottom-end"
-        @wa-select=${(event: CustomEvent<{ item: { value?: string } }>) => {
-          if (event.detail.item.value === "delete") {
-            this.onDeleteProvider?.(card);
-          }
-        }}
-      >
-        <button
-          slot="trigger"
-          type="button"
-          class="btn btn--sm btn--icon provider-manager__menu-trigger"
-          aria-label=${actionsLabel}
-          title=${actionsLabel}
-          ?disabled=${this.disabled}
-        >
-          ${icons.moreHorizontal}
-        </button>
-        <wa-dropdown-item
-          value="delete"
-          variant="danger"
-          data-models-delete-provider=${card.id}
-          ?disabled=${this.disabled}
-        >
-          ${t("modelProviders.delete.action")}
-        </wa-dropdown-item>
-      </wa-dropdown>
-    `;
-  }
-
   override render() {
     if (!this.intent) {
       return nothing;
@@ -533,16 +497,8 @@ export class ProviderManager extends OpenClawLightDomElement {
     const title = creating
       ? t("modelProviders.manager.customProvider")
       : (this.card?.displayName ?? this.providerId);
-    const draftModelId = typeof this.modelDraft?.id === "string" ? this.modelDraft.id : null;
-    const modelIds = providerModels(this.config, this.providerId).flatMap((model) => {
-      if (typeof model.id !== "string") {
-        return [];
-      }
-      return [model.id === this.originalModelId && draftModelId !== null ? draftModelId : model.id];
-    });
-    if (this.modelDraft && this.originalModelId === undefined && draftModelId !== null) {
-      modelIds.push(draftModelId);
-    }
+    // Built-in providers have no editable name, so their icon is not a user choice.
+    const canRename = creating || this.customProvider;
     return html`${
         this.modelDraft
           ? providerModelDialog({
@@ -572,17 +528,18 @@ export class ProviderManager extends OpenClawLightDomElement {
         }}
       >
         <header class="provider-manager__header">
-          <div class="provider-manager__identity">
-            ${renderProviderBrandIcon(this.providerId, {
-              className: "model-providers__icon",
-              modelIds,
-            })}
-            <div>
-              <h2>${title}</h2>
-              <span class="muted">${this.providerId}</span>
-            </div>
-          </div>
-          ${this.renderHeaderMenu()}
+          ${providerEditorHeader({
+            provider: this.providerId,
+            title,
+            draft: this.draft,
+            name: this.nameDraft,
+            editableName: canRename,
+            disabled: this.disabled,
+            card: this.card,
+            canDeleteProvider: this.canDeleteProvider,
+            onDeleteProvider: this.onDeleteProvider,
+            onIconSelect: (choice: ProviderIconChoice) => this.applyIconChoice(choice),
+          })}
         </header>
         <div class="provider-manager__body">
           ${this.blocked ? html`<p class="callout warning">${this.blocked}</p>` : nothing}
@@ -607,7 +564,7 @@ export class ProviderManager extends OpenClawLightDomElement {
               },
               state: {
                 busy: this.busy,
-                canRename: creating || this.customProvider,
+                canRename,
                 card: this.card,
                 creating,
                 dirty: this.dirty,

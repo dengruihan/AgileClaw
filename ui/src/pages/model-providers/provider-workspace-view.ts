@@ -58,9 +58,8 @@ export function renderProviderWorkspace(props: ModelProvidersViewProps) {
                     aria-pressed=${selected === card && !props.creatingProvider}
                     @click=${() => props.onProviderSettings?.(card)}
                   >
-                    ${renderProviderBrandIcon(card.id, {
+                    ${renderProviderBrandIcon(card.configKey ?? card.id, {
                       className: "model-providers__icon",
-                      modelIds: card.modelIds,
                     })}
                     <span class="model-providers__nav-copy"
                       ><strong>${card.displayName}</strong></span
