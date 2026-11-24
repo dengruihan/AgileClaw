@@ -6,7 +6,7 @@ import type {
   ProviderUsageSnapshot,
   UsageWindow,
 } from "../../../src/infra/provider-usage.types.js";
-import { t } from "../i18n/index.ts";
+import { i18n, t } from "../i18n/index.ts";
 import { formatUiExternalText } from "../lib/format-error.ts";
 import { formatCompactTokenCount } from "../lib/format.ts";
 
@@ -45,15 +45,18 @@ function groupUsageWindows(windows: UsageWindow[]): Map<string, UsageWindow[]> {
 
 function createProviderAmountFormatter(unit: string): (amount: number) => string {
   const normalizedUnit = unit.trim().toUpperCase();
+  // Money follows the app language, like dates and counts elsewhere in the UI;
+  // the host region may disagree with the language the operator selected.
+  const locale = i18n.getLocale();
   if (["USD", "EUR", "GBP", "CNY", "JPY"].includes(normalizedUnit)) {
-    const formatter = new Intl.NumberFormat(undefined, {
+    const formatter = new Intl.NumberFormat(locale, {
       style: "currency",
       currency: normalizedUnit,
       maximumFractionDigits: normalizedUnit === "JPY" ? 0 : 2,
     });
     return (amount) => formatter.format(amount);
   }
-  const formatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
+  const formatter = new Intl.NumberFormat(locale, { maximumFractionDigits: 2 });
   return (amount) => `${formatter.format(amount)} ${unit}`;
 }
 
@@ -185,7 +188,7 @@ function renderProviderCostHistory(snapshot: ProviderUsageDetails) {
           totals.requests > 0
             ? html`<span
                 >${t("usage.providerUsage.requests", {
-                  count: new Intl.NumberFormat().format(totals.requests),
+                  count: new Intl.NumberFormat(i18n.getLocale()).format(totals.requests),
                 })}</span
               >`
             : nothing

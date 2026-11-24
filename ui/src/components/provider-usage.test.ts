@@ -3,6 +3,7 @@
 import { render } from "lit";
 import { describe, expect, it, vi } from "vitest";
 import type { ProviderUsageCostDaily } from "../../../src/infra/provider-usage.types.js";
+import { i18n } from "../i18n/index.ts";
 import { renderProviderUsageDetails } from "./provider-usage.ts";
 
 function dailyUsage(
@@ -90,6 +91,36 @@ describe("renderProviderUsageDetails", () => {
       );
     },
   );
+
+  it("formats amounts in the app language instead of the host region", () => {
+    vi.spyOn(i18n, "getLocale").mockReturnValue("de");
+    try {
+      const container = document.createElement("div");
+      const today = new Date().toISOString().slice(0, 10);
+      render(
+        renderProviderUsageDetails({
+          windows: [],
+          costHistory: {
+            unit: "usd",
+            periodDays: 30,
+            daily: [dailyUsage(today, 12.5)],
+            models: [],
+            categories: [],
+          },
+        }),
+        container,
+      );
+
+      const expected = new Intl.NumberFormat("de", {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      }).format(12.5);
+      expect(container.querySelector(".provider-cost-window strong")?.textContent).toBe(expected);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
 
   it("preserves nonfinite chart maxima, signed amounts, and source-order cache totals", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
