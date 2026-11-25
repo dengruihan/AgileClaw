@@ -186,11 +186,7 @@ export function providerConnectionFields(params: {
     ${
       templatePrefilled && !state.providerCreated
         ? html`<div>
-            <button
-              type="submit"
-              class="btn btn--primary"
-              ?disabled=${state.disabled || state.busy}
-            >
+            <button type="submit" class="btn primary" ?disabled=${state.disabled || state.busy}>
               ${t("modelProviders.manager.createProvider")}
             </button>
           </div>`

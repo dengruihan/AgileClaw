@@ -616,6 +616,15 @@
   padding: var(--space-6) var(--space-6) 0;
 }
 
+/* The extracted editor header renders its own header element inside this
+   wrapper. As a flex child with the shared header's `flex-shrink: 0` it keeps
+   its max-content width, so the identity block overflows the card on narrow
+   screens; let it shrink and the heading wrap instead. */
+.provider-manager--inline > .provider-manager__header > .provider-manager__header {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 .provider-manager__identity {
   display: flex;
   align-items: center;
@@ -813,6 +822,12 @@
   min-height: 0;
   padding: var(--space-5);
   overflow-y: auto;
+}
+
+/* The body scrolls its cards; flex children must keep their content height
+   instead of compressing to the dialog's height on narrow screens. */
+.provider-template-picker__body > * {
+  flex-shrink: 0;
 }
 
 .provider-template-picker__section h3 {
