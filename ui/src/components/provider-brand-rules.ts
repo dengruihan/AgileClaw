@@ -18,9 +18,12 @@ export type ProviderBrandIcon = {
   label: string;
   /**
    * Case-insensitive substring rule. Rules are intentionally broad (a model
-   * family names its vendor); a few brands need a narrower form: "meta" and
-   * "poe" match as whole words so "metadata" and "poem"/"poetry" keep no icon,
-   * and comfy only matches the ComfyUI product name.
+   * family names its vendor); a few brands need a narrower form: "meta",
+   * "poe", and "crof" match as whole words so "metadata", "poem"/"poetry",
+   * "Mycroft", and the "microfono"/"microfoon" microphone words keep no icon,
+   * "crossmodel" only matches the joined brand spelling so the generic phrase
+   * "cross model" does not claim it, and comfy only matches the ComfyUI product
+   * name.
    */
   pattern?: RegExp;
 };
@@ -105,7 +108,9 @@ const BRAND_ICON_META: Record<ProviderIconId, ProviderBrandIconMeta> = {
     pattern: /zai|z\.ai|zhipu|glm|chatglm|智谱/i,
   },
 
-  // Aggregating and hosting platforms.
+  // Aggregating and hosting platforms. Abacus.AI is the ChatLLM/RouteLLM
+  // platform; "abacus" does not appear inside another product name.
+  abacus: { label: "Abacus.AI", pattern: /abacus/i },
   baseten: { label: "Baseten", pattern: /baseten/i },
   bedrock: {
     label: "Amazon Bedrock",
@@ -118,6 +123,11 @@ const BRAND_ICON_META: Record<ProviderIconId, ProviderBrandIconMeta> = {
     pattern: /clawrouter|claw[\s_-]?router/i,
   },
   cloudflare: { label: "Cloudflare AI Gateway", pattern: /cloudflare/i },
+  // Whole-word crof keeps "Mycroft", "croft" and the "microfono"/"microfoon"
+  // microphone words off CrofAI's mark; the joined "crofai" form still matches.
+  crof: { label: "Crof", pattern: /\bcrof\b|crof[\s._-]?ai/i },
+  // Joined spelling only: "cross model" is a generic phrase, not the brand.
+  crossmodel: { label: "Crossmodel", pattern: /crossmodel/i },
   deepinfra: {
     label: "DeepInfra",
     pattern: /deep[\s_-]?infra/i,
@@ -171,16 +181,14 @@ const BRAND_ICON_META: Record<ProviderIconId, ProviderBrandIconMeta> = {
   vertexai: { label: "Vertex AI (Google)" },
   volcengine: { label: "Volcengine" },
 
-  // Coding agents, editors, and media tools: selectable, never name-matched.
-  abacus: { label: "Abacus.AI" },
+  // Coding agents, editors, media tools, and the generic LLM Proxy mark:
+  // selectable, never name-matched.
   amp: { label: "Amp" },
   antigravity: { label: "Antigravity (Google)" },
   augment: { label: "Augment Code" },
   codebuff: { label: "Codebuff" },
   commandcode: { label: "CommandCode" },
   copilot: { label: "GitHub Copilot" },
-  crof: { label: "Crof" },
-  crossmodel: { label: "Crossmodel" },
   cursor: { label: "Cursor" },
   deepgram: { label: "Deepgram" },
   devin: { label: "Devin" },
@@ -190,6 +198,9 @@ const BRAND_ICON_META: Record<ProviderIconId, ProviderBrandIconMeta> = {
   jetbrains: { label: "JetBrains" },
   kilo: { label: "Kilo Code" },
   kiro: { label: "Kiro (AWS)" },
+  // Not a company: the mark covers any LLM-API-Key-Proxy-compatible /v1/quota-stats
+  // endpoint, whose base URL each operator supplies, so a name rule would claim
+  // every self-hosted relay called "LLM Proxy".
   llmproxy: { label: "LLM Proxy" },
   manus: { label: "Manus" },
   opencode: { label: "OpenCode" },

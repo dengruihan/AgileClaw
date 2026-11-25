@@ -75,6 +75,36 @@ describe("matchProviderBrand", () => {
     expect(matchProviderBrand("Comfy")).toBeNull();
   });
 
+  it("maps Abacus.AI, CrofAI, and CrossModel names to their own marks", () => {
+    expect(matchProviderBrand("Abacus")).toBe("abacus");
+    expect(matchProviderBrand("Abacus AI")).toBe("abacus");
+    expect(matchProviderBrand("abacus.ai 中转")).toBe("abacus");
+    expect(matchProviderBrand("Crof")).toBe("crof");
+    expect(matchProviderBrand("CrofAI")).toBe("crof");
+    expect(matchProviderBrand("crof-ai relay")).toBe("crof");
+    expect(matchProviderBrand("CrossModel")).toBe("crossmodel");
+    expect(matchProviderBrand("crossmodel.ai")).toBe("crossmodel");
+    expect(matchProviderBrand("My CrossModel gateway")).toBe("crossmodel");
+  });
+
+  it("keeps near-miss names off the new rules", () => {
+    expect(matchProviderBrand("Abaqus")).toBeNull();
+    expect(matchProviderBrand("Mycroft")).toBeNull();
+    expect(matchProviderBrand("Croft Analytics")).toBeNull();
+    expect(matchProviderBrand("Microfono")).toBeNull();
+    expect(matchProviderBrand("microfoon")).toBeNull();
+    expect(matchProviderBrand("cross-model evaluation")).toBeNull();
+    expect(matchProviderBrand("Cross Model Relay")).toBeNull();
+  });
+
+  it("leaves the generic LLM Proxy mark picker-only", () => {
+    expect(matchProviderBrand("LLM Proxy")).toBeNull();
+    expect(matchProviderBrand("LLM-API-Key-Proxy")).toBeNull();
+    expect(matchProviderBrand("My LLM proxy")).toBeNull();
+    const labels = new Map(PROVIDER_BRAND_ICONS.map((entry) => [entry.icon, entry.label]));
+    expect(labels.get("llmproxy")).toBe("LLM Proxy");
+  });
+
   it("matches Chinese brand names and leaves other Chinese names alone", () => {
     expect(matchProviderBrand("阿里云通义千问")).toBe("alibaba");
     expect(matchProviderBrand("豆包")).toBe("doubao");
