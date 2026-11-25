@@ -1328,6 +1328,16 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     ["ui/src/components/agent-select-registration.ts"],
   ),
   pageWatch(
+    "ui/src/e2e/model-provider-templates.e2e.test.ts",
+    ["config", "model-providers"],
+    [
+      "ui/src/pages/model-providers/provider-manager-connection.ts",
+      "ui/src/pages/model-providers/provider-manager-template.ts",
+      "ui/src/pages/model-providers/provider-manager.ts",
+      "ui/src/pages/model-providers/provider-template-picker.ts",
+    ],
+  ),
+  pageWatch(
     "ui/src/e2e/model-provider-usage-outcomes.e2e.test.ts",
     ["config", "model-providers"],
     ["ui/src/components/agent-select-registration.ts", "ui/src/components/select-picker.ts"],

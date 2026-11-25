@@ -2954,6 +2954,7 @@
       "ui/src/e2e/model-catalog-partial-refresh.e2e.test.ts": 15,
       "ui/src/e2e/model-defaults-recovery.e2e.test.ts": 4,
       "ui/src/e2e/model-provider-login.e2e.test.ts": 20,
+      "ui/src/e2e/model-provider-templates.e2e.test.ts": 3,
       "ui/src/e2e/model-provider-usage-outcomes.e2e.test.ts": 7,
       "ui/src/e2e/model-providers-help.e2e.test.ts": 5,
       "ui/src/e2e/model-providers-layout.e2e.test.ts": 6,

@@ -19,12 +19,9 @@ external secret references stay managed at their source and are not revealed.
 
 The provider list groups cloud providers and local or custom endpoints. Select a
 provider to edit its **Base URL**, **API format**, and **API key** in the main
-panel. Changing or clearing a saved key replaces or removes that credential. Connection changes save
-only when you choose **Save**; switching providers asks before discarding unsaved
-changes.
+panel. Changing or clearing a saved key replaces or removes that credential. Connection edits save automatically shortly after you change them; switching providers asks before discarding unsaved changes.
 
-Use **Add provider** to create a custom endpoint, save its connection, then use
-**Add model** to enter the model IDs supplied by that endpoint. Model editing
+Use **Add provider** to create a custom endpoint. The entry opens a provider template list: choosing a curated template prefills the endpoint, API format, models, name, and icon and creates the entry with **Create provider**; the **Custom provider** entry keeps the blank form for a readable name, base URL, and API format, and saves once those fields are complete. A template whose endpoint is already configured is marked **Added** and opens that provider instead of creating a second one, and the **Custom provider** button in the connect wizard still opens the blank form. Created providers take a `custom-<host>` config key that the editor shows under the provider name only after the first save. Template providers arrive with their curated models; for a blank custom provider, use **Add model** to enter the model IDs supplied by that endpoint. Model editing
 opens a separate dialog for the name, context window, maximum output tokens,
 supported inputs, reasoning levels, and token costs. Advanced fields you do not
 edit remain intact. Provider defaults are inherited when optional overrides are
