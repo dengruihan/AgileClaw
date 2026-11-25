@@ -57,6 +57,11 @@
       "types": "./dist/provider-model-id-normalize.d.mts",
       "import": "./dist/provider-model-id-normalize.mjs",
       "default": "./dist/provider-model-id-normalize.mjs"
+    },
+    "./provider-templates": {
+      "types": "./dist/provider-templates.d.mts",
+      "import": "./dist/provider-templates.mjs",
+      "default": "./dist/provider-templates.mjs"
     }
   }
 }

@@ -441,6 +441,7 @@ export const sharedVitestConfig = {
           "provider-model-id-normalize.ts",
         ),
       },
+      sourcePackageAlias("model-catalog-core", "provider-templates"),
       {
         find: "@openclaw/model-catalog-core",
         replacement: path.join(repoRoot, "packages", "model-catalog-core", "src", "index.ts"),
