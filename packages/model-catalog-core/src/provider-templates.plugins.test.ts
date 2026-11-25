@@ -1,5 +1,7 @@
 // Guards the curated provider templates against the plugin manifests that own
-// their endpoint sets, API, headers, default models, and model rows. Each row
+// their endpoint sets, API, headers, default models, and model rows. The plugin
+// manifest is resolved from each template's declared sourceProviderId and the
+// declared owner is asserted, so the owner linkage cannot drift. Each row then
 // selects the manifest catalog that owns it (including the distinct Token Plan
 // catalog) and applies the manifest's own suppressions, so endpoint/model
 // variants cannot silently cross over. Builder-owned facts (exact coding/API
@@ -45,6 +47,15 @@ const EXTENSIONS_DIR = path.resolve(
   "../../../extensions",
 );
 
+const PLUGIN_DIRECTORY_BY_PROVIDER: Record<string, string> = {
+  deepseek: "deepseek",
+  kimi: "kimi-coding",
+  minimax: "minimax",
+  moonshot: "moonshot",
+  qwen: "qwen",
+  zai: "zai",
+};
+
 const manifestCache = new Map<string, PluginManifest>();
 
 function readManifest(pluginDirectory: string): PluginManifest {
@@ -59,6 +70,29 @@ function readManifest(pluginDirectory: string): PluginManifest {
   return manifest;
 }
 
+/** Resolves the manifest from the template's declared owner, not from test bookkeeping. */
+function readManifestForSourceProvider(sourceProviderId: string): PluginManifest {
+  const pluginDirectory = PLUGIN_DIRECTORY_BY_PROVIDER[sourceProviderId];
+  if (!pluginDirectory) {
+    throw new Error(`No plugin directory is mapped for source provider ${sourceProviderId}`);
+  }
+  return readManifest(pluginDirectory);
+}
+
+function requireCatalog(
+  manifest: PluginManifest,
+  catalogProviderId: string,
+  templateId: string,
+): ManifestCatalogProvider {
+  const catalog = manifest.modelCatalog?.providers?.[catalogProviderId];
+  if (!catalog) {
+    throw new Error(
+      `${templateId} source provider does not declare modelCatalog.providers.${catalogProviderId}`,
+    );
+  }
+  return catalog;
+}
+
 /** Which manifest fact declares the template's endpoint. */
 type EndpointOwnership =
   | { kind: "catalogBaseUrl" }
@@ -66,10 +100,14 @@ type EndpointOwnership =
   | { kind: "host" };
 
 type TemplateManifestFacts = {
-  /** Extension whose manifest owns the facts for this template. */
-  pluginDirectory: string;
-  /** Manifest catalog provider that owns the model rows, api, headers, and default model. */
-  catalogProviderId: string | undefined;
+  /** Provider id the template must declare as its owner. */
+  sourceProviderId: string;
+  /**
+   * Manifest catalog key that owns the model rows, api, headers, and default
+   * model; differs from sourceProviderId only for the Token Plan catalog. Null
+   * means the manifest has no catalog (MiniMax), so only hosts are checkable here.
+   */
+  catalogProviderId: string | null;
   endpoint: EndpointOwnership;
   /** Catalog-declared default model; omitted when only the plugin builder owns it. */
   ownDefaultModel?: boolean;
@@ -77,78 +115,78 @@ type TemplateManifestFacts = {
 
 const TEMPLATE_MANIFEST_FACTS: Record<string, TemplateManifestFacts> = {
   "zhipu-coding-cn": {
-    pluginDirectory: "zai",
+    sourceProviderId: "zai",
     catalogProviderId: "zai",
     endpoint: { kind: "host" },
   },
   "zai-coding": {
-    pluginDirectory: "zai",
+    sourceProviderId: "zai",
     catalogProviderId: "zai",
     endpoint: { kind: "host" },
   },
   "zhipu-api-cn": {
-    pluginDirectory: "zai",
+    sourceProviderId: "zai",
     catalogProviderId: "zai",
     endpoint: { kind: "host" },
     ownDefaultModel: true,
   },
   "zai-api": {
-    pluginDirectory: "zai",
+    sourceProviderId: "zai",
     catalogProviderId: "zai",
     endpoint: { kind: "catalogBaseUrl" },
     ownDefaultModel: true,
   },
   kimi: {
-    pluginDirectory: "moonshot",
+    sourceProviderId: "moonshot",
     catalogProviderId: "moonshot",
     endpoint: { kind: "catalogBaseUrl" },
     ownDefaultModel: true,
   },
   "kimi-cn": {
-    pluginDirectory: "moonshot",
+    sourceProviderId: "moonshot",
     catalogProviderId: "moonshot",
     endpoint: { kind: "declaredBaseUrl" },
     ownDefaultModel: true,
   },
   "kimi-code": {
-    pluginDirectory: "kimi-coding",
+    sourceProviderId: "kimi",
     catalogProviderId: "kimi",
     endpoint: { kind: "catalogBaseUrl" },
     ownDefaultModel: true,
   },
   minimax: {
-    pluginDirectory: "minimax",
-    catalogProviderId: undefined,
+    sourceProviderId: "minimax",
+    catalogProviderId: null,
     endpoint: { kind: "host" },
   },
   "minimax-cn": {
-    pluginDirectory: "minimax",
-    catalogProviderId: undefined,
+    sourceProviderId: "minimax",
+    catalogProviderId: null,
     endpoint: { kind: "host" },
   },
   deepseek: {
-    pluginDirectory: "deepseek",
+    sourceProviderId: "deepseek",
     catalogProviderId: "deepseek",
     endpoint: { kind: "catalogBaseUrl" },
     ownDefaultModel: true,
   },
   "bailian-cn": {
-    pluginDirectory: "qwen",
+    sourceProviderId: "qwen",
     catalogProviderId: "qwen",
     endpoint: { kind: "declaredBaseUrl" },
   },
   "bailian-intl": {
-    pluginDirectory: "qwen",
+    sourceProviderId: "qwen",
     catalogProviderId: "qwen",
     endpoint: { kind: "declaredBaseUrl" },
   },
   "bailian-coding-cn": {
-    pluginDirectory: "qwen",
+    sourceProviderId: "qwen",
     catalogProviderId: "qwen",
     endpoint: { kind: "declaredBaseUrl" },
   },
   "qwen-token-plan-cn": {
-    pluginDirectory: "qwen",
+    sourceProviderId: "qwen",
     catalogProviderId: "qwen-token-plan",
     endpoint: { kind: "declaredBaseUrl" },
   },
@@ -197,11 +235,13 @@ describe("provider templates match their owning plugin manifests", () => {
     "%s",
     (id, template: ProviderTemplate) => {
       const facts = factsFor(id);
-      const manifest = readManifest(facts.pluginDirectory);
+
+      expect(template.sourceProviderId, `${id} source provider`).toBe(facts.sourceProviderId);
+      const manifest = readManifestForSourceProvider(template.sourceProviderId);
       const catalog =
-        facts.catalogProviderId === undefined
+        facts.catalogProviderId === null
           ? undefined
-          : manifest.modelCatalog?.providers?.[facts.catalogProviderId];
+          : requireCatalog(manifest, facts.catalogProviderId, id);
 
       expectDeclaredEndpoint(template.provider.baseUrl, manifest, catalog, facts.endpoint);
 

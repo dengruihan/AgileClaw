@@ -1,5 +1,7 @@
 // Binds the curated provider templates to the plugin builders and exported
 // constants that own their exact endpoints, default models, and model rows.
+// Each row also asserts the template's declared sourceProviderId against the
+// plugin that supplies those builder facts, so the owner linkage cannot drift.
 // This lives in the root test tree because core tsgo graphs must not include
 // extension files (scripts/check-tsgo-core-boundary.mts); the package-level
 // guard covers the manifest-owned facts instead.
@@ -123,6 +125,8 @@ function modelShape(model: OwnerModelRow) {
 }
 
 type OwnerFacts = {
+  /** Provider id the template must declare as its owner. */
+  sourceProviderId: string;
   baseUrl: string;
   api: string | undefined;
   headers: Record<string, unknown> | undefined;
@@ -132,6 +136,7 @@ type OwnerFacts = {
 
 const OWNER_FACTS: Record<string, OwnerFacts> = {
   "zhipu-coding-cn": {
+    sourceProviderId: "zai",
     baseUrl: ZAI_CODING_CN_BASE_URL,
     api: zaiManifestCatalog.api,
     headers: undefined,
@@ -139,6 +144,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: zaiModels,
   },
   "zai-coding": {
+    sourceProviderId: "zai",
     baseUrl: ZAI_CODING_GLOBAL_BASE_URL,
     api: zaiManifestCatalog.api,
     headers: undefined,
@@ -146,6 +152,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: zaiModels,
   },
   "zhipu-api-cn": {
+    sourceProviderId: "zai",
     baseUrl: ZAI_CN_BASE_URL,
     api: zaiManifestCatalog.api,
     headers: undefined,
@@ -153,6 +160,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: zaiModels,
   },
   "zai-api": {
+    sourceProviderId: "zai",
     baseUrl: ZAI_GLOBAL_BASE_URL,
     api: zaiManifestCatalog.api,
     headers: undefined,
@@ -160,6 +168,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: zaiModels,
   },
   kimi: {
+    sourceProviderId: "moonshot",
     baseUrl: MOONSHOT_BASE_URL,
     api: moonshotProvider.api,
     headers: undefined,
@@ -167,6 +176,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: moonshotProvider.models,
   },
   "kimi-cn": {
+    sourceProviderId: "moonshot",
     baseUrl: MOONSHOT_CN_BASE_URL,
     api: moonshotProvider.api,
     headers: undefined,
@@ -174,6 +184,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: moonshotProvider.models,
   },
   "kimi-code": {
+    sourceProviderId: "kimi",
     baseUrl: KIMI_CODING_BASE_URL,
     api: kimiCodingProvider.api,
     headers: kimiCodingProvider.headers,
@@ -181,6 +192,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: kimiCodingProvider.models,
   },
   minimax: {
+    sourceProviderId: "minimax",
     baseUrl: MINIMAX_API_BASE_URL,
     api: minimaxProvider.api,
     headers: undefined,
@@ -188,6 +200,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: minimaxProvider.models,
   },
   "minimax-cn": {
+    sourceProviderId: "minimax",
     baseUrl: MINIMAX_CN_API_BASE_URL,
     api: minimaxProvider.api,
     headers: undefined,
@@ -195,6 +208,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: minimaxProvider.models,
   },
   deepseek: {
+    sourceProviderId: "deepseek",
     baseUrl: DEEPSEEK_BASE_URL,
     api: deepseekProvider.api,
     headers: undefined,
@@ -202,6 +216,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: deepseekProvider.models,
   },
   "bailian-cn": {
+    sourceProviderId: "qwen",
     baseUrl: QWEN_STANDARD_CN_BASE_URL,
     api: bailianCnProvider.api,
     headers: undefined,
@@ -209,6 +224,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: bailianCnProvider.models,
   },
   "bailian-intl": {
+    sourceProviderId: "qwen",
     baseUrl: QWEN_STANDARD_GLOBAL_BASE_URL,
     api: bailianIntlProvider.api,
     headers: undefined,
@@ -216,6 +232,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: bailianIntlProvider.models,
   },
   "bailian-coding-cn": {
+    sourceProviderId: "qwen",
     baseUrl: QWEN_CN_BASE_URL,
     api: bailianCodingProvider.api,
     headers: undefined,
@@ -223,6 +240,7 @@ const OWNER_FACTS: Record<string, OwnerFacts> = {
     models: bailianCodingProvider.models,
   },
   "qwen-token-plan-cn": {
+    sourceProviderId: "qwen",
     baseUrl: QWEN_TOKEN_PLAN_CN_BASE_URL,
     api: tokenPlanProvider.api,
     headers: undefined,
@@ -251,6 +269,7 @@ describe("provider templates match their owning plugin builders", () => {
     (id, template: ProviderTemplate) => {
       const owner = ownerFactsFor(id);
 
+      expect(template.sourceProviderId, `${id} source provider`).toBe(owner.sourceProviderId);
       expect(template.provider.baseUrl, `${id} endpoint`).toBe(owner.baseUrl);
       expect(template.provider.api, `${id} api`).toBe(owner.api);
       expect(template.provider.headers, `${id} headers`).toEqual(owner.headers);
