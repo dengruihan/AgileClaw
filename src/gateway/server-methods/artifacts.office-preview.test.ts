@@ -39,7 +39,8 @@ vi.mock("../session-transcript-readers.js", async () => {
     "../session-transcript-readers.js",
   );
   const { withArtifactFixtureReader } = await import("./artifacts.test-support.js");
-  return withArtifactFixtureReader(actual, hoisted.visitSessionMessagesAsync);
+  const fixtureReader = withArtifactFixtureReader(actual, hoisted.visitSessionMessagesAsync);
+  return { ...actual, readSessionArtifacts: fixtureReader.readSessionArtifacts };
 });
 
 vi.mock("../managed-image-attachments.js", async () => {

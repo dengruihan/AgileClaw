@@ -10,7 +10,8 @@ import { readConfigMachineState } from "../state/config-machine-state.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { NODE_OCCUPANCY_MACHINE_STATE_KEY, NodeOccupancyOwner } from "./node-occupancy.js";
 
-vi.mock("../logger.js", () => ({
+vi.mock("../logger.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../logger.js")>()),
   logWarn: vi.fn(),
 }));
 

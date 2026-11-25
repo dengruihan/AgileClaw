@@ -17,7 +17,8 @@ const SESSION_LINEAGE: Record<
   { canonicalKey: string; agentId: string; entry: SessionEntry }
 > = {};
 
-vi.mock("../session-sharing.js", () => ({
+vi.mock("../session-sharing.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../session-sharing.js")>()),
   resolveSessionSharingTarget: (params: { sessionKey: string }) =>
     SESSION_LINEAGE[params.sessionKey] ?? null,
 }));

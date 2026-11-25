@@ -5,7 +5,8 @@ import { resetProcessRegistryForTests } from "../agents/bash-process-registry.te
 import { sweepSessionScopeBackgroundProcesses } from "./session-scope-process-sweep.js";
 
 const { cancel } = vi.hoisted(() => ({ cancel: vi.fn(() => true) }));
-vi.mock("../process/supervisor/index.js", () => ({
+vi.mock("../process/supervisor/index.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../process/supervisor/index.js")>()),
   getProcessSupervisor: () => ({ cancel }),
 }));
 

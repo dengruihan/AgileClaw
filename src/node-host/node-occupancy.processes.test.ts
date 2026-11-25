@@ -5,7 +5,8 @@ import { createDeferred } from "../../test/helpers/promise.js";
 import { closeOpenClawStateDatabaseForTest } from "../state/openclaw-state-db.js";
 import { NodeOccupancyOwner } from "./node-occupancy.js";
 
-vi.mock("../logger.js", () => ({
+vi.mock("../logger.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../logger.js")>()),
   logWarn: vi.fn(),
 }));
 
