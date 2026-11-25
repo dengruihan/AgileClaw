@@ -680,7 +680,7 @@ describe("ModelProvidersPage provider templates", () => {
     const harness = createHarness("main");
     const originalRequest = harness.request.getMockImplementation()!;
     const existingKey = "custom-api-deepseek-com";
-    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+    harness.request.mockImplementation(async (method: string) => {
       if (method === "config.get") {
         return {
           config: {
@@ -697,7 +697,7 @@ describe("ModelProvidersPage provider templates", () => {
           valid: true,
         };
       }
-      return originalRequest(method, params);
+      return originalRequest(method);
     });
     const page = appendPage(harness.context);
     await waitForProviders(page);
@@ -717,11 +717,11 @@ describe("ModelProvidersPage provider templates", () => {
   it("keeps panel creation disabled while the provider list is unknown", async () => {
     const harness = createHarness("main");
     const originalRequest = harness.request.getMockImplementation()!;
-    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+    harness.request.mockImplementation(async (method: string) => {
       if (method === "models.authStatus") {
         throw new Error("synthetic provider list failure");
       }
-      return originalRequest(method, params);
+      return originalRequest(method);
     });
     const page = appendPage(harness.context);
     await waitForProviders(page);
@@ -744,7 +744,7 @@ describe("ModelProvidersPage provider templates", () => {
     const harness = createHarness("main");
     const originalRequest = harness.request.getMockImplementation()!;
     const configKey = "MyDeepSeek";
-    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+    harness.request.mockImplementation(async (method: string) => {
       if (method === "config.get") {
         return {
           config: {
@@ -764,7 +764,7 @@ describe("ModelProvidersPage provider templates", () => {
           valid: true,
         };
       }
-      return originalRequest(method, params);
+      return originalRequest(method);
     });
     const page = appendPage(harness.context);
     await waitForProviders(page);
