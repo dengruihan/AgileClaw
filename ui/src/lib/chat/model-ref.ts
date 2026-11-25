@@ -1,6 +1,10 @@
 import { isLegacyCodexProviderId } from "../../../../src/config/legacy-codex-provider.js";
 import { normalizeAgentModelRefForConfig } from "../../../../src/config/model-input.js";
 import type { ModelCatalogEntry } from "../../api/types.ts";
+import {
+  resolveProviderDisplayName,
+  type ProviderDisplayNames,
+} from "../../components/provider-icon.ts";
 
 export function normalizeChatModelProviderId(provider: string): string {
   const normalized = provider.trim().toLowerCase();
@@ -165,25 +169,47 @@ function createQualifiedCatalogKey(entry: ModelCatalogEntry): string {
   return buildQualifiedChatModelValue(entry.id, entry.provider).trim().toLowerCase();
 }
 
-function createNameProviderKey(name: string, provider?: string | null): string {
-  return `${name.toLowerCase()}\u0000${provider?.trim().toLowerCase() ?? ""}`;
+function createNameProviderKey(name: string, providerName?: string | null): string {
+  return `${name.toLowerCase()}\u0000${providerName?.trim().toLowerCase() ?? ""}`;
 }
 
 type ChatModelDisplayLookup = ReadonlyMap<string, string>;
 
-export function buildCatalogDisplayLookup(catalog: ModelCatalogEntry[]): Map<string, string> {
+/**
+ * Labels every catalog row, suffixing the provider name only when the friendly
+ * name alone would not identify the row. Providers that resolve to the same
+ * name fall back to their id so those rows stay distinguishable.
+ */
+export function buildCatalogDisplayLookup(
+  catalog: ModelCatalogEntry[],
+  authoredProviderNames?: ProviderDisplayNames | null,
+): Map<string, string> {
   const nameToValues = new Map<string, Set<string>>();
   const nameProviderToValues = new Map<string, Set<string>>();
+  // Resolved names walk the provider config, so one lookup per provider per render.
+  const providerNames = new Map<string, string>();
+  const resolveProviderName = (provider: string) => {
+    const key = provider.trim().toLowerCase();
+    const cached = providerNames.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const resolved = resolveProviderDisplayName(provider, authoredProviderNames);
+    providerNames.set(key, resolved);
+    return resolved;
+  };
   const entries = catalog.map((entry) => {
     const name = resolveCatalogDisplayName(entry);
+    const providerName = resolveProviderName(entry.provider);
     return {
       entry,
       name,
+      providerName,
       qualifiedKey: normalizeAgentModelRefForConfig(
         buildQualifiedChatModelValue(entry.id, entry.provider),
       ),
       nameKey: name.toLowerCase(),
-      providerKey: createNameProviderKey(name, entry.provider),
+      providerKey: createNameProviderKey(name, providerName),
     };
   });
 
@@ -201,13 +227,18 @@ export function buildCatalogDisplayLookup(catalog: ModelCatalogEntry[]): Map<str
   }
 
   return new Map(
-    entries.map(({ entry, name, qualifiedKey, nameKey, providerKey }) => {
+    entries.map(({ entry, name, providerName, qualifiedKey, nameKey, providerKey }) => {
       let label = name || formatRawCatalogLabel(entry);
       if (name && (nameToValues.get(nameKey)?.size ?? 0) > 1) {
+        // The provider name separates the rows. When two providers resolve to the
+        // same name, only their ids can, and the model id already repeating the
+        // name keeps the provider id alone.
         const detail =
           (nameProviderToValues.get(providerKey)?.size ?? 0) <= 1
-            ? entry.provider?.trim() || entry.id
-            : formatRawCatalogLabel(entry);
+            ? providerName || entry.provider?.trim() || entry.id
+            : entry.id.trim().toLowerCase() === name.toLowerCase()
+              ? entry.provider?.trim() || entry.id
+              : formatRawCatalogLabel(entry);
         label = `${name} · ${detail}`;
       }
       return [qualifiedKey, label];

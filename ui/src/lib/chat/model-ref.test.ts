@@ -44,6 +44,47 @@ describe("chat-model-ref helpers", () => {
     },
   );
 
+  it("suffixes a duplicate model name with the provider name", () => {
+    const entries = [
+      { id: "gpt-5.5", name: "GPT-5.5", provider: "custom-relay-eu-west-1-acme" },
+      { id: "gpt-5.5", name: "GPT-5.5", provider: "openrouter" },
+    ];
+
+    const lookup = buildCatalogDisplayLookup(entries, {
+      "custom-relay-eu-west-1-acme": "Acme Relay",
+    });
+
+    expect(entries.map((entry) => buildChatModelOptionFromLookup(entry, lookup))).toEqual([
+      { value: "custom-relay-eu-west-1-acme/gpt-5.5", label: "GPT-5.5 · Acme Relay" },
+      { value: "openrouter/gpt-5.5", label: "GPT-5.5 · OpenRouter" },
+    ]);
+  });
+
+  it("falls back to the provider id when two providers share a display name", () => {
+    const entries = [
+      { id: "gpt-5.5", name: "GPT-5.5", provider: "acme-eu" },
+      { id: "gpt-5.5", name: "GPT-5.5", provider: "acme-us" },
+    ];
+
+    const lookup = buildCatalogDisplayLookup(entries, { "acme-eu": "Acme", "acme-us": "Acme" });
+
+    expect(entries.map((entry) => buildChatModelOptionFromLookup(entry, lookup))).toEqual([
+      { value: "acme-eu/gpt-5.5", label: "GPT-5.5 · acme-eu" },
+      { value: "acme-us/gpt-5.5", label: "GPT-5.5 · acme-us" },
+    ]);
+  });
+
+  it("leaves a unique model name unsuffixed", () => {
+    const [entry] = [{ id: "gpt-5.5", name: "GPT-5.5", provider: "acme-eu" }];
+
+    const lookup = buildCatalogDisplayLookup([entry], { "acme-eu": "Acme" });
+
+    expect(buildChatModelOptionFromLookup(entry, lookup)).toEqual({
+      value: "acme-eu/gpt-5.5",
+      label: "GPT-5.5",
+    });
+  });
+
   it("keeps ambiguous raw overrides unchanged", () => {
     expect(
       normalizeChatModelOverrideValue(

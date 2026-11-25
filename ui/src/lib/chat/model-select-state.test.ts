@@ -1,13 +1,14 @@
 // @vitest-environment node
 // Control UI tests cover chat model select state behavior.
 import { expectDefined } from "@openclaw/normalization-core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import {
   createModelCatalog,
   createSessionsListResult,
   DEEPSEEK_CHAT_MODEL,
   DEFAULT_CHAT_MODEL_CATALOG,
 } from "../../test-helpers/chat-model.ts";
+import { registerProviderIconConfigSource } from "../provider-icon-source.ts";
 import {
   resolveChatModelUnavailableReason,
   resolveChatModelOverrideValue,
@@ -290,8 +291,8 @@ describe("chat-model-select-state", () => {
       name: "all-cold",
       available: false,
       options: [
-        { value: "openai/gpt-5.5", label: "GPT-5.5 · openai", disabled: true },
-        { value: "codex/gpt-5.5", label: "GPT-5.5 · codex", disabled: true },
+        { value: "openai/gpt-5.5", label: "GPT-5.5 · OpenAI", disabled: true },
+        { value: "codex/gpt-5.5", label: "GPT-5.5 · Codex", disabled: true },
       ],
     },
   ])(
@@ -616,17 +617,55 @@ describe("chat-model-select-state", () => {
 
     const resolved = resolveChatModelSelectState(state);
     expect(resolved.currentOverride).toBe("anthropic/claude-3-7-sonnet");
-    expect(resolved.defaultLabel).toBe("Default (Claude Sonnet · openrouter)");
+    expect(resolved.defaultLabel).toBe("Default (Claude Sonnet · OpenRouter)");
     expect(resolved.options).toEqual([
       {
         value: "anthropic/claude-3-7-sonnet",
-        label: "Claude Sonnet · anthropic",
+        label: "Claude Sonnet · Anthropic",
       },
       {
         value: "openrouter/claude-3-7-sonnet",
-        label: "Claude Sonnet · openrouter",
+        label: "Claude Sonnet · OpenRouter",
       },
     ]);
+  });
+
+  it("suffixes a duplicate model name with the configured provider name", () => {
+    onTestFinished(
+      registerProviderIconConfigSource(() => ({
+        models: { providers: { "custom-relay-eu-west-1-acme": { displayName: "Acme Relay" } } },
+      })),
+    );
+    const state = createChatModelState({
+      chatModelCatalog: createModelCatalog(
+        {
+          id: "gpt-5.5",
+          name: "GPT-5.5",
+          provider: "custom-relay-eu-west-1-acme",
+        },
+        {
+          id: "gpt-5.5",
+          name: "GPT-5.5",
+          provider: "openrouter",
+        },
+      ),
+      sessionsResult: createSessionsListResult({
+        model: "gpt-5.5",
+        modelProvider: "custom-relay-eu-west-1-acme",
+        defaultsModel: "gpt-5.5",
+        defaultsProvider: "openrouter",
+      }),
+    });
+
+    const resolved = resolveChatModelSelectState(state);
+    expect(resolved.options).toEqual([
+      {
+        value: "custom-relay-eu-west-1-acme/gpt-5.5",
+        label: "GPT-5.5 · Acme Relay",
+      },
+      { value: "openrouter/gpt-5.5", label: "GPT-5.5 · OpenRouter" },
+    ]);
+    expect(resolved.defaultLabel).toBe("Default (GPT-5.5 · OpenRouter)");
   });
 
   it("falls back to id and provider when duplicate names share the same provider", () => {

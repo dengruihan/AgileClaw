@@ -74,6 +74,24 @@ describe("buildModelOptions", () => {
     });
   });
 
+  it("suffixes a duplicate model name with the draft config's provider name", () => {
+    const relay = "custom-relay-eu-west-1-acme";
+    const config = {
+      agents: { defaults: { models: { [`${relay}/gpt-5.5`]: {}, "openrouter/gpt-5.5": {} } } },
+      models: { providers: { [relay]: { displayName: "Acme Relay" } } },
+    };
+
+    expect(
+      buildModelOptions(config, null, [
+        { provider: relay, id: "gpt-5.5", name: "GPT-5.5" },
+        { provider: "openrouter", id: "gpt-5.5", name: "GPT-5.5" },
+      ]).map(({ value, label }) => ({ value, label })),
+    ).toEqual([
+      { value: `${relay}/gpt-5.5`, label: "GPT-5.5 · Acme Relay" },
+      { value: "openrouter/gpt-5.5", label: "GPT-5.5 · OpenRouter" },
+    ]);
+  });
+
   it("keeps case-distinct catalog identities, configured aliases, and current values", () => {
     const lower = "custom/model-a";
     const upper = "custom/Model-A";

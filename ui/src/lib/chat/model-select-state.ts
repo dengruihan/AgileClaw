@@ -267,6 +267,8 @@ export function resolveChatModelSelectState(
             catalogModelAvailabilityKey(entry) === selectedKey ||
             catalogModelAvailabilityKey(entry) === defaultKey,
         );
+  // Provider suffixes name the provider as the picker rows do: the authored
+  // display name from the config the UI boots with, else the brand label.
   const displayLookup = buildCatalogDisplayLookup(visibleCatalog);
   const options = buildChatModelOptions(visibleCatalog, displayLookup);
   const currentOverride = resolveCatalogChatModelValue(

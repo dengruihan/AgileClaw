@@ -4,8 +4,8 @@ import type { ModelAuthStatusResult } from "../../../api/types.ts";
 import { icons } from "../../../components/icons.ts";
 import {
   hasProviderBrandIcon,
-  providerDisplayLabel,
   renderProviderBrandIcon,
+  resolveProviderDisplayName,
 } from "../../../components/provider-icon.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../../i18n/locales/en-model-controls.ts";
@@ -149,6 +149,19 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
   // The window shows one provider's models at a time; the selection decides
   // which one, and the provider flyout switches it.
   const leadingProvider = leadingModelOption?.provider ?? providerGroupEntries[0]?.[0];
+  // Provider rows carry the provider's display name; two visible providers that
+  // share one name stay distinguishable by falling back to their id.
+  const providerNames = new Map<string, string>();
+  const providerNameCounts = new Map<string, number>();
+  for (const [provider] of providerGroupEntries) {
+    const name = resolveProviderDisplayName(provider);
+    providerNames.set(provider, name);
+    providerNameCounts.set(name, (providerNameCounts.get(name) ?? 0) + 1);
+  }
+  const providerRowLabel = (provider: string) => {
+    const name = providerNames.get(provider) ?? resolveProviderDisplayName(provider);
+    return (providerNameCounts.get(name) ?? 0) > 1 ? `${name} · ${provider}` : name;
+  };
   const leadingGroupOptions =
     leadingProvider === undefined ? undefined : providerGroups.get(leadingProvider);
   const optionIndex = new Map(
@@ -263,7 +276,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                   >${renderChatModelProviderIcon(provider)}</span
                 >
                 <span class="chat-controls__provider-option-name"
-                  >${providerDisplayLabel(provider)}</span
+                  >${providerRowLabel(provider)}</span
                 >
                 ${renderProviderBadge(provider)}
                 <span class="chat-controls__model-option-action">
@@ -325,7 +338,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                 class="chat-controls__combined-model-row chat-controls__provider-row"
                 aria-disabled=${params.disabled ? "true" : "false"}
                 aria-label=${t("chat.modelControls.providerModels", {
-                  provider: providerDisplayLabel(leadingProvider),
+                  provider: providerRowLabel(leadingProvider),
                 })}
                 @click=${(event: MouseEvent) => {
                   if (params.disabled) {
@@ -337,7 +350,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                   >${renderChatModelProviderIcon(leadingProvider)}</span
                 >
                 <span class="chat-controls__combined-model-value"
-                  >${providerDisplayLabel(leadingProvider)}</span
+                  >${providerRowLabel(leadingProvider)}</span
                 >
                 ${renderProviderBadge(leadingProvider)}
                 <span class="chat-controls__inline-select-chevron" aria-hidden="true"
@@ -365,7 +378,7 @@ export function renderChatModelPicker(params: ChatModelPickerParams) {
                 data-chat-model-provider=${leadingProvider ?? nothing}
                 role="listbox"
                 aria-label=${t("chat.modelControls.providerModels", {
-                  provider: providerDisplayLabel(leadingProvider ?? ""),
+                  provider: providerRowLabel(leadingProvider ?? ""),
                 })}
               >
                 ${repeat(leadingGroupOptions, modelPickerOptionKey, (entry) =>

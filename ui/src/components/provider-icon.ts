@@ -7,7 +7,10 @@
 import { html } from "lit";
 import { inferControlUiPublicAssetPath } from "../app/public-assets.ts";
 import { takeGraphemes } from "../lib/graphemes.ts";
-import { readProviderIconConfig } from "../lib/provider-icon-source.ts";
+import {
+  readProviderIconConfig,
+  readProviderIconConfigEntries,
+} from "../lib/provider-icon-source.ts";
 import { icons } from "./icons.ts";
 import { isProviderIconId } from "./provider-icon-ids.ts";
 
@@ -79,6 +82,58 @@ export function formatRawProviderLabel(provider: string): string {
 /** Brand display name for a (normalized, lowercase) provider id. */
 export function providerDisplayLabel(provider: string): string {
   return PROVIDER_DISPLAY_LABELS[provider] ?? formatRawProviderLabel(provider);
+}
+
+/** Authored `models.providers.*.displayName` values, keyed by exact provider key. */
+export type ProviderDisplayNames = Readonly<Record<string, string | null | undefined>>;
+
+/**
+ * Name projection for callers that already hold a config object. Draft editors
+ * must read the draft through this instead of the saved config source.
+ */
+export function readConfiguredProviderNames(
+  config: Record<string, unknown> | null,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(readProviderIconConfigEntries(config)).flatMap(([provider, entry]) =>
+      entry.displayName ? [[provider, entry.displayName]] : [],
+    ),
+  );
+}
+
+function authoredProviderName(names: ProviderDisplayNames, provider: string): string {
+  const exact = names[provider]?.trim();
+  if (exact) {
+    return exact;
+  }
+  const normalized = provider.toLowerCase();
+  for (const [key, name] of Object.entries(names)) {
+    if (key.trim().toLowerCase() === normalized) {
+      return name?.trim() ?? "";
+    }
+  }
+  return "";
+}
+
+/**
+ * Name a surface shows for a provider: the authored display name from its
+ * `models.providers` entry when one exists, else the brand label. Callers that
+ * already hold a config object pass `readConfiguredProviderNames(config)`; the
+ * rest read the config source that provider icons also use, so a provider's
+ * name and mark always come from one entry.
+ */
+export function resolveProviderDisplayName(
+  provider: string,
+  authoredNames?: ProviderDisplayNames | null,
+): string {
+  const key = provider.trim();
+  if (!key) {
+    return "";
+  }
+  const authored = authoredNames
+    ? authoredProviderName(authoredNames, key)
+    : readProviderIconConfig(key)?.displayName;
+  return authored || providerDisplayLabel(key.toLowerCase());
 }
 
 /** Provider id from a canonical `provider/model` reference, or null when absent. */
