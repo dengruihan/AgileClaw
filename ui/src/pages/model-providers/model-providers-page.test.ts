@@ -731,4 +731,26 @@ describe("ModelProvidersPage provider templates", () => {
     ).toContain("Refresh and try again");
     expect(page.querySelector("openclaw-provider-manager")).toBeNull();
   });
+
+  it("refuses to start creation while the provider list is still loading", async () => {
+    const harness = createHarness("main");
+    const release = harness.deferNextAuthStatus();
+    const page = appendPage(harness.context);
+    // Wait for the shared config load to settle so the add entry is enabled; the
+    // provider list stays in flight, leaving the page without reservation facts.
+    await waitForFast(() => expect(addProviderEntry(page).disabled).toBe(false));
+    expect(page.data).toBeNull();
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+
+    // The refusal has to stay visible in the page shell: a picker opened here
+    // would hide the message behind its backdrop and offer disabled rows.
+    expect(page.querySelector("[data-provider-template-picker]")).toBeNull();
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+    expect(page.messages.connection?.text).toContain("Refresh and try again");
+
+    release();
+    await page.updateComplete;
+  });
 });

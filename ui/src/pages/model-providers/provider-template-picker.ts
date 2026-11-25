@@ -5,8 +5,6 @@
 import {
   PROVIDER_TEMPLATE_GROUPS,
   PROVIDER_TEMPLATES,
-  type ProviderTemplate,
-  type ProviderTemplateGroup,
   type ProviderTemplateName,
 } from "@openclaw/model-catalog-core/provider-templates";
 import { html, nothing } from "lit";
@@ -55,7 +53,7 @@ export function localizedTemplateName(name: ProviderTemplateName, locale: string
  * plus the path, with trailing slashes dropped. The path must stay because
  * templates share hosts across different API roots (Zhipu Coding vs API plans).
  */
-export function normalizeTemplateEndpoint(raw: string | undefined): string {
+function normalizeTemplateEndpoint(raw: string | undefined): string {
   const value = raw?.trim();
   if (!value) {
     return "";
@@ -86,19 +84,14 @@ function endpointOwners(
 export function buildProviderTemplateSections(options: {
   locale: string;
   occupied: ReadonlyMap<string, string | undefined>;
-  templates?: readonly ProviderTemplate[];
-  groups?: readonly ProviderTemplateGroup[];
 }): ProviderTemplatePickerSection[] {
-  const templates = options.templates ?? PROVIDER_TEMPLATES;
-  const groups = options.groups ?? PROVIDER_TEMPLATE_GROUPS;
   const owners = endpointOwners(options.occupied);
-  return [...groups]
+  return [...PROVIDER_TEMPLATE_GROUPS]
     .toSorted((left, right) => left.order - right.order)
     .map((group) => ({
       id: group.id,
       label: localizedTemplateName(group.name, options.locale),
-      rows: templates
-        .filter((template) => template.group === group.id)
+      rows: PROVIDER_TEMPLATES.filter((template) => template.group === group.id)
         .toSorted(
           (left, right) =>
             left.order - right.order ||

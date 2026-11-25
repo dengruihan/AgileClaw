@@ -7,7 +7,6 @@ import { PROVIDER_ICON_IDS } from "../../components/provider-icon-ids.ts";
 import {
   buildProviderTemplateSections,
   localizedTemplateName,
-  normalizeTemplateEndpoint,
   renderProviderTemplatePicker,
   type ProviderTemplatePickerProps,
 } from "./provider-template-picker.ts";
@@ -80,7 +79,8 @@ describe("buildProviderTemplateSections", () => {
       occupied: new Map([
         // Same host as the Coding Plan row, different API root.
         ["custom-open-bigmodel-cn", "https://open.bigmodel.cn/api/paas/v4"],
-        ["custom-api-deepseek-com", "https://api.deepseek.com/"],
+        // Mixed host case and a trailing slash still name the same endpoint.
+        ["custom-api-deepseek-com", "https://API.DeepSeek.com/"],
       ]),
     });
     const rows = sections.flatMap((section) => section.rows);
@@ -90,17 +90,6 @@ describe("buildProviderTemplateSections", () => {
     expect(added["zhipu-coding-cn"]).toBeUndefined();
     expect(added.deepseek).toBe("custom-api-deepseek-com");
     expect(added["kimi-cn"]).toBeUndefined();
-  });
-
-  it("normalizes the endpoint host and trailing slash but keeps the path", () => {
-    expect(normalizeTemplateEndpoint("https://API.DeepSeek.com/")).toBe("api.deepseek.com");
-    expect(normalizeTemplateEndpoint(" https://api.z.ai/api/paas/v4/ ")).toBe(
-      "api.z.ai/api/paas/v4",
-    );
-    expect(normalizeTemplateEndpoint("https://api.z.ai/api/coding/paas/v4")).not.toBe(
-      normalizeTemplateEndpoint("https://api.z.ai/api/paas/v4"),
-    );
-    expect(normalizeTemplateEndpoint(undefined)).toBe("");
   });
 });
 

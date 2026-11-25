@@ -531,6 +531,9 @@ suite.define(() => {
         await headerAdd.dispatchEvent("click");
         await emptyAdd.dispatchEvent("click");
         expect(await page.locator(".provider-manager--inline").count()).toBe(0);
+        // A synthetic click must not start the flow either: the template picker
+        // stays closed, so the refusal message remains the visible outcome.
+        expect(await page.locator("[data-provider-template-picker]").count()).toBe(0);
         expect(await gateway.getRequests("config.patch")).toHaveLength(0);
         if (recordVisuals) {
           await page.screenshot({

@@ -189,6 +189,13 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       void page.selectProvider({ provider: card.configKey ?? card.id, view: "settings" });
     },
     onCustomProvider: () => {
+      if (!page.providerReservationsKnown()) {
+        // No reservation facts yet (initial load, agent switch): keep the old
+        // refusal, whose message renders in the page shell, instead of opening
+        // a picker whose creation rows could only be disabled.
+        void page.selectProvider({ provider: "", view: "create" });
+        return;
+      }
       if (!providerCreationDisabled) {
         page.templatePickerOpen = true;
       }
