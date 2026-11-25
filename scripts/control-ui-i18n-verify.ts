@@ -46,7 +46,7 @@ function toRepoPath(filePath: string): string {
 export function formatControlUiCatalogFallbackDriftError(): string {
   return [
     "control-ui catalog fallback baseline drift detected.",
-    "Run `pnpm ui:i18n:sync` (included in `pnpm release:prep`) and commit the generated locale artifacts.",
+    "Run `pnpm ui:i18n:sync`, commit the generated locale artifacts, then run `pnpm ui:i18n:check`.",
   ].join("\n");
 }
 

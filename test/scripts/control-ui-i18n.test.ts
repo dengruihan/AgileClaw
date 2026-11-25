@@ -490,11 +490,12 @@ describe("control-ui-i18n generated ownership", () => {
 });
 
 describe("control-ui-i18n catalog validation", () => {
-  it("points strict catalog drift at the generated release repair", () => {
+  it("points strict catalog drift at sync then check", () => {
     const message = formatControlUiCatalogFallbackDriftError();
 
     expect(message).toContain("pnpm ui:i18n:sync");
-    expect(message).toContain("pnpm release:prep");
+    expect(message).toContain("pnpm ui:i18n:check");
+    expect(message).not.toContain("pnpm release:prep");
     expect(message).not.toContain("pnpm ui:i18n:baseline");
   });
 
