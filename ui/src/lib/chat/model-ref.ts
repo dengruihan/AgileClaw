@@ -207,7 +207,9 @@ type ChatModelDisplayLookup = ReadonlyMap<string, string>;
 /**
  * Labels every catalog row, suffixing the provider name only when the friendly
  * name alone would not identify the row. A provider id appears only when it is
- * what separates the rows: several providers that resolve to one name.
+ * what separates the rows: several providers that resolve to one name. Without
+ * `authoredProviderNames` the names come from the registered provider config
+ * source, the same one provider icons read.
  */
 export function buildCatalogDisplayLookup(
   catalog: ModelCatalogEntry[],

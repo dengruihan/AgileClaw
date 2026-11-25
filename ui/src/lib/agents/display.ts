@@ -411,11 +411,12 @@ export function buildModelOptions(
       }
       return { ...entry, alias: alias || undefined };
     });
-    // The picker edits a draft config, so its provider names come from that draft
-    // rather than the saved config the shared resolver reads by default.
+    // The picker edits a draft config, so its provider names come from that draft.
+    // Without a draft (restricted or retired catalog) the shared resolver reads the
+    // saved config its provider rows also read.
     const displayLookup = buildCatalogDisplayLookup(
       displayCatalog,
-      readConfiguredProviderNames(configForm),
+      configForm ? readConfiguredProviderNames(configForm) : undefined,
     );
     for (const entry of displayCatalog) {
       const option = buildChatModelOptionFromLookup(entry, displayLookup);

@@ -1,5 +1,5 @@
 // Control UI tests cover agents utils behavior.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 import { formatAgentRuntimeLabel } from "../../../../src/shared/agent-runtime-display.js";
 import { AVATAR_MAX_DATA_URL_CHARS } from "../../../../src/shared/avatar-limits.js";
 import {
@@ -8,6 +8,7 @@ import {
   resolveAssistantTextAvatar,
   resolveChatAvatarRenderUrl,
 } from "../avatar.ts";
+import { registerProviderIconConfigSource } from "../provider-icon-source.ts";
 import {
   buildAgentContext,
   buildModelOptions,
@@ -83,6 +84,25 @@ describe("buildModelOptions", () => {
 
     expect(
       buildModelOptions(config, null, [
+        { provider: relay, id: "gpt-5.5", name: "GPT-5.5" },
+        { provider: "openrouter", id: "gpt-5.5", name: "GPT-5.5" },
+      ]).map(({ value, label }) => ({ value, label })),
+    ).toEqual([
+      { value: `${relay}/gpt-5.5`, label: "GPT-5.5 · Acme Relay" },
+      { value: "openrouter/gpt-5.5", label: "GPT-5.5 · OpenRouter" },
+    ]);
+  });
+
+  it("uses the saved provider name when the picker has no draft config", () => {
+    const relay = "custom-relay-apac-prod-01";
+    onTestFinished(
+      registerProviderIconConfigSource(() => ({
+        models: { providers: { [relay]: { displayName: "Acme Relay" } } },
+      })),
+    );
+
+    expect(
+      buildModelOptions(null, null, [
         { provider: relay, id: "gpt-5.5", name: "GPT-5.5" },
         { provider: "openrouter", id: "gpt-5.5", name: "GPT-5.5" },
       ]).map(({ value, label }) => ({ value, label })),
