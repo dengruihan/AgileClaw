@@ -10,6 +10,7 @@ import {
   classifySystemAgentApprovalText,
   type SystemAgentApprovalIntent,
 } from "./operator-approval.js";
+import { resolveSetupInferenceProbeOutputTokens } from "./setup-inference-probe-work.js";
 import {
   resolveSystemAgentVerifiedInferenceRoute,
   type SystemAgentVerifiedInferenceBinding,
@@ -34,7 +35,6 @@ export type SystemAgentApprovalClassifier = (params: {
 }) => Promise<SystemAgentApprovalIntent>;
 
 const APPROVAL_INTENT_TIMEOUT_MS = 10_000;
-const APPROVAL_INTENT_MAX_TOKENS = 8;
 
 const APPROVAL_INTENT_SYSTEM_PROMPT = [
   "You classify one chat message from a user who was just asked to approve a pending configuration change.",
@@ -142,7 +142,11 @@ export async function classifySystemAgentApprovalIntent(
                   ],
                 },
                 options: {
-                  maxTokens: APPROVAL_INTENT_MAX_TOKENS,
+                  // A one-word answer still needs a reasoning-safe floor: a
+                  // reasoning-first judge spends a small cap on thinking and
+                  // returns no text, so the classifier would fall back to
+                  // "other" and leave the pending change unarmed.
+                  maxTokens: resolveSetupInferenceProbeOutputTokens(route),
                   signal: controller.signal,
                 },
               });
