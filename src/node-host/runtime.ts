@@ -1,67 +1,41 @@
 /** Transport-independent CLI node-host runtime shared by Gateway and app workers. */
-import type { CloudflareAccessCredentials } from "../../packages/gateway-client/src/cloudflare-access.js";
 import type { OpenClawConfig } from "../config/config.js";
 import { getRuntimeConfig } from "../config/config.js";
-import { NODE_CLAUDE_SKILLS_MESSAGE_BYTES } from "../infra/node-claude-skill-protocol.js";
-import {
-  NODE_AGENT_CLI_CLAUDE_RUN_COMMAND,
-  NODE_DUPLEX_INVOKE_IDLE_TIMEOUT_MS,
-  NODE_SYSTEM_RUN_COMMAND,
-  type NodeExecutorProfile,
-} from "../infra/node-commands.js";
-import { createNodeDuplexEndpoint } from "../infra/node-duplex-framing.js";
+import type { NodeExecutorProfile } from "../infra/node-commands.js";
 import type { NodeWorkerCapacitySnapshot } from "../infra/node-runner-inventory.js";
 import { ensureOpenClawCliOnPath } from "../infra/path-env.js";
 import { ensureTerminalUploadCleanup } from "../infra/terminal-file-upload.js";
 import { logDebug } from "../logger.js";
-import type { OpenClawPluginNodeHostCommandIo } from "../plugins/types.js";
-import type { OpenClawPluginNodeHostCommandContext } from "../plugins/types.node-host.js";
-import { BoundedBuffer } from "../shared/bounded-buffer.js";
-import { createDeferredCore } from "../shared/deferred.js";
-import { NODE_DESKTOP_STREAM_COMMAND } from "../shared/node-desktop-stream.js";
-import { createNodeInvokeResponder, type NodeHostClient } from "./client.js";
+import type { NodeHostClient } from "./client.js";
 import { resolveNodeDesktopHostConfig } from "./desktop-stream-command.js";
-import { requestsClaudeNodeSkillRuntime } from "./invoke-agent-cli-claude-params.js";
-import { handleInvoke, type NodeInvokeRequestPayload } from "./invoke.js";
-import { startNodeHostMcpManager, type NodeHostMcpManager } from "./mcp.js";
-import { buildNodeEventParams } from "./node-event-params.js";
-import {
-  dispatchNodeInvokeInput,
-  registerNodeInvokeInputHandler,
-  type NodeInvokeInputTarget,
-} from "./node-invoke-input.js";
-import { createNodeInvokeProgressWriter } from "./node-invoke-progress.js";
 import type { NodeOccupancyOwner } from "./node-occupancy.js";
-import { NodeWorkerBundleInstaller } from "./node-worker-bundle-installer.js";
 import { resolveNodeWorkerContainerEngine } from "./node-worker-container-engine.js";
 import { NodeWorkerContainerContextMismatchError } from "./node-worker-container-lifecycle.js";
 import { createNodeWorkerSupervisor } from "./node-worker-supervisor.js";
 import { NodeWorkerWorkspaceRuntime } from "./node-worker-workspace.js";
 import {
   ensureNodeHostPluginRegistry,
-  hasRegisteredNodeHostCommandActiveWork,
-  isRegisteredNodeHostCommandDuplex,
   listRegisteredNodeHostCapsAndCommands,
-  notifyRegisteredNodeHostCommandDisconnect,
-  watchRegisteredNodeHostCommandAvailability,
 } from "./plugin-node-host.js";
+import {
+  startActiveNodeHostRuntime,
+  type ActiveNodeHostRuntime,
+  type WorkerHostingHandoff,
+} from "./runtime-active.js";
 import {
   assertNodeHostManifestUsable,
   buildNodeHostManifest,
   createNodeHostInventory,
   resolveNodeCommandSurface,
-  sameNodeHostManifest,
-  type NodeHostManifest,
   type NodeHostInventory,
+  type NodeHostManifest,
 } from "./runtime-manifest.js";
-import { createNodeOccupancyRuntime, type NodeOccupancyGrant } from "./runtime-occupancy.js";
-import { resolveExecutableTrustPathFromEnv, SkillBinsCache } from "./runtime-skill-bins.js";
-import { createNodeHostUpdatePause } from "./runtime-update-pause.js";
+import { createNodeOccupancyRuntime } from "./runtime-occupancy.js";
+import { resolveExecutableTrustPathFromEnv } from "./runtime-skill-bins.js";
 import { scanNodeHostedSkills } from "./skills.js";
 export type { NodeHostInventory } from "./runtime-manifest.js";
 
 const DEFAULT_NODE_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
-const WORKER_INITIALIZATION_RETRY_MS = 5_000;
 
 type PreparedNodeHostRuntime = {
   manifest: NodeHostManifest;
@@ -81,29 +55,6 @@ type PreparedNodeHostRuntime = {
   }): ActiveNodeHostRuntime;
 };
 
-type ActiveNodeHostRuntime = {
-  invoke(frame: NodeInvokeRequestPayload): Promise<void>;
-  handleInput(invokeId: string, seq: number, payloadJSON: string): void;
-  cancel(invokeId: string): void;
-  cancelAll(): Promise<void>;
-  tryPauseForUpdate(): Promise<boolean>;
-  resumeAfterUpdate(): void;
-  updateGatewayConnection(connection?: {
-    url: string;
-    tlsFingerprint?: string;
-    cloudflareAccess?: CloudflareAccessCredentials;
-  }): void;
-  close(): Promise<void>;
-};
-
-type ActiveNodeInvoke = {
-  controller: AbortController;
-  framedFailure?: Error;
-  input?: NodeInvokeInputTarget;
-};
-
-const MAX_PENDING_INVOKE_INPUT_BYTES = 64 * 1024;
-
 function ensureNodePathEnv(): string {
   ensureOpenClawCliOnPath({ pathEnv: process.env.PATH ?? "" });
   const current = process.env.PATH ?? "";
@@ -112,19 +63,6 @@ function ensureNodePathEnv(): string {
   }
   process.env.PATH = DEFAULT_NODE_PATH;
   return DEFAULT_NODE_PATH;
-}
-
-async function settleNodeHostCleanup(owners: Array<Promise<unknown> | undefined>): Promise<void> {
-  const results = await Promise.allSettled(owners.filter((owner) => owner !== undefined));
-  const errors = [
-    ...new Set(results.flatMap((result) => (result.status === "rejected" ? [result.reason] : []))),
-  ];
-  if (errors.length === 1) {
-    throw errors[0];
-  }
-  if (errors.length > 1) {
-    throw new AggregateError(errors, "node-host runtime cleanup failed");
-  }
 }
 
 export async function prepareNodeHostRuntime(params?: {
@@ -199,16 +137,15 @@ export async function prepareNodeHostRuntime(params?: {
   let preparedContainerSupervisor: ReturnType<typeof createNodeWorkerSupervisor> | undefined;
   let preparedContainerCapacity: NodeWorkerCapacitySnapshot | undefined;
   let preparedContainerInitialized = false;
-  let workerCleanupIncomplete = false;
-  let publishContainerCapacity: ((capacity: NodeWorkerCapacitySnapshot) => void) | undefined;
+  const workerHosting: WorkerHostingHandoff = { cleanupIncomplete: false };
   let workerHostingDisabledReason: string | undefined;
   const disablePreparedWorkerHosting = async (error: unknown) => {
     let failure = error;
-    workerCleanupIncomplete ||= error instanceof NodeWorkerContainerContextMismatchError;
+    workerHosting.cleanupIncomplete ||= error instanceof NodeWorkerContainerContextMismatchError;
     try {
       await preparedContainerSupervisor?.close();
     } catch (closeError) {
-      workerCleanupIncomplete = true;
+      workerHosting.cleanupIncomplete = true;
       if (closeError !== error) {
         failure = new Error(`${String(error)}; supervisor cleanup failed: ${String(closeError)}`);
       }
@@ -245,7 +182,7 @@ export async function prepareNodeHostRuntime(params?: {
           : {}),
         onCapacityChanged: (capacity) => {
           preparedContainerCapacity = capacity;
-          publishContainerCapacity?.(capacity);
+          workerHosting.publishCapacity?.(capacity);
         },
       });
       try {
@@ -288,466 +225,33 @@ export async function prepareNodeHostRuntime(params?: {
     ...(workerHostingDisabledReason ? { workerHostingDisabledReason } : {}),
     initialInventory,
     occupancy: occupancyRuntime?.owner,
-    start({
-      client,
-      onInventoryChanged,
-      onManifestChanged,
-      onRunnerCapacityChanged,
-      onWorkerHostingDisabled,
-    }) {
-      const mcpAbort = new AbortController();
-      let closing = false;
-      let inFlightInvokes = 0;
-      let connectionGeneration = 0;
-      let closePromise: Promise<void> | undefined;
-      let supervisorClose: Promise<void> | undefined;
-      let mcpClose: Promise<void> | undefined;
-      let initializationRetry: ReturnType<typeof setTimeout> | undefined;
-      const workerWorkspace = preparedWorkerWorkspace;
-      const workerBundleInstaller = workerRunsEnabled
-        ? new NodeWorkerBundleInstaller({ env })
-        : undefined;
-      let workerSupervisor =
-        preparedContainerSupervisor ??
-        (workerRunsEnabled
-          ? createNodeWorkerSupervisor({
-              env,
-              capacity: config.nodeHost?.workerRuns?.capacity,
-              onCapacityChanged: onRunnerCapacityChanged,
-              workspace: workerWorkspace,
-            })
-          : undefined);
-      if (preparedContainerSupervisor) {
-        publishContainerCapacity = onRunnerCapacityChanged;
-        if (preparedContainerCapacity) {
-          onRunnerCapacityChanged?.(preparedContainerCapacity);
-        }
-      }
-      const initializeWorkerSupervisor = () => {
-        const supervisor = workerSupervisor;
-        if (!supervisor || closing) {
-          return;
-        }
-        void supervisor.initialize().catch(async (error: unknown) => {
-          logDebug(`node-host: worker capacity reconciliation failed: ${String(error)}`);
-          if (closing || workerSupervisor !== supervisor) {
-            return;
-          }
-          if (error instanceof NodeWorkerContainerContextMismatchError) {
-            // Closing this supervisor cannot retire claims on a different daemon.
-            workerCleanupIncomplete = true;
-            workerSupervisor = undefined;
-            onWorkerHostingDisabled?.(error.message);
-            await supervisor.close().catch((closeError: unknown) => {
-              logDebug(`node-host: worker supervisor cleanup failed: ${String(closeError)}`);
-            });
-            return;
-          }
-          initializationRetry = setTimeout(() => {
-            initializationRetry = undefined;
-            initializeWorkerSupervisor();
-          }, WORKER_INITIALIZATION_RETRY_MS);
-          initializationRetry.unref?.();
-        });
-      };
-      if (workerSupervisor && !preparedContainerInitialized) {
-        initializeWorkerSupervisor();
-      }
-      let skillBins = new SkillBinsCache(client, pathEnv);
-      const activeInvokes = new Map<string, ActiveNodeInvoke>();
-      occupancyRuntime?.attachClient(client);
-      let disconnectCleanup: Promise<void> = Promise.resolve();
-      let pendingDisconnectCleanups = 0;
-      let disconnectCleanupFailed = false;
-      const pluginCommandContext: OpenClawPluginNodeHostCommandContext = {
-        sendNodeEvent: async (event, payload) =>
-          await client.request("node.event", buildNodeEventParams(event, payload)),
-        ...(workerWorkspace
-          ? {
-              acquireManagedWorkspaceAsync: (request) =>
-                workerWorkspace.acquireManagedWorkspaceAsync(request),
-              acquireManagedWorkspace: (request) =>
-                workerWorkspace.acquireManagedWorkspace(request),
-            }
-          : {}),
-      };
-      let currentPluginNodeHost = pluginNodeHost;
-      let currentManifest = manifest;
-      let gatewayConnection:
-        | {
-            url: string;
-            tlsFingerprint?: string;
-            cloudflareAccess?: CloudflareAccessCredentials;
-          }
-        | undefined;
-      let manager: NodeHostMcpManager | undefined;
-      let mcpStartupComplete = Boolean(commandAllowlist);
-      const publishInventory = () =>
-        onInventoryChanged?.(
-          createNodeHostInventory(
-            skills,
-            currentPluginNodeHost.nodePluginTools,
-            manager?.descriptors,
-          ),
-        );
-      const startup = commandAllowlist
-        ? Promise.resolve(undefined)
-        : startNodeHostMcpManager(config.nodeHost?.mcp?.servers, {
-            signal: mcpAbort.signal,
-            onDescriptorsChanged: () => {
-              if (!closing && manager) {
-                publishInventory();
-              }
-            },
-          }).then((resolved) => {
-            manager = resolved;
-            mcpStartupComplete = true;
-            if (!closing) {
-              publishInventory();
-            }
-            return resolved;
-          });
-      const refreshAvailability = () => {
-        if (closing) {
-          return;
-        }
-        const nextPluginNodeHost = resolvePluginNodeHost();
-        const nextManifest = buildManifest(nextPluginNodeHost);
-        currentPluginNodeHost = nextPluginNodeHost;
-        if (!sameNodeHostManifest(currentManifest, nextManifest)) {
-          currentManifest = nextManifest;
-          onManifestChanged?.(nextManifest);
-        }
-        publishInventory();
-      };
-      const stopAvailabilityWatch = onManifestChanged
-        ? watchRegisteredNodeHostCommandAvailability(
-            availabilityContext,
-            refreshAvailability,
-            commandAllowlist,
-          )
-        : async () => {};
-      // The watcher cannot replay a socket change between preparation and
-      // registration. Resolve once after attachment to close that race.
-      if (onManifestChanged) {
-        refreshAvailability();
-      }
-      const updatePause = createNodeHostUpdatePause({
-        hasLocalActiveWork: () =>
-          closing ||
-          !mcpStartupComplete ||
-          inFlightInvokes > 0 ||
-          pendingDisconnectCleanups > 0 ||
-          disconnectCleanupFailed ||
-          hasRegisteredNodeHostCommandActiveWork() ||
-          workerCleanupIncomplete ||
-          (occupancyRuntime?.hasActiveWork() ?? false),
-        hasWorkerActiveWork: async () => {
-          if (await workerSupervisor?.hasActiveWork()) {
-            return true;
-          }
-          await workerSupervisor?.retireIdle();
-          return false;
-        },
+    start(startParams) {
+      return startActiveNodeHostRuntime({
+        ...startParams,
+        env,
+        config,
+        commandAllowlist,
+        skills,
+        pathEnv,
+        platform,
+        duplexEnabled,
+        installedAppsSharingEnabled,
+        desktopHostConfig,
+        claudePath,
+        ephemeral: params?.ephemeral === true,
+        occupancyRuntime,
+        workerRunsEnabled,
+        preparedWorkerWorkspace,
+        preparedContainerSupervisor,
+        preparedContainerCapacity,
+        preparedContainerInitialized,
+        workerHosting,
+        pluginNodeHost,
+        manifest,
+        availabilityContext,
+        resolvePluginNodeHost,
+        buildManifest,
       });
-      return {
-        async invoke(frame) {
-          if (updatePause.isPaused) {
-            await createNodeInvokeResponder(client, frame).error(
-              "UNAVAILABLE",
-              "node host is updating; retry shortly",
-            );
-            return;
-          }
-          // Admission precedes the first await; disconnects and duplicate IDs do
-          // not release update ownership before the original command settles.
-          inFlightInvokes += 1;
-          try {
-            const generation = connectionGeneration;
-            try {
-              await disconnectCleanup;
-            } catch {
-              if (!closing && generation === connectionGeneration) {
-                await createNodeInvokeResponder(client, frame).error(
-                  "UNAVAILABLE",
-                  "Node disconnect cleanup failed. Reconnect the node to retry cleanup.",
-                );
-              }
-              return;
-            }
-            if (closing || generation !== connectionGeneration) {
-              return;
-            }
-            // Enforce the declaration locally too: a paired Gateway cannot widen
-            // an operator-restricted surface by sending a hidden command directly.
-            if (commandAllowlist && !currentManifest.commands.includes(frame.command)) {
-              await createNodeInvokeResponder(client, frame).error(
-                "UNAVAILABLE",
-                "command not advertised by this node",
-              );
-              return;
-            }
-            let leaseAdmission: NodeOccupancyGrant | undefined;
-            if (occupancyRuntime) {
-              // Lifecycle commands answer here; every other command passes
-              // admission except the operator approval policy, which governs
-              // the device rather than a turn.
-              const outcome = await occupancyRuntime.beginInvoke(
-                frame,
-                createNodeInvokeResponder(client, frame),
-              );
-              if (outcome.handoff === "answered") {
-                return;
-              }
-              leaseAdmission = outcome.admission;
-            }
-            const claudeSkills =
-              frame.command === NODE_AGENT_CLI_CLAUDE_RUN_COMMAND &&
-              requestsClaudeNodeSkillRuntime(frame.paramsJSON);
-            const duplexCommand =
-              duplexEnabled && (claudeSkills || isRegisteredNodeHostCommandDuplex(frame.command));
-            const streamableInvoke = duplexCommand || frame.command === NODE_DESKTOP_STREAM_COMMAND;
-            // system.run streams only when its params request it; the writer
-            // stays inert for invokes that never write a chunk.
-            const progressEnabled = streamableInvoke || frame.command === NODE_SYSTEM_RUN_COMMAND;
-            const controller = new AbortController();
-            // Every command must remain cancellable after dispatch; only duplex
-            // commands own ordered input and its pre-spawn buffer.
-            const input: NodeInvokeInputTarget | undefined = duplexCommand
-              ? {
-                  nextInputSeq: 0,
-                  pendingInput: new BoundedBuffer<string>(
-                    MAX_PENDING_INVOKE_INPUT_BYTES,
-                    {
-                      mode: "fail-closed",
-                      onOverflow: () =>
-                        controller.abort(
-                          new Error("terminal input exceeded the 64 KiB pre-spawn buffer"),
-                        ),
-                    },
-                    (payload) => Buffer.byteLength(payload, "utf8"),
-                  ),
-                  inputFailed: false,
-                }
-              : undefined;
-            const active: ActiveNodeInvoke = { controller, ...(input ? { input } : {}) };
-            // Redelivered IDs must not orphan the original command's process or
-            // let its cleanup unregister the replacement invocation.
-            activeInvokes.get(frame.id)?.controller.abort();
-            activeInvokes.set(frame.id, active);
-            const progress = progressEnabled
-              ? createNodeInvokeProgressWriter({
-                  client,
-                  frame,
-                  idleTimeoutMs: NODE_DUPLEX_INVOKE_IDLE_TIMEOUT_MS,
-                  onError: () => controller.abort(),
-                })
-              : undefined;
-            if (duplexCommand) {
-              progress?.startHeartbeats();
-            }
-            const framedIo =
-              input && progress
-                ? createNodeDuplexEndpoint({
-                    ...(claudeSkills ? { maxMessageBytes: NODE_CLAUDE_SKILLS_MESSAGE_BYTES } : {}),
-                    sendFrame: async (payload) => await progress.write(JSON.stringify(payload)),
-                    onError: (error) => {
-                      active.framedFailure = error;
-                      controller.abort(error);
-                    },
-                  })
-                : undefined;
-            if (framedIo) {
-              controller.signal.addEventListener("abort", () => framedIo.close(), { once: true });
-            }
-            let framedInputRegistered = false;
-            const pluginCommandIo: OpenClawPluginNodeHostCommandIo | undefined =
-              input && progress && framedIo
-                ? {
-                    signal: controller.signal,
-                    emitChunk: async (chunk) => await progress.write(chunk),
-                    onInput: (callback) => {
-                      if (activeInvokes.get(frame.id) === active) {
-                        registerNodeInvokeInputHandler(input, callback);
-                      }
-                    },
-                    frames: {
-                      send: async (message) => await framedIo.send(message),
-                      onMessage: (callback) => {
-                        const unsubscribe = framedIo.onMessage(callback);
-                        if (!framedInputRegistered) {
-                          framedInputRegistered = true;
-                          registerNodeInvokeInputHandler(input, (payloadJSON) => {
-                            try {
-                              framedIo.receive(payloadJSON);
-                            } catch (error) {
-                              controller.abort(error);
-                            }
-                          });
-                          void framedIo.sendReady().catch(controller.abort.bind(controller));
-                        }
-                        return unsubscribe;
-                      },
-                    },
-                  }
-                : undefined;
-            // A lease-tagged exec keeps occupancy until its process tree is
-            // extinct; revoke and disconnect tree-kill through this handle.
-            const settleLeaseProcess = occupancyRuntime?.registerLeaseProcessForInvoke({
-              command: frame.command,
-              admission: leaseAdmission,
-              abort: () => controller.abort(),
-            });
-            const dispatch = async () => {
-              try {
-                await handleInvoke(frame, client, skillBins, manager, {
-                  ...(claudePath ? { claudePath } : {}),
-                  signal: controller.signal,
-                  pluginCommandIo,
-                  flushPluginCommandIo: framedIo?.drain,
-                  canReportAbortedFailure: (error) =>
-                    controller.signal.aborted &&
-                    error === active.framedFailure &&
-                    error === controller.signal.reason &&
-                    activeInvokes.get(frame.id) === active,
-                  ...(gatewayConnection?.url ? { gatewayUrl: gatewayConnection.url } : {}),
-                  ...(gatewayConnection?.tlsFingerprint
-                    ? { gatewayTlsFingerprint: gatewayConnection.tlsFingerprint }
-                    : {}),
-                  ...(gatewayConnection?.cloudflareAccess
-                    ? { gatewayCloudflareAccess: gatewayConnection.cloudflareAccess }
-                    : {}),
-                  desktopHostConfig,
-                  ...(progress ? { emitProgress: (text) => progress.write(text) } : {}),
-                  installedAppsSharingEnabled,
-                  installedAppsPlatform: platform,
-                  pluginCommandContext,
-                  ...(params?.ephemeral === true && !commandAllowlist
-                    ? {
-                        workerComputer: { capabilities: () => resolvePluginNodeHost().computerUse },
-                      }
-                    : {}),
-                  ...(workerBundleInstaller ? { workerBundleInstaller } : {}),
-                  ...(workerSupervisor ? { workerSupervisor } : {}),
-                  ...(workerWorkspace ? { workerWorkspace } : {}),
-                });
-              } finally {
-                framedIo?.close();
-                progress?.stop();
-                await progress?.flush();
-                if (activeInvokes.get(frame.id) === active) {
-                  activeInvokes.delete(frame.id);
-                }
-              }
-            };
-            try {
-              // Interactive control surfaces share one device resource; the gate
-              // serializes them while exec and file commands stay parallel.
-              if (occupancyRuntime?.shouldSerializeControl(frame.command)) {
-                await occupancyRuntime.runControl(dispatch);
-              } else {
-                await dispatch();
-              }
-            } finally {
-              settleLeaseProcess?.();
-            }
-          } finally {
-            inFlightInvokes -= 1;
-          }
-        },
-        handleInput(invokeId, seq, payloadJSON) {
-          const input = activeInvokes.get(invokeId)?.input;
-          if (!dispatchNodeInvokeInput(input, seq, payloadJSON)) {
-            logDebug(`node-host: dropped inactive or duplicate input for invoke ${invokeId}`);
-          }
-        },
-        cancel(invokeId) {
-          activeInvokes.get(invokeId)?.controller.abort();
-        },
-        cancelAll() {
-          connectionGeneration += 1;
-          // Retired refreshes may still finish; their cache must never serve the next connection.
-          skillBins = new SkillBinsCache(client, pathEnv);
-          // Close can reenter from an abort listener and must see this cleanup barrier.
-          pendingDisconnectCleanups += 1;
-          const idleCleanup = workerSupervisor?.retireIdle();
-          // Disconnect kills holder-owned processes and clears occupancy unless
-          // detached lease processes still keep it alive.
-          const occupancyCleanup = occupancyRuntime?.handleDisconnect();
-          const cleanup = settleNodeHostCleanup([
-            disconnectCleanup.catch(() => {}).then(notifyRegisteredNodeHostCommandDisconnect),
-            idleCleanup,
-            occupancyCleanup,
-          ]).finally(() => {
-            pendingDisconnectCleanups -= 1;
-          });
-          disconnectCleanup = cleanup;
-          // Logging observes the failure; invocation and shutdown retain the rejected result.
-          void cleanup.then(
-            () => {
-              if (disconnectCleanup === cleanup) {
-                disconnectCleanupFailed = false;
-              }
-            },
-            (error: unknown) => {
-              if (disconnectCleanup === cleanup) {
-                disconnectCleanupFailed = true;
-              }
-              logDebug(`node-host: disconnect cleanup failed: ${String(error)}`);
-            },
-          );
-          for (const active of activeInvokes.values()) {
-            active.controller.abort();
-          }
-          activeInvokes.clear();
-          return cleanup;
-        },
-        tryPauseForUpdate: updatePause.tryPauseForUpdate,
-        resumeAfterUpdate: updatePause.resumeAfterUpdate,
-        updateGatewayConnection(connection) {
-          gatewayConnection = connection;
-        },
-        close() {
-          if (closePromise) {
-            return closePromise;
-          }
-          const wasClosing = closing;
-          closing = true;
-          // Install the shared completion before abort listeners or cleanup can reenter close.
-          const completion = createDeferredCore();
-          closePromise = completion.promise;
-          const closeOwners = async () => {
-            if (!wasClosing && initializationRetry) {
-              clearTimeout(initializationRetry);
-              initializationRetry = undefined;
-            }
-            if (!wasClosing || disconnectCleanupFailed) {
-              // cancelAll publishes the cleanup barrier joined below.
-              void this.cancelAll();
-            }
-            const watcherClose = stopAvailabilityWatch();
-            // Startup observes this signal before either independent owner is joined.
-            mcpAbort.abort();
-            const disconnectClose = disconnectCleanup;
-            supervisorClose ??= Promise.resolve()
-              .then(() => workerSupervisor?.close())
-              .catch((error: unknown) => {
-                // The supervisor retains failed retirement records and an open journal for retry.
-                supervisorClose = undefined;
-                throw error;
-              });
-            // MCP close is terminal: another call after failure can return an empty success.
-            mcpClose ??= startup.then((resolved) => resolved?.close());
-            await settleNodeHostCleanup([watcherClose, disconnectClose, supervisorClose, mcpClose]);
-          };
-          void closeOwners().then(completion.resolve, (error: unknown) => {
-            closePromise = undefined;
-            completion.reject(error);
-          });
-          return completion.promise;
-        },
-      };
     },
   };
 }
-/* oxlint-disable max-lines -- TODO: split this grandfathered oversized file. */
