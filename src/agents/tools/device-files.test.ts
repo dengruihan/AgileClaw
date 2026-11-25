@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const callGatewayTool = vi.fn();
 const planFileEdit = vi.fn();
 
+// mock-isolation: the real module imports the gateway transport (device auth + state-database singleton); this planning fixture runs the dispatch path without a gateway.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
 }));
-vi.mock("../sessions/tools/file-tool-planning.js", () => ({
+vi.mock("../sessions/tools/file-tool-planning.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../sessions/tools/file-tool-planning.js")>()),
   planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));
 

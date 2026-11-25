@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const releaseDeviceScopeLease = vi.fn();
 const gatewayContext = vi.fn();
 
+// mock-isolation: the real module owns live device-scope leases and the state-database session accessor; this fixture replaces the lease release it observes.
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
   releaseDeviceScopeLease: (...args: unknown[]) => releaseDeviceScopeLease(...args),
 }));
+// mock-isolation: the real module binds the gateway caller context and pulls the gateway transport; the fixture injects the in-process registry context directly.
 vi.mock("./in-process-gateway.js", () => ({
   getInProcessGatewayToolContext: () => gatewayContext(),
 }));

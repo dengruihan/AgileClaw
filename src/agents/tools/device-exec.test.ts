@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const callGatewayTool = vi.fn();
 
+// The fixture's contract is that no real gateway transport runs; the real module
+// also builds the device-auth store and the process-wide state-database singleton.
+// mock-isolation: keep transport and state-database initialization out of this dispatch fixture.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
 }));
