@@ -2,7 +2,6 @@
 import { BUNDLED_PLUGIN_TEST_GLOB } from "./vitest.bundled-plugin-paths.ts";
 import { extensionExcludedChannelTestGlobs } from "./vitest.channel-paths.mjs";
 import { acpxExtensionTestRoots } from "./vitest.extension-acpx-paths.mjs";
-import { activeMemoryExtensionTestRoots } from "./vitest.extension-active-memory-paths.mjs";
 import { browserExtensionTestRoots } from "./vitest.extension-browser-paths.mjs";
 import { codexExtensionTestRoots } from "./vitest.extension-codex-paths.mjs";
 import {
@@ -32,7 +31,6 @@ import { createScopedVitestConfig } from "./vitest.scoped-config.ts";
 import { pluginControlUiPathGlob } from "./vitest.ui-paths.mjs";
 
 export const extensionCatchAllExcludedTestRoots = [
-  activeMemoryExtensionTestRoots,
   acpxExtensionTestRoots,
   browserExtensionTestRoots,
   codexExtensionTestRoots,

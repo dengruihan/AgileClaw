@@ -91,7 +91,6 @@ const SCOPED_PROJECT_GROUP_ORDER_BY_NAME = new Map(
     "commands-light",
     "cron",
     "daemon",
-    "extension-active-memory",
     "extension-acpx",
     "extension-channels",
     "extension-codex",
