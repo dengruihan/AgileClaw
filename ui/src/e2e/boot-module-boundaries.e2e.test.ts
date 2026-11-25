@@ -4,7 +4,7 @@ import { controlUiE2eBuiltModuleRequest } from "./control-ui-built-module.test-s
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 import { defineGatewayModuleBoundaryTests } from "./gateway-module-boundaries.test-support.ts";
 import { defineNativeModuleBoundaryTests } from "./native-module-boundaries.test-support.ts";
-import { defineSessionPlacementModuleBoundaryTests } from "./session-placement-module-boundaries.test-support.ts";
+import { defineSessionPlacementRecoveryModuleBoundaryTests } from "./session-placement-recovery-module-boundaries.test-support.ts";
 import { defineTypographyModuleBoundaryTests } from "./typography-module-boundaries.test-support.ts";
 
 const tempDirs = createTempDirTracker();
@@ -38,6 +38,6 @@ const moduleRequest = (sourcePath: string) => controlUiE2eBuiltModuleRequest(sou
 suite.define(() => {
   defineGatewayModuleBoundaryTests(suite, moduleRequest);
   defineNativeModuleBoundaryTests(suite, moduleRequest);
-  defineSessionPlacementModuleBoundaryTests(suite, moduleRequest);
+  defineSessionPlacementRecoveryModuleBoundaryTests(suite, moduleRequest);
   defineTypographyModuleBoundaryTests(suite, moduleRequest);
 });
