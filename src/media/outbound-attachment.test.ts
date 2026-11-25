@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const loadWebMedia = vi.hoisted(() => vi.fn());
 const saveMediaBuffer = vi.hoisted(() => vi.fn());
 
-vi.mock("./web-media.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./web-media.js")>()),
+// mock-isolation: Keep real web-media initialization outside this outbound staging fixture; it stubs loadWebMedia and exercises no other export.
+vi.mock("./web-media.js", () => ({
   loadWebMedia,
 }));
 
