@@ -763,6 +763,7 @@ const enSettings = {
       addModel: "Add model",
       noModels: "No models yet. Add a model ID supplied by your provider.",
       addModelsAfterSave: "Save the connection, then add model definitions in the list below.",
+      createProvider: "Create provider",
     },
     catalogSettings: {
       title: "Global model catalog settings",

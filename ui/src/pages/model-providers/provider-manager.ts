@@ -31,6 +31,7 @@ import {
   providerModelForm,
 } from "./provider-manager-model-form.ts";
 import { providerModelsList } from "./provider-manager-models.ts";
+import { providerCreateInput, providerTemplateSeed } from "./provider-manager-template.ts";
 import {
   configuredProvider,
   providerConnectionPatch,
@@ -47,7 +48,9 @@ registerSettingsEnglish();
 export type ProviderManagerIntent = {
   provider: string;
   view: "settings" | "models" | "create";
-} & { templateId?: string };
+  /** Curated template seeding the create draft; never persisted to config. */
+  templateId?: string;
+};
 type CredentialResult = { ok: false; error?: string } | { ok: true; warning: string | null };
 
 /** Matches the config form's auto-save debounce so both lanes feel alike. */
@@ -124,7 +127,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       this.providerCreated = false;
       this.providerId = this.intent?.provider ?? "";
       this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
-      this.draft = structuredClone(this.original);
+      this.draft = this.resetDraft();
       this.nameDraft = "";
       this.seededName = "";
       this.catalog = [];
@@ -134,7 +137,7 @@ export class ProviderManager extends OpenClawLightDomElement {
       }
     } else if (!this.dirty && !this.modelDraft && !this.busy) {
       this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
-      this.draft = structuredClone(this.original);
+      this.draft = this.resetDraft();
     }
     this.syncName();
     this.credential.sync({
@@ -184,11 +187,15 @@ export class ProviderManager extends OpenClawLightDomElement {
   }
 
   private get dirty() {
+    const changed = (key: string) =>
+      JSON.stringify(this.draft[key]) !== JSON.stringify(this.original[key]);
+    return this.credential.dirty || [...this.touched].some(changed);
+  }
+
+  /** Fresh draft state: the stored entry, or a template's prefilled endpoint facts. */
+  private resetDraft() {
     return (
-      this.credential.dirty ||
-      [...this.touched].some(
-        (key) => JSON.stringify(this.draft[key]) !== JSON.stringify(this.original[key]),
-      )
+      providerTemplateSeed(this.intent, this.providerCreated) ?? structuredClone(this.original)
     );
   }
 
@@ -210,7 +217,7 @@ export class ProviderManager extends OpenClawLightDomElement {
     try {
       if (!this.touched.size && !this.providerCreated) {
         this.original = structuredClone(configuredProvider(this.config, this.providerId) ?? {});
-        this.draft = structuredClone(this.original);
+        this.draft = this.resetDraft();
       }
       if (listModels) {
         const result = await client.request<ModelCatalogResult>("models.list", {
@@ -288,20 +295,15 @@ export class ProviderManager extends OpenClawLightDomElement {
       return;
     }
     this.draft = draft;
-    if (this.intent?.view === "create" && !this.providerCreated) {
-      // The create write takes the whole draft once the endpoint is complete.
-      return;
+    if (this.intent?.view !== "create" || this.providerCreated) {
+      this.armConnectionAutoSave(0);
     }
-    this.armConnectionAutoSave(0);
   }
 
   private commitName() {
-    if (!this.applyNameDraft()) {
-      return;
-    }
-    if (this.intent?.view === "create" && !this.providerCreated) {
-      // Nothing is persisted yet; the create write takes the whole draft once the
-      // endpoint is complete.
+    // A new provider persists nothing yet; the create write takes the whole draft
+    // once the endpoint is complete.
+    if (!this.applyNameDraft() || (this.intent?.view === "create" && !this.providerCreated)) {
       return;
     }
     // Same owner as the connection fields, armed immediately because a confirmed
@@ -424,18 +426,12 @@ export class ProviderManager extends OpenClawLightDomElement {
       draft: this.modelDraft ?? {},
       inheritedInput: this.catalog.find((row) => row.id === this.modelDraft?.id)?.input,
       lockId: this.originalModelId !== undefined,
-      onCostField: (key, value) => {
-        if (this.modelDraft) {
-          this.setModelFields(modelCostFieldPatch(this.modelDraft, key, value));
-        }
-      },
+      onCostField: (key, value) =>
+        this.setModelFields(modelCostFieldPatch(this.modelDraft ?? {}, key, value)),
       onField: (patch) => this.setModelFields(patch),
       onThinkingMap: (map) => this.setModelFields({ thinkingLevelMap: map }),
-      onThinkingValue: (level, value) => {
-        if (this.modelDraft) {
-          this.setModelFields(modelThinkingLevelPatch(this.modelDraft, level, value));
-        }
-      },
+      onThinkingValue: (level, value) =>
+        this.setModelFields(modelThinkingLevelPatch(this.modelDraft ?? {}, level, value)),
     });
   }
 
@@ -497,8 +493,9 @@ export class ProviderManager extends OpenClawLightDomElement {
       return nothing;
     }
     const creating = this.intent.view === "create" && !this.providerCreated;
+    // A template create is named by the template it prefilled from.
     const title = creating
-      ? t("modelProviders.manager.customProvider")
+      ? this.committedName || t("modelProviders.manager.customProvider")
       : (this.card?.displayName ?? this.providerId);
     // Built-in providers have no editable name, so their icon is not a user choice.
     const canRename = creating || this.customProvider;
@@ -580,6 +577,7 @@ export class ProviderManager extends OpenClawLightDomElement {
                 nameDraft: this.nameDraft,
                 providerCreated: this.providerCreated,
                 revealKey: this.credential.revealed,
+                templateId: creating ? this.intent?.templateId : undefined,
               },
             })}
           </div>
@@ -708,7 +706,7 @@ export class ProviderManager extends OpenClawLightDomElement {
           if (firstCreate) {
             const patch = providerCreatePatch({
               config,
-              entry: { ...this.draft, api: this.draft.api ?? "openai-completions", models: [] },
+              ...providerCreateInput(this.draft, this.intent),
               // Non-null whenever this branch runs: the guard above refuses an
               // unchecked creation before any config write.
               reservedProviderIds: reservedProviderIds ?? [],

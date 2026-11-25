@@ -21,23 +21,40 @@ export function configuredProvider(
 }
 
 /**
+ * The stored entry a create write uses: the editor draft with its protocol
+ * defaulted and its model list carried over. A template draft arrives with
+ * curated models; a blank custom provider still declares the empty list that a
+ * custom key requires.
+ */
+export function providerCreateEntry(draft: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...draft,
+    api: draft.api ?? "openai-completions",
+    models: Array.isArray(draft.models) ? draft.models : [],
+  };
+}
+
+/**
  * Claims a fresh `models.providers` key for a new custom provider and returns its
  * create patch. The claim runs against the latest snapshot inside the write
  * transaction, so a concurrent save cannot make two providers share a key, and an
  * existing same-endpoint provider is never overwritten: creation always takes an
- * unused key. The seed is endpoint-derived, so a display name never moves identity.
+ * unused key. The seed is endpoint-derived, so a display name never moves identity;
+ * a template that shares its host with another endpoint may pass its own seed.
  */
 export function providerCreatePatch(params: {
   config: Record<string, unknown> | null;
   entry: Record<string, unknown>;
   /** Plugin-declared provider ids that a generated key must not take. */
   reservedProviderIds?: Iterable<string>;
+  /** Endpoint key seed for templates that share a host, normalized by the claim. */
+  keySeed?: string;
 }): ProviderModelsPatch & { providerId: string } {
   const baseUrl = typeof params.entry.baseUrl === "string" ? params.entry.baseUrl.trim() : "";
   const reserved = new Set(params.reservedProviderIds ?? []);
   const providers = asNullableRecord(asNullableRecord(params.config?.models)?.providers);
   const claim = claimEndpointId({
-    seed: buildEndpointIdFromUrl(baseUrl),
+    seed: params.keySeed ?? buildEndpointIdFromUrl(baseUrl),
     occupied: endpointIdOccupancy(providers ?? undefined),
     isReserved: (candidate) =>
       reserved.has(candidate) || isBuiltInModelProviderOverlayId(candidate),
