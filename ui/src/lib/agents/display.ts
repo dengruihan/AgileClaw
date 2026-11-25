@@ -19,6 +19,7 @@ import type {
   AgentsListResult,
   ModelCatalogEntry,
 } from "../../api/types.ts";
+import { readConfiguredProviderNames } from "../../components/provider-icon.ts";
 import { t } from "../../i18n/index.ts";
 import { resolveAgentAvatarUrl, resolveAssistantTextAvatar } from "../avatar.ts";
 import { buildCatalogDisplayLookup, buildChatModelOptionFromLookup } from "../chat/model-ref.ts";
@@ -410,7 +411,13 @@ export function buildModelOptions(
       }
       return { ...entry, alias: alias || undefined };
     });
-    const displayLookup = buildCatalogDisplayLookup(displayCatalog);
+    // The picker edits a draft config, so its provider names come from that draft.
+    // Without a draft (restricted or retired catalog) the shared resolver reads the
+    // saved config its provider rows also read.
+    const displayLookup = buildCatalogDisplayLookup(
+      displayCatalog,
+      configForm ? readConfiguredProviderNames(configForm) : undefined,
+    );
     for (const entry of displayCatalog) {
       const option = buildChatModelOptionFromLookup(entry, displayLookup);
       catalogOptions.set(normalizeAgentModelRefForConfig(option.value), {

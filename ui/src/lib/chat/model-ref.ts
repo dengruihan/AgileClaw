@@ -1,6 +1,10 @@
 import { isLegacyCodexProviderId } from "../../../../src/config/legacy-codex-provider.js";
 import { normalizeAgentModelRefForConfig } from "../../../../src/config/model-input.js";
 import type { ModelCatalogEntry } from "../../api/types.ts";
+import {
+  resolveProviderDisplayName,
+  type ProviderDisplayNames,
+} from "../../components/provider-icon.ts";
 
 export function normalizeChatModelProviderId(provider: string): string {
   const normalized = provider.trim().toLowerCase();
@@ -142,8 +146,8 @@ function formatChatModelDisplay(value: string): string {
   return `${trimmed.slice(separator + 1)} · ${trimmed.slice(0, separator)}`;
 }
 
-function formatRawCatalogLabel(entry: ModelCatalogEntry): string {
-  const provider = entry.provider?.trim();
+function formatRawCatalogLabel(entry: ModelCatalogEntry, providerLabel?: string): string {
+  const provider = providerLabel ?? entry.provider?.trim();
   return provider ? `${entry.id} · ${provider}` : entry.id;
 }
 
@@ -165,29 +169,83 @@ function createQualifiedCatalogKey(entry: ModelCatalogEntry): string {
   return buildQualifiedChatModelValue(entry.id, entry.provider).trim().toLowerCase();
 }
 
-function createNameProviderKey(name: string, provider?: string | null): string {
-  return `${name.toLowerCase()}\u0000${provider?.trim().toLowerCase() ?? ""}`;
+function createNameProviderKey(name: string, providerName?: string | null): string {
+  return `${name.toLowerCase()}\u0000${providerName?.trim().toLowerCase() ?? ""}`;
+}
+
+type DuplicateDetailInput = {
+  name: string;
+  providerName: string;
+  /** Rows sharing this (name, provider name) pair. */
+  rowsUnderProvider: number;
+  /** Distinct provider ids behind those rows. */
+  distinctProviders: number;
+};
+
+/**
+ * Disambiguating part after a repeated model name. The provider name separates a
+ * name repeated across providers; when several providers resolve to one name only
+ * their ids can, and a model id already equal to the name keeps the provider id
+ * alone. Ids are the last resort, never a shorter stand-in for the name.
+ */
+function resolveDuplicateDetail(entry: ModelCatalogEntry, input: DuplicateDetailInput): string {
+  if (input.rowsUnderProvider <= 1) {
+    return input.providerName || entry.provider?.trim() || entry.id;
+  }
+  if (input.distinctProviders > 1) {
+    return entry.id.trim().toLowerCase() === input.name.toLowerCase()
+      ? entry.provider?.trim() || entry.id
+      : formatRawCatalogLabel(entry);
+  }
+  // One provider's ids share the name: the model id separates them, and the
+  // provider part stays the name it is displayed under.
+  return formatRawCatalogLabel(entry, input.providerName);
 }
 
 type ChatModelDisplayLookup = ReadonlyMap<string, string>;
 
-export function buildCatalogDisplayLookup(catalog: ModelCatalogEntry[]): Map<string, string> {
+/**
+ * Labels every catalog row, suffixing the provider name only when the friendly
+ * name alone would not identify the row. A provider id appears only when it is
+ * what separates the rows: several providers that resolve to one name. Without
+ * `authoredProviderNames` the names come from the registered provider config
+ * source, the same one provider icons read.
+ */
+export function buildCatalogDisplayLookup(
+  catalog: ModelCatalogEntry[],
+  authoredProviderNames?: ProviderDisplayNames | null,
+): Map<string, string> {
   const nameToValues = new Map<string, Set<string>>();
   const nameProviderToValues = new Map<string, Set<string>>();
+  const nameProviderIds = new Map<string, Set<string>>();
+  // Resolved names walk the provider config, so one lookup per provider per render.
+  const providerNames = new Map<string, string>();
+  const resolveProviderName = (provider: string) => {
+    const key = provider.trim().toLowerCase();
+    const cached = providerNames.get(key);
+    if (cached !== undefined) {
+      return cached;
+    }
+    const resolved = resolveProviderDisplayName(provider, authoredProviderNames);
+    providerNames.set(key, resolved);
+    return resolved;
+  };
   const entries = catalog.map((entry) => {
     const name = resolveCatalogDisplayName(entry);
+    const providerName = resolveProviderName(entry.provider);
     return {
       entry,
       name,
+      providerName,
       qualifiedKey: normalizeAgentModelRefForConfig(
         buildQualifiedChatModelValue(entry.id, entry.provider),
       ),
       nameKey: name.toLowerCase(),
-      providerKey: createNameProviderKey(name, entry.provider),
+      providerKey: createNameProviderKey(name, providerName),
     };
   });
 
-  for (const { name, qualifiedKey, nameKey, providerKey } of entries) {
+  for (const { entry, name, qualifiedKey, nameKey, providerKey } of entries) {
     if (!name) {
       continue;
     }
@@ -198,17 +256,24 @@ export function buildCatalogDisplayLookup(catalog: ModelCatalogEntry[]): Map<str
     const nameProviderValues = nameProviderToValues.get(providerKey) ?? new Set<string>();
     nameProviderValues.add(qualifiedKey);
     nameProviderToValues.set(providerKey, nameProviderValues);
+
+    // Distinct provider ids for one (name, provider name) pair. More than one
+    // means several providers share the name, and only their ids tell rows apart.
+    const nameProviderIdValues = nameProviderIds.get(providerKey) ?? new Set<string>();
+    nameProviderIdValues.add(entry.provider?.trim().toLowerCase() ?? "");
+    nameProviderIds.set(providerKey, nameProviderIdValues);
   }
 
   return new Map(
-    entries.map(({ entry, name, qualifiedKey, nameKey, providerKey }) => {
+    entries.map(({ entry, name, providerName, qualifiedKey, nameKey, providerKey }) => {
       let label = name || formatRawCatalogLabel(entry);
       if (name && (nameToValues.get(nameKey)?.size ?? 0) > 1) {
-        const detail =
-          (nameProviderToValues.get(providerKey)?.size ?? 0) <= 1
-            ? entry.provider?.trim() || entry.id
-            : formatRawCatalogLabel(entry);
-        label = `${name} · ${detail}`;
+        label = `${name} · ${resolveDuplicateDetail(entry, {
+          name,
+          providerName,
+          rowsUnderProvider: nameProviderToValues.get(providerKey)?.size ?? 0,
+          distinctProviders: nameProviderIds.get(providerKey)?.size ?? 0,
+        })}`;
       }
       return [qualifiedKey, label];
     }),

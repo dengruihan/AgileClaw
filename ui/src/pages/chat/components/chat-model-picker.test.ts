@@ -147,6 +147,126 @@ it("groups providers in authored order without ranking the selection", () => {
   ).toBe("true");
 });
 
+it("names provider rows from the authored provider display name", () => {
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: { providers: { "custom-relay-eu-west-1": { displayName: "Acme Relay" } } },
+    })),
+  );
+  const container = document.createElement("div");
+  mount(
+    container,
+    [
+      {
+        provider: "custom-relay-eu-west-1",
+        value: "custom-relay-eu-west-1/model-a",
+        commitValue: "custom-relay-eu-west-1/model-a",
+        label: "Model A · Acme Relay",
+        isDefault: false,
+      },
+    ],
+    "custom-relay-eu-west-1/model-a",
+  );
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-chat-model-provider-option] .chat-controls__provider-option-name",
+      ),
+      (row) => row.textContent?.trim(),
+    ),
+  ).toEqual(["Acme Relay"]);
+  expect(
+    container
+      .querySelector<HTMLElement>(".chat-controls__combined-model-value")
+      ?.textContent?.trim(),
+  ).toBe("Acme Relay");
+  // The disambiguation suffix repeats the provider heading, so the model row drops it.
+  expect(
+    container
+      .querySelector(
+        '[data-chat-model-option="custom-relay-eu-west-1/model-a"] .chat-controls__model-option-name',
+      )
+      ?.textContent?.trim(),
+  ).toBe("Model A");
+});
+
+it("keeps the model id when one provider's ids share a model name", () => {
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: { providers: { "custom-relay-apac-prod-01": { displayName: "Acme Relay" } } },
+    })),
+  );
+  const container = document.createElement("div");
+  mount(
+    container,
+    [
+      {
+        provider: "custom-relay-apac-prod-01",
+        value: "custom-relay-apac-prod-01/gpt-5.5",
+        commitValue: "custom-relay-apac-prod-01/gpt-5.5",
+        label: "GPT-5.5 · gpt-5.5 · Acme Relay",
+        isDefault: false,
+      },
+      {
+        provider: "custom-relay-apac-prod-01",
+        value: "custom-relay-apac-prod-01/gpt-5.5-mini",
+        commitValue: "custom-relay-apac-prod-01/gpt-5.5-mini",
+        label: "GPT-5.5 · gpt-5.5-mini · Acme Relay",
+        isDefault: false,
+      },
+    ],
+    "custom-relay-apac-prod-01/gpt-5.5",
+  );
+  // The provider name repeats the heading; the model id is what separates the rows.
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-chat-model-list] .chat-controls__model-option-name",
+      ),
+      (row) => row.textContent?.trim(),
+    ),
+  ).toEqual(["GPT-5.5 · gpt-5.5", "GPT-5.5 · gpt-5.5-mini"]);
+});
+
+it("keeps provider rows distinguishable when two providers share a display name", () => {
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: {
+        providers: { "acme-eu": { displayName: "Acme" }, "acme-us": { displayName: "Acme" } },
+      },
+    })),
+  );
+  const container = document.createElement("div");
+  mount(
+    container,
+    [
+      {
+        provider: "acme-eu",
+        value: "acme-eu/model-a",
+        commitValue: "acme-eu/model-a",
+        label: "Model A",
+        isDefault: false,
+      },
+      {
+        provider: "acme-us",
+        value: "acme-us/model-a",
+        commitValue: "acme-us/model-a",
+        label: "Model A",
+        isDefault: false,
+      },
+    ],
+    "acme-eu/model-a",
+  );
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-chat-model-provider-option] .chat-controls__provider-option-name",
+      ),
+      (row) => row.textContent?.trim(),
+    ).toSorted(),
+  ).toEqual(["Acme · acme-eu", "Acme · acme-us"]);
+});
+
 it("shows the saved brand icon on the trigger for a custom provider", () => {
   onTestFinished(
     registerProviderIconConfigSource(() => ({

@@ -4,6 +4,7 @@ import {
   formatRawProviderLabel,
   providerDisplayLabel,
   renderProviderBrandIcon,
+  resolveProviderDisplayName,
 } from "../../../components/provider-icon.ts";
 import { t } from "../../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../../i18n/locales/en-model-controls.ts";
@@ -55,10 +56,18 @@ export type ChatModelPickerTargetGroup = {
 
 function formatModelLabel(option: ChatModelPickerOption): string {
   // Grouped rows already carry the provider as the section heading, so a
-  // catalog name that repeats it as a prefix or trailing "(Provider)" reads twice.
+  // catalog name that repeats it as a prefix, trailing "(Provider)", or the
+  // disambiguation suffix reads twice. A same-name collision suffixes the
+  // provider id instead, which is what tells those rows apart, so it stays.
+  const providerName = resolveProviderDisplayName(option.provider);
+  const nameSuffix = ` · ${providerName.toLowerCase()}`;
+  if (providerName && option.label.toLowerCase().endsWith(nameSuffix)) {
+    return option.label.slice(0, option.label.length - nameSuffix.length);
+  }
   const prefixes = [
     formatRawProviderLabel(option.provider),
     providerDisplayLabel(option.provider),
+    providerName,
   ].toSorted((left, right) => right.length - left.length);
   for (const prefix of prefixes) {
     if (option.label.toLowerCase().startsWith(`${prefix.toLowerCase()} `)) {

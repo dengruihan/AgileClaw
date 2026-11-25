@@ -6,8 +6,10 @@ import { icons } from "./icons.ts";
 import {
   compareCloudProfiles,
   hasProviderBrandIcon,
+  readConfiguredProviderNames,
   renderProviderBrandIcon,
   resolveCloudProfileIcon,
+  resolveProviderDisplayName,
 } from "./provider-icon.ts";
 
 /** Registers the config object a booting app would expose to icon surfaces. */
@@ -163,5 +165,29 @@ describe("model provider brand icons", () => {
     render(renderProviderBrandIcon("custom-provider"), container);
     expect(iconId(container)).toBeNull();
     expect(fallbackLetter(container)).toBe("C");
+  });
+});
+
+describe("provider display names", () => {
+  it("prefers the authored display name over the brand label", () => {
+    registerProviders({ "custom-relay-eu-west-1": { displayName: "Acme Relay" } });
+    expect(resolveProviderDisplayName("custom-relay-eu-west-1")).toBe("Acme Relay");
+    expect(resolveProviderDisplayName("openai")).toBe("OpenAI");
+  });
+
+  it("accepts an injected name table for drafts and matches keys case-insensitively", () => {
+    const names = readConfiguredProviderNames({
+      models: { providers: { "Acme-Relay": { displayName: "  Acme Relay " } } },
+    });
+    expect(names).toEqual({ "Acme-Relay": "Acme Relay" });
+    expect(resolveProviderDisplayName("acme-relay", names)).toBe("Acme Relay");
+    expect(resolveProviderDisplayName("openrouter", names)).toBe("OpenRouter");
+    expect(resolveProviderDisplayName("custom-relay-eu-west-1")).toBe("Custom Relay Eu West 1");
+  });
+
+  it("ignores entries without an authored name", () => {
+    registerProviders({ "custom-relay": { icon: "mistral" } });
+    expect(resolveProviderDisplayName("custom-relay")).toBe("Custom Relay");
+    expect(resolveProviderDisplayName("")).toBe("");
   });
 });

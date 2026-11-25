@@ -9,14 +9,16 @@ import type {
   ModelCatalogEntry,
   ModelCatalogProviderOutcome,
 } from "../../api/types.ts";
-import { providerDisplayLabel } from "../../components/provider-icon.ts";
+import {
+  providerDisplayLabel,
+  readConfiguredProviderNames,
+} from "../../components/provider-icon.ts";
 import {
   canonicalModelAuthProviderId,
   isMonitoredAuthProvider,
   listEffectiveModelAuthProviders,
 } from "../../lib/model-auth.ts";
 import type { ModelCatalogPresentation } from "../../lib/model-catalog-store.ts";
-import { readProviderIconConfigEntries } from "../../lib/provider-icon-source.ts";
 
 type ModelProviderAuthKind = "ok" | "expiring" | "expired" | "missing" | "api-key";
 
@@ -359,12 +361,8 @@ export function readModelProviderConfig(config: Record<string, unknown> | null):
   const providers = asRecord(models?.providers);
   const providerIds = Object.keys(providers ?? {});
   // One parser owns the authored icon fields; this projection keeps the name
-  // table the settings page already consumes.
-  const providerDisplayNames = Object.fromEntries(
-    Object.entries(readProviderIconConfigEntries(config)).flatMap(([provider, entry]) =>
-      entry.displayName ? [[provider, entry.displayName]] : [],
-    ),
-  );
+  // table the settings page consumes and the shared provider-name resolver reads.
+  const providerDisplayNames = readConfiguredProviderNames(config);
   const agents = asRecord(config?.agents);
   const defaults = asRecord(agents?.defaults);
   const model = defaults?.model;
