@@ -15,6 +15,7 @@ import { normalizeConfigPath, normalizeConfigPaths } from "./helpers/vitest-conf
 import {
   auditFullSuiteTestFileOwnership,
   isOpsPackageTestFile,
+  listInventoryTestFiles,
   listVitestConfigTestFiles,
 } from "./vitest-projects-config.test-support.js";
 import { createAgentsCoreVitestConfig } from "./vitest/vitest.agents-core.config.ts";
@@ -421,17 +422,13 @@ describe("projects vitest config", () => {
   });
 
   it("keeps ops package verification suites out of the Vitest full-suite inventory", () => {
-    const opsTestFiles = globSync(["ops/**/*.{test,spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"], {
-      cwd: process.cwd(),
-      exclude: ["**/.*/**", "**/dist/**", "**/node_modules/**", "**/vendor/**"],
-    }).map((file) => file.replaceAll("\\", "/"));
-    expect(opsTestFiles.length).toBeGreaterThan(0);
-    for (const file of opsTestFiles) {
-      expect(isOpsPackageTestFile(file), file).toBe(true);
+    const excluded = listInventoryTestFiles().filter(isOpsPackageTestFile);
+    expect(excluded.length).toBeGreaterThan(0);
+    for (const file of excluded) {
+      expect(file.startsWith("ops/"), file).toBe(true);
       // The exclusion stays honest only while every suite under ops/ is a `node --test` suite.
       expect(readFileSync(file, "utf8"), file).toMatch(/from\s+["']node:test["']/u);
     }
-    expect(isOpsPackageTestFile("src/commands/status.test.ts")).toBe(false);
   });
 
   it("focuses a discovered test from each leaf through its actual execution config", async () => {

@@ -114,16 +114,19 @@ export function isOpsPackageTestFile(file: string): boolean {
   return file.startsWith("ops/");
 }
 
+export function listInventoryTestFiles(): string[] {
+  return globSync(["**/*.{test,spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"], {
+    cwd: process.cwd(),
+    exclude: ["**/.*/**", "**/dist/**", "**/node_modules/**", "**/vendor/**"],
+  }).map(toRepoPath);
+}
+
 function listNormalFullSuiteTestFiles(): string[] {
   const e2eNamedIntegrationTests = new Set([
     "src/gateway/gateway.test.ts",
     "src/gateway/server.startup-matrix-migration.integration.test.ts",
   ]);
-  return globSync(["**/*.{test,spec}.{ts,tsx,mts,cts,js,jsx,mjs,cjs}"], {
-    cwd: process.cwd(),
-    exclude: ["**/.*/**", "**/dist/**", "**/node_modules/**", "**/vendor/**"],
-  })
-    .map(toRepoPath)
+  return listInventoryTestFiles()
     .filter(
       (file) =>
         !isOpsPackageTestFile(file) &&
