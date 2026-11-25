@@ -53,8 +53,8 @@ import {
 } from "./setup-inference-core.js";
 import {
   registerHiddenSetupInferenceProbeRun,
+  resolveSetupInferenceProbeOutputTokens,
   runSetupInferenceProbeWork,
-  SETUP_INFERENCE_TEST_MAX_TOKENS,
   type SetupTurnFailure,
   type SetupTurnSuccess,
 } from "./setup-inference-probe-work.js";
@@ -186,9 +186,11 @@ export async function runSetupInferenceTurn(params: {
         reasoningLevel: "off",
         verboseLevel: "off",
         disableTrajectory: true,
-        // The "reply OK" probe stays bounded; custom completions keep the model's own budget.
+        // The "reply OK" probe stays bounded, but with enough output room for a
+        // reasoning-first model to think before its first visible token. Custom
+        // completions keep the model's own budget.
         ...(params.prompt === undefined && (!harness || harness === "openclaw")
-          ? { streamParams: { maxTokens: SETUP_INFERENCE_TEST_MAX_TOKENS } }
+          ? { streamParams: { maxTokens: resolveSetupInferenceProbeOutputTokens(route) } }
           : {}),
         modelRun: true,
       });
