@@ -8,7 +8,10 @@ import { t } from "../../i18n/index.ts";
 import { createInitialDevicesState } from "../../lib/nodes/page-operations.ts";
 import { DevicesDialogController, type DevicesDialogHost } from "./devices-dialogs.ts";
 
-vi.mock("../../components/confirm-dialog.ts", () => ({ showConfirmDialog: vi.fn() }));
+vi.mock("../../components/confirm-dialog.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../components/confirm-dialog.ts")>()),
+  showConfirmDialog: vi.fn(),
+}));
 vi.mock("../../components/input-dialog.ts", () => ({ showInputDialog: vi.fn() }));
 
 type InputDialogOptions = Parameters<typeof showInputDialog>[0];

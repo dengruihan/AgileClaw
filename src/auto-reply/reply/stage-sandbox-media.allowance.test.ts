@@ -16,7 +16,10 @@ import {
 } from "./stage-sandbox-media.js";
 
 const sandboxMocks = vi.hoisted(() => ({ ensureSandboxWorkspaceForSession: vi.fn() }));
-vi.mock("../../agents/sandbox.js", () => sandboxMocks);
+vi.mock("../../agents/sandbox.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../agents/sandbox.js")>()),
+  ensureSandboxWorkspaceForSession: sandboxMocks.ensureSandboxWorkspaceForSession,
+}));
 beforeEach(() => sandboxMocks.ensureSandboxWorkspaceForSession.mockReset());
 
 it.each([

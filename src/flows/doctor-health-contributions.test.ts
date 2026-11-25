@@ -371,7 +371,8 @@ vi.mock("../infra/exec-approvals-generated-migration.js", () => ({
   repairObsoleteGeneratedExecApprovals: mocks.repairObsoleteGeneratedExecApprovals,
 }));
 
-vi.mock("../infra/device-pairing-migration.js", () => ({
+vi.mock("../infra/device-pairing-migration.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../infra/device-pairing-migration.js")>()),
   migratePairedDeviceRegistryPolicyFields: mocks.migratePairedDeviceRegistryPolicyFields,
 }));
 

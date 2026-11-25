@@ -32,7 +32,10 @@ const daemonMocks = vi.hoisted(() => ({
 
 vi.mock("./daemon.js", () => daemonMocks);
 
-vi.mock("./pairing.js", () => pairingMocks);
+vi.mock("./pairing.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./pairing.js")>()),
+  runNodePairingStatus: pairingMocks.runNodePairingStatus,
+}));
 
 vi.mock("../../node-host/config.js", () => ({
   loadNodeHostConfig: daemonMocks.loadNodeHostConfig,
