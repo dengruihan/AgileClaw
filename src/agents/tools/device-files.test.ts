@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const callGatewayTool = vi.fn();
 const planFileEdit = vi.fn();
 
+// mock-isolation: the real module imports the gateway transport (device auth + state-database singleton); this planning fixture runs the dispatch path without a gateway.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
 }));
+// mock-isolation: file-tool-planning constructs a real WorkerTaskPool at module scope and registers it in the process-global openclaw.workerTaskPools set; this fixture replaces planFileEdit only.
 vi.mock("../sessions/tools/file-tool-planning.js", () => ({
   planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));

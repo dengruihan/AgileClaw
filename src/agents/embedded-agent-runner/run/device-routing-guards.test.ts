@@ -6,12 +6,15 @@ import { textResult } from "../../tools/tool-results.js";
 
 const resolveSessionScopeRoot = vi.fn();
 
+// mock-isolation: the real config facade loads the runtime config layer and deferred plugin migrations over the state-database cache; this serialization fixture serves runtime config from the stub.
 vi.mock("../../../config/config.js", () => ({ getRuntimeConfig: () => ({}) }));
+// mock-isolation: the real module resolves the scope root through the live session store (state database); this focused guard test supplies the root it asserts.
 vi.mock("../../../gateway/server-methods/session-device-scope.js", () => ({
   resolveSessionScopeRoot: (...args: unknown[]) => resolveSessionScopeRoot(...args),
 }));
 // The step rule needs only the tool-name constant; the real module pulls the
 // gateway tool context graph, which this focused test must not load.
+// mock-isolation: real use-device-tool initialization would load that graph.
 vi.mock("../../tools/use-device-tool.js", () => ({ USE_DEVICE_TOOL_NAME: "use_device" }));
 
 const { applyDeviceControlSerialization } = await import("../../tools/device-serialization.js");

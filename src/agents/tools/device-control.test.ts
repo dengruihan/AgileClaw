@@ -7,14 +7,18 @@ const gatewayContext = vi.fn();
 const nodeGet = vi.fn();
 const callGatewayTool = vi.fn();
 
+// mock-isolation: the real config facade loads the runtime config layer and deferred plugin migrations over the state-database cache; this fixture serves runtime config from the stub.
 vi.mock("../../config/config.js", () => ({ getRuntimeConfig: () => ({}) }));
+// mock-isolation: the real module owns live device-scope leases and the state-database session accessor; the fixture replaces the lease operations it observes.
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
   acquireDeviceScopeLease: vi.fn(),
   resolveSessionScopeRoot: vi.fn(),
 }));
+// mock-isolation: the real module binds the gateway caller context and pulls the gateway transport; the fixture injects the in-process registry context directly.
 vi.mock("./in-process-gateway.js", () => ({
   getInProcessGatewayToolContext: () => gatewayContext(),
 }));
+// mock-isolation: the real module imports the gateway transport (device auth + state-database singleton); this dispatch fixture runs without a gateway.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
   readGatewayCallOptions: () => ({}),

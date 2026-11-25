@@ -10,14 +10,17 @@ const listNodes = vi.fn();
 const resolveNodeIdFromList = vi.fn();
 const resolveSessionScopeRoot = vi.fn();
 
+// mock-isolation: the real module imports the gateway transport (device auth + state-database singleton); this tool fixture runs without a gateway.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
   readGatewayCallOptions: () => ({}),
 }));
-vi.mock("./nodes-utils.js", () => ({
+vi.mock("./nodes-utils.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./nodes-utils.js")>()),
   listNodes: (...args: unknown[]) => listNodes(...args),
   resolveNodeIdFromList: (...args: unknown[]) => resolveNodeIdFromList(...args),
 }));
+// mock-isolation: the real module owns live device-scope leases and the state-database session accessor; the fixture replaces the scope-root read it observes.
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
   resolveSessionScopeRoot: (...args: unknown[]) => resolveSessionScopeRoot(...args),
 }));
@@ -32,7 +35,7 @@ function makeState(overrides: Partial<DeviceScopeRoutingState> = {}): {
 } {
   const markScope = vi.fn();
   const noteLeaseUsed = vi.fn();
-  const closeDeviceControlSessions = vi.fn(async () => {});
+  const closeDeviceControlSessions = vi.fn(async (_deviceId?: string, _reason?: string) => {});
   return {
     state: {
       sessionKey: "agent:main:root",

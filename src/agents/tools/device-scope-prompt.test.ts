@@ -5,14 +5,17 @@ const publishSessionDeviceScopePrompt = vi.fn();
 const publishPromptDeviceScopeSnapshot = vi.fn();
 const gatewayContext = vi.fn();
 
+// mock-isolation: the real module owns live device-scope leases and the state-database session accessor; this fixture replaces the lease resolve/publish it observes.
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
   resolveSessionScopeRoot: (...args: unknown[]) => resolveSessionScopeRoot(...args),
   publishSessionDeviceScopePrompt: (...args: unknown[]) => publishSessionDeviceScopePrompt(...args),
 }));
-vi.mock("../prompt-device-scope.js", () => ({
+vi.mock("../prompt-device-scope.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../prompt-device-scope.js")>()),
   publishPromptDeviceScopeSnapshot: (...args: unknown[]) =>
     publishPromptDeviceScopeSnapshot(...args),
 }));
+// mock-isolation: the real module binds the gateway caller context and pulls the gateway transport; the fixture injects the in-process registry context directly.
 vi.mock("./in-process-gateway.js", () => ({
   getInProcessGatewayToolContext: () => gatewayContext(),
 }));

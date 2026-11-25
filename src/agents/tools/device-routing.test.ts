@@ -26,17 +26,22 @@ const nodeGet = vi.fn();
 const callGatewayTool = vi.fn();
 const planFileEdit = vi.fn();
 
+// mock-isolation: the real config facade loads the runtime config layer and deferred plugin migrations over the state-database cache; this fixture serves runtime config from the stub.
 vi.mock("../../config/config.js", () => ({ getRuntimeConfig: () => ({}) }));
+// mock-isolation: the real module owns live device-scope leases and the state-database session accessor; the fixture replaces the lease operations it observes.
 vi.mock("../../gateway/server-methods/session-device-scope.js", () => ({
   acquireDeviceScopeLease: (...args: unknown[]) => acquireDeviceScopeLease(...args),
   resolveSessionScopeRoot: (...args: unknown[]) => resolveSessionScopeRoot(...args),
 }));
+// mock-isolation: the real module binds the gateway caller context and pulls the gateway transport; the fixture injects the in-process registry context directly.
 vi.mock("./in-process-gateway.js", () => ({
   getInProcessGatewayToolContext: () => gatewayContext(),
 }));
+// mock-isolation: the real module imports the gateway transport (device auth + state-database singleton); this routing fixture runs without a gateway.
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
 }));
+// mock-isolation: file-tool-planning constructs a real WorkerTaskPool at module scope and registers it in the process-global openclaw.workerTaskPools set; this fixture replaces planFileEdit only.
 vi.mock("../sessions/tools/file-tool-planning.js", () => ({
   planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));
@@ -44,7 +49,8 @@ vi.mock("../sessions/tools/file-tool-planning.js", () => ({
 // The control adapters have their own focused suite; here a stub proves the
 // routing layer dispatches control tools to them with the call identity.
 const deviceControlCalls: Array<Record<string, unknown>> = [];
-vi.mock("./device-control.js", () => ({
+vi.mock("./device-control.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./device-control.js")>()),
   deviceControlAdapter: (toolName: string, cacheKey: object) =>
     toolName === "browser" || toolName === "computer"
       ? (params: Record<string, unknown>) => {
