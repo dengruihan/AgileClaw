@@ -626,6 +626,14 @@ describe("ModelProvidersPage provider templates", () => {
     )?.intent;
   }
 
+  function managerCard(page: ModelProvidersPageTestElement) {
+    return (
+      page.querySelector("openclaw-provider-manager") as
+        | (HTMLElement & { card: { id: string; configKey?: string } | null })
+        | null
+    )?.card;
+  }
+
   it("opens the template picker from the add-provider entry and creates a custom provider", async () => {
     const { context } = createHarness("main");
     const page = appendPage(context);
@@ -729,6 +737,82 @@ describe("ModelProvidersPage provider templates", () => {
     expect(
       page.querySelector("[data-provider-template-picker] [role='status']")?.textContent,
     ).toContain("Refresh and try again");
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+  });
+
+  it("opens a hand-written mixed-case config key from its added template row", async () => {
+    const harness = createHarness("main");
+    const originalRequest = harness.request.getMockImplementation()!;
+    const configKey = "MyDeepSeek";
+    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+      if (method === "config.get") {
+        return {
+          config: {
+            models: {
+              providers: {
+                // Another card holds the default selection, so opening the row
+                // actually moves the manager to the mixed-case entry.
+                aaa: { baseUrl: "https://api.example.test", models: [{ id: "placeholder" }] },
+                [configKey]: {
+                  baseUrl: "https://api.deepseek.com",
+                  models: [{ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }],
+                },
+              },
+            },
+          },
+          hash: "mixed-case-endpoint",
+          valid: true,
+        };
+      }
+      return originalRequest(method, params);
+    });
+    const page = appendPage(harness.context);
+    await waitForProviders(page);
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    const row = page.querySelector<HTMLButtonElement>('[data-template-id="deepseek"]')!;
+    expect(row.getAttribute("data-template-added")).toBe("true");
+    row.click();
+
+    // Endpoint occupancy lowercases the key it reports; opening that id leaves
+    // the manager without a card or a configured draft, i.e. a blank settings view.
+    await waitForFast(() =>
+      expect(managerIntent(page)).toEqual({ provider: configKey, view: "settings" }),
+    );
+    await waitForFast(() => expect(managerCard(page)?.configKey).toBe(configKey));
+    await waitForFast(() =>
+      expect(
+        page.querySelector<HTMLInputElement>('openclaw-provider-manager input[name="baseUrl"]')
+          ?.value,
+      ).toBe("https://api.deepseek.com"),
+    );
+  });
+
+  it("closes the picker when stale route data refuses a template row", async () => {
+    const { context } = createHarness("main");
+    const page = appendPage(context);
+    await waitForProviders(page);
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    expect(page.querySelector("[data-provider-template-picker]")).not.toBeNull();
+
+    // A stale route refresh drops the provider data the row's click relies on,
+    // while the open modal keeps rendering rows that still look selectable.
+    page.data = null;
+    await page.updateComplete;
+    const row = page.querySelector<HTMLButtonElement>('[data-template-id="kimi"]')!;
+    expect(row.disabled).toBe(false);
+    row.click();
+
+    await waitForFast(() =>
+      expect(page.messages.connection?.text).toContain("Refresh and try again"),
+    );
+    // The refusal has to be visible: a picker left open hides it behind its backdrop.
+    await waitForFast(() =>
+      expect(page.querySelector("[data-provider-template-picker]")).toBeNull(),
+    );
     expect(page.querySelector("openclaw-provider-manager")).toBeNull();
   });
 

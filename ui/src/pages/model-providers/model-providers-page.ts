@@ -107,6 +107,9 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
         kind: "error",
         text: this.providerCreationBlockedReason(),
       });
+      // The picker's rows still look selectable while its reservation facts are
+      // missing; leaving it open would hide this refusal behind the backdrop.
+      this.templatePickerOpen = false;
       return;
     }
     const manager = this.querySelector<ProviderManager>("openclaw-provider-manager");
