@@ -36,6 +36,7 @@ import { waitForFast } from "../../test-helpers/wait-for.ts";
 import type { DefaultModelSelection, ModelBehaviorConfig } from "./data.ts";
 import { EMPTY_MODEL_PROVIDERS_DATA, type ModelProvidersData } from "./load.ts";
 import type { ModelProbeController } from "./model-probe-controller.ts";
+import type { ProviderManagerIntent } from "./provider-manager.ts";
 import type { ModelProvidersRouteData } from "./route.ts";
 import "./model-providers-page.ts";
 
@@ -65,10 +66,7 @@ export type ModelProvidersPageTestElement = HTMLElement & {
   routeData: ModelProvidersRouteData | undefined;
   requestUpdate: () => void;
   saveDefaults: () => Promise<void>;
-  selectProvider: (intent: {
-    provider: string;
-    view: "settings" | "models" | "create";
-  }) => Promise<void>;
+  selectProvider: (intent: ProviderManagerIntent) => Promise<void>;
   selectedAgentId: string;
 };
 
