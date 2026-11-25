@@ -111,10 +111,6 @@ function requireNativeHookRelayGraph(): TsdownConfigEntry {
   return expectDefined(graphs[0], "native hook relay graph");
 }
 
-function bundledEntry(pluginId: string): string {
-  return `${bundledPluginRoot(pluginId)}/index`;
-}
-
 function unifiedDistGraph(): TsdownConfigEntry | undefined {
   return asConfigArray(tsdownConfig).find((config) =>
     entryKeys(config).includes("plugins/runtime/index"),
@@ -316,7 +312,6 @@ describe("tsdown config", () => {
       "web-fetch/runtime",
       "mcp/openclaw-tools-serve",
       "mcp/plugin-tools-serve",
-      bundledEntry("active-memory"),
       "bundled/boot-md/handler",
     ]) {
       expect(keys).toContain(entry);
@@ -424,6 +419,8 @@ describe("tsdown config", () => {
 
     expect(hasPluginEntry("amazon-bedrock")).toBe(false);
     expect(hasPluginEntry("amazon-bedrock-mantle")).toBe(false);
+    // active-memory was extracted to its own repository and installs as an external plugin.
+    expect(hasPluginEntry("active-memory")).toBe(false);
   });
 
   it("keeps PI model discovery synthetic auth refs behind one stable runtime dist entry", () => {
