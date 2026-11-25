@@ -1,7 +1,10 @@
 // Guards the curated provider templates against the plugin manifests that own
-// their endpoint and model facts. Manifest-backed rows must not drift; the
-// MiniMax rows track a builder because that plugin's manifest has no model
-// catalog, so only its endpoint hosts and empty headers are checkable there.
+// their endpoint sets, API, headers, default models, and model rows. Each row
+// selects the manifest catalog that owns it (including the distinct Token Plan
+// catalog) and applies the manifest's own suppressions, so endpoint/model
+// variants cannot silently cross over. Builder-owned facts (exact coding/API
+// endpoint constants, MiniMax's model rows) are guarded in the root contract
+// test, because core tsgo graphs must not include extension files.
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,15 +14,29 @@ import {
 } from "@openclaw/model-catalog-core/provider-templates";
 import { describe, expect, it } from "vitest";
 
+type ManifestCatalogModel = {
+  id: string;
+};
+
 type ManifestCatalogProvider = {
   baseUrl?: string;
   api?: string;
   headers?: Record<string, string>;
-  models?: Array<{ id: string; status?: string }>;
+  defaultModel?: string;
+  models?: ManifestCatalogModel[];
+};
+
+type ManifestSuppression = {
+  provider: string;
+  model: string;
+  when?: { baseUrlHosts?: string[] };
 };
 
 type PluginManifest = {
-  modelCatalog?: { providers?: Record<string, ManifestCatalogProvider> };
+  modelCatalog?: {
+    providers?: Record<string, ManifestCatalogProvider>;
+    suppressions?: ManifestSuppression[];
+  };
   providerEndpoints?: Array<{ baseUrls?: string[]; hosts?: string[] }>;
 };
 
@@ -28,76 +45,192 @@ const EXTENSIONS_DIR = path.resolve(
   "../../../extensions",
 );
 
-const PLUGIN_DIRECTORY_BY_PROVIDER: Record<string, string> = {
-  deepseek: "deepseek",
-  kimi: "kimi-coding",
-  minimax: "minimax",
-  moonshot: "moonshot",
-  qwen: "qwen",
-  zai: "zai",
-};
-
 const manifestCache = new Map<string, PluginManifest>();
 
-function readManifest(providerId: string): PluginManifest {
-  const cached = manifestCache.get(providerId);
+function readManifest(pluginDirectory: string): PluginManifest {
+  const cached = manifestCache.get(pluginDirectory);
   if (cached) {
     return cached;
   }
-  const directory = PLUGIN_DIRECTORY_BY_PROVIDER[providerId];
-  if (!directory) {
-    throw new Error(`No plugin directory is mapped for source provider ${providerId}`);
-  }
   const manifest = JSON.parse(
-    fs.readFileSync(path.join(EXTENSIONS_DIR, directory, "openclaw.plugin.json"), "utf8"),
+    fs.readFileSync(path.join(EXTENSIONS_DIR, pluginDirectory, "openclaw.plugin.json"), "utf8"),
   ) as PluginManifest;
-  manifestCache.set(providerId, manifest);
+  manifestCache.set(pluginDirectory, manifest);
   return manifest;
 }
 
-function endpointIsDeclared(
-  manifest: PluginManifest,
-  catalog: ManifestCatalogProvider | undefined,
-  baseUrl: string,
-): boolean {
-  if (catalog?.baseUrl === baseUrl) {
-    return true;
+/** Which manifest fact declares the template's endpoint. */
+type EndpointOwnership =
+  | { kind: "catalogBaseUrl" }
+  | { kind: "declaredBaseUrl" }
+  | { kind: "host" };
+
+type TemplateManifestFacts = {
+  /** Extension whose manifest owns the facts for this template. */
+  pluginDirectory: string;
+  /** Manifest catalog provider that owns the model rows, api, headers, and default model. */
+  catalogProviderId: string | undefined;
+  endpoint: EndpointOwnership;
+  /** Catalog-declared default model; omitted when only the plugin builder owns it. */
+  ownDefaultModel?: boolean;
+};
+
+const TEMPLATE_MANIFEST_FACTS: Record<string, TemplateManifestFacts> = {
+  "zhipu-coding-cn": {
+    pluginDirectory: "zai",
+    catalogProviderId: "zai",
+    endpoint: { kind: "host" },
+  },
+  "zai-coding": {
+    pluginDirectory: "zai",
+    catalogProviderId: "zai",
+    endpoint: { kind: "host" },
+  },
+  "zhipu-api-cn": {
+    pluginDirectory: "zai",
+    catalogProviderId: "zai",
+    endpoint: { kind: "host" },
+    ownDefaultModel: true,
+  },
+  "zai-api": {
+    pluginDirectory: "zai",
+    catalogProviderId: "zai",
+    endpoint: { kind: "catalogBaseUrl" },
+    ownDefaultModel: true,
+  },
+  kimi: {
+    pluginDirectory: "moonshot",
+    catalogProviderId: "moonshot",
+    endpoint: { kind: "catalogBaseUrl" },
+    ownDefaultModel: true,
+  },
+  "kimi-cn": {
+    pluginDirectory: "moonshot",
+    catalogProviderId: "moonshot",
+    endpoint: { kind: "declaredBaseUrl" },
+    ownDefaultModel: true,
+  },
+  "kimi-code": {
+    pluginDirectory: "kimi-coding",
+    catalogProviderId: "kimi",
+    endpoint: { kind: "catalogBaseUrl" },
+    ownDefaultModel: true,
+  },
+  minimax: {
+    pluginDirectory: "minimax",
+    catalogProviderId: undefined,
+    endpoint: { kind: "host" },
+  },
+  "minimax-cn": {
+    pluginDirectory: "minimax",
+    catalogProviderId: undefined,
+    endpoint: { kind: "host" },
+  },
+  deepseek: {
+    pluginDirectory: "deepseek",
+    catalogProviderId: "deepseek",
+    endpoint: { kind: "catalogBaseUrl" },
+    ownDefaultModel: true,
+  },
+  "bailian-cn": {
+    pluginDirectory: "qwen",
+    catalogProviderId: "qwen",
+    endpoint: { kind: "declaredBaseUrl" },
+  },
+  "bailian-intl": {
+    pluginDirectory: "qwen",
+    catalogProviderId: "qwen",
+    endpoint: { kind: "declaredBaseUrl" },
+  },
+  "bailian-coding-cn": {
+    pluginDirectory: "qwen",
+    catalogProviderId: "qwen",
+    endpoint: { kind: "declaredBaseUrl" },
+  },
+  "qwen-token-plan-cn": {
+    pluginDirectory: "qwen",
+    catalogProviderId: "qwen-token-plan",
+    endpoint: { kind: "declaredBaseUrl" },
+  },
+};
+
+function factsFor(templateId: string): TemplateManifestFacts {
+  const facts = TEMPLATE_MANIFEST_FACTS[templateId];
+  if (!facts) {
+    throw new Error(`No manifest facts are mapped for provider template ${templateId}`);
   }
-  const host = new URL(baseUrl).hostname;
-  return (manifest.providerEndpoints ?? []).some(
-    (endpoint) => endpoint.baseUrls?.includes(baseUrl) || endpoint.hosts?.includes(host),
-  );
+  return facts;
 }
 
-describe("provider templates match their source plugin manifests", () => {
+function endpointHost(baseUrl: string): string {
+  return new URL(baseUrl).hostname;
+}
+
+function expectDeclaredEndpoint(
+  baseUrl: string,
+  manifest: PluginManifest,
+  catalog: ManifestCatalogProvider | undefined,
+  ownership: EndpointOwnership,
+) {
+  if (ownership.kind === "catalogBaseUrl") {
+    expect(baseUrl).toBe(catalog?.baseUrl);
+    return;
+  }
+  const endpoints = manifest.providerEndpoints ?? [];
+  if (ownership.kind === "declaredBaseUrl") {
+    expect(endpoints.some((endpoint) => endpoint.baseUrls?.includes(baseUrl))).toBe(true);
+    return;
+  }
+  // Host-only declarations cannot bind a variant path; the exact endpoint
+  // constants are guarded in the root contract test.
+  expect(endpoints.some((endpoint) => endpoint.hosts?.includes(endpointHost(baseUrl)))).toBe(true);
+}
+
+describe("provider templates match their owning plugin manifests", () => {
+  it("maps every template to exactly one manifest fact set", () => {
+    const templateIds = PROVIDER_TEMPLATES.map((template) => template.id).toSorted();
+
+    expect(Object.keys(TEMPLATE_MANIFEST_FACTS).toSorted()).toEqual(templateIds);
+  });
+
   it.each(PROVIDER_TEMPLATES.map((template) => [template.id, template] as const))(
     "%s",
-    (_id, template: ProviderTemplate) => {
-      const manifest = readManifest(template.sourceProviderId);
-      const catalog = manifest.modelCatalog?.providers?.[template.sourceProviderId];
+    (id, template: ProviderTemplate) => {
+      const facts = factsFor(id);
+      const manifest = readManifest(facts.pluginDirectory);
+      const catalog =
+        facts.catalogProviderId === undefined
+          ? undefined
+          : manifest.modelCatalog?.providers?.[facts.catalogProviderId];
 
-      expect(
-        endpointIsDeclared(manifest, catalog, template.provider.baseUrl),
-        `${template.id} endpoint is not declared by ${template.sourceProviderId}`,
-      ).toBe(true);
-      expect(template.provider.headers).toEqual(catalog?.headers);
+      expectDeclaredEndpoint(template.provider.baseUrl, manifest, catalog, facts.endpoint);
 
       if (!catalog) {
-        // MiniMax publishes its model rows from a builder, not the manifest.
-        expect(manifest.providerEndpoints?.length ?? 0).toBeGreaterThan(0);
+        expect(template.provider.headers, `${id} headers`).toBeUndefined();
         return;
       }
 
-      expect(template.provider.api).toBe(catalog.api);
-      const catalogModelIds = new Set((catalog.models ?? []).map((model) => model.id));
-      for (const model of template.provider.models) {
-        expect(catalogModelIds.has(model.id), `${template.id} model ${model.id}`).toBe(true);
-      }
-      if (template.provider.defaultModel !== undefined) {
-        expect(
-          catalogModelIds.has(template.provider.defaultModel),
-          `${template.id} default model ${template.provider.defaultModel}`,
-        ).toBe(true);
+      const host = endpointHost(template.provider.baseUrl);
+      const suppressedIds = new Set(
+        (manifest.modelCatalog?.suppressions ?? [])
+          .filter(
+            (suppression) =>
+              suppression.provider === facts.catalogProviderId &&
+              suppression.when?.baseUrlHosts?.includes(host),
+          )
+          .map((suppression) => suppression.model),
+      );
+      const modelIds = (catalog.models ?? []).map((model) => model.id);
+      const expectedIds = modelIds.filter((modelId) => !suppressedIds.has(modelId));
+
+      expect(template.provider.api, `${id} api`).toBe(catalog.api);
+      expect(template.provider.headers, `${id} headers`).toEqual(catalog.headers);
+      expect(
+        template.provider.models.map((model) => model.id),
+        `${id} models`,
+      ).toEqual(expectedIds);
+      if (facts.ownDefaultModel) {
+        expect(template.provider.defaultModel, `${id} default model`).toBe(catalog.defaultModel);
       }
     },
   );

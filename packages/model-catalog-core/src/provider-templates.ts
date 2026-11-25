@@ -2,9 +2,10 @@
 //
 // Each row is a hand-written projection of a source plugin catalog: endpoint,
 // header, and model facts come from extensions/<plugin>/openclaw.plugin.json or
-// the plugin builder that owns them. provider-templates.plugins.test.ts keeps
-// endpoints, headers, and model ids in sync with those owners, so update the
-// affected row (and its model table) whenever a source plugin catalog changes.
+// the plugin builder that owns them. provider-templates.plugins.test.ts checks
+// the manifest-owned facts and test/provider-templates.contract.test.ts binds
+// the plugin builders, so update the affected row (and its model table)
+// whenever a source plugin catalog changes.
 //
 // Templates are editor draft seeds only. A created provider is an ordinary
 // custom-<host> config entry with no template linkage, so nothing here widens

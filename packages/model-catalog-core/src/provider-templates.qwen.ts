@@ -1,8 +1,9 @@
 // Model rows shared by the curated provider templates. Kept apart from
 // provider-templates.ts so the files stay inside the lint line budget.
 //
-// Values mirror each source plugin catalog row; see provider-templates.ts and
-// provider-templates.plugins.test.ts for the owning facts and their guards.
+// Values mirror each source plugin catalog row; see provider-templates.ts,
+// provider-templates.plugins.test.ts, and test/provider-templates.contract.test.ts
+// for the owning facts and their guards.
 import type { ProviderTemplateModel } from "./provider-templates.js";
 
 export const QWEN_MODELS: ProviderTemplateModel[] = [
