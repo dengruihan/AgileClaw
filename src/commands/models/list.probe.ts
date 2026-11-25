@@ -77,6 +77,41 @@ import { formatMs } from "./shared.js";
 
 const PROBE_PROMPT = "Reply with OK. Do not use tools.";
 
+/**
+ * Reasoning-first models spend output tokens on thinking before their first
+ * visible token, and providers count that thinking against `max_tokens`. Probes
+ * used to cap output at 8 tokens, so the cap was consumed inside reasoning
+ * (stopReason=length, no text); the runner then exhausted its reasoning-only
+ * retries and ended as an incomplete turn, reported as an unknown connection
+ * failure even though the model and credential work. Keep room for the
+ * transport's default 1024-token thinking budget plus a visible-output reserve;
+ * the probe timeout, not this cap, bounds the wait.
+ */
+const PROBE_MIN_OUTPUT_TOKENS = 2_048;
+
+/**
+ * Resolves the output cap for one probe. The floor gives reasoning models room
+ * to think, but never exceeds the model's configured output cap: transports
+ * that forward an explicit cap unchanged (anthropic-messages, openai-responses)
+ * would otherwise reject the request as invalid.
+ */
+function resolveProbeOutputTokens(params: {
+  cfg: OpenClawConfig;
+  provider: string;
+  modelId: string;
+  requested: number;
+}): number {
+  const configuredMax = resolveMergedModelProviderEntry(
+    params.cfg,
+    params.provider,
+  )?.providerConfig.models?.find((model) => model.id === params.modelId)?.maxTokens;
+  const floor =
+    configuredMax && configuredMax > 0
+      ? Math.min(PROBE_MIN_OUTPUT_TOKENS, configuredMax)
+      : PROBE_MIN_OUTPUT_TOKENS;
+  return Math.max(params.requested, floor);
+}
+
 /** Scrubs credential-shaped text before probe failures cross a UI or CLI boundary. */
 export function redactAuthProbeError(error: string): string {
   return redactStatusSecrets(error);
@@ -801,7 +836,14 @@ async function probeTarget(params: {
         thinkLevel: "off",
         reasoningLevel: "off",
         verboseLevel: "off",
-        streamParams: { maxTokens },
+        streamParams: {
+          maxTokens: resolveProbeOutputTokens({
+            cfg,
+            provider: model.provider,
+            modelId: model.model,
+            requested: maxTokens,
+          }),
+        },
         agentHarnessRuntimeOverride: "openclaw",
         disableTools: true,
         modelRun: true,
