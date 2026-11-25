@@ -165,6 +165,32 @@ describe("classifySystemAgentApprovalIntent", () => {
     expect(deps.completeWithPreparedSimpleCompletionModel).toHaveBeenCalledOnce();
   });
 
+  it("leaves a reasoning-first judge room to answer the one-word verdict", async () => {
+    const binding = requireSharedVerifiedInference();
+    const deps = completionDeps("approve", binding);
+    // Reasoning-first models spend their first THINKING_TOKENS output tokens on
+    // thinking before any visible text, so a cap this small ends the call
+    // reasoning-only and the classifier falls back to "other" — which keeps a
+    // pending change unarmed even though the user just agreed to it.
+    const THINKING_TOKENS = 1_024;
+    deps.completeWithPreparedSimpleCompletionModel.mockImplementation(
+      async (params) =>
+        ((params.options?.maxTokens ?? 0) > THINKING_TOKENS
+          ? { content: [{ type: "text", text: "approve" }] }
+          : {
+              content: [{ type: "thinking", thinking: "The user seems to be agreeing." }],
+              stopReason: "length",
+            }) as never,
+    );
+
+    await expect(
+      classifySystemAgentApprovalIntent(
+        { message: "alright, ship that change", verifiedInference: binding },
+        deps,
+      ),
+    ).resolves.toBe("approve");
+  });
+
   it("fails closed to other on unexpected model output", async () => {
     const binding = requireSharedVerifiedInference();
     const deps = completionDeps("I think the user probably agrees", binding);
