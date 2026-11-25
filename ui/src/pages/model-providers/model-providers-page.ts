@@ -74,6 +74,8 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
   @state() providerQuery = "";
   private pendingConnection = false;
   @state() addProviderOpen = false;
+  /** The add-provider entries open the template picker before any editor. */
+  @state() templatePickerOpen = false;
   @state() managerIntent: ProviderManagerIntent | null = null;
   private initialManagerIntent: ProviderManagerIntent | null = null;
   private providerSelectionRevision = 0;
@@ -108,7 +110,14 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
       return;
     }
     const manager = this.querySelector<ProviderManager>("openclaw-provider-manager");
-    if (manager?.intent?.provider === intent.provider && manager.intent.view === intent.view) {
+    // A template switch is a new creation intent even when the empty create view
+    // already shows, so templateId joins the intent comparison.
+    if (
+      manager?.intent?.provider === intent.provider &&
+      manager.intent.view === intent.view &&
+      manager.intent.templateId === intent.templateId
+    ) {
+      this.templatePickerOpen = false;
       return;
     }
     const revision = ++this.providerSelectionRevision;
@@ -117,6 +126,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     }
     if (revision === this.providerSelectionRevision && this.isConnected) {
       this.managerIntent = intent;
+      this.templatePickerOpen = false;
     }
   }
   @state() addProviderId = "";
@@ -410,6 +420,7 @@ export class ModelProvidersPage extends OpenClawLightDomElement {
     this.probeResults = {};
     this.providerDeleteConfirmation?.abort();
     this.addProviderOpen = false;
+    this.templatePickerOpen = false;
     this.addProviderId = "";
     this.addProviderKey = "";
   }

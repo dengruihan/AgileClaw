@@ -610,3 +610,147 @@ describe("ModelProvidersPage agent scope", () => {
     expect(page.busy).toEqual({});
   });
 });
+
+describe("ModelProvidersPage provider templates", () => {
+  function addProviderEntry(page: ModelProvidersPageTestElement) {
+    return page.querySelector<HTMLButtonElement>(
+      ".settings-section__actions [data-custom-provider]",
+    )!;
+  }
+
+  function managerIntent(page: ModelProvidersPageTestElement) {
+    return (
+      page.querySelector("openclaw-provider-manager") as
+        | (HTMLElement & { intent: { provider: string; view: string; templateId?: string } })
+        | null
+    )?.intent;
+  }
+
+  it("opens the template picker from the add-provider entry and creates a custom provider", async () => {
+    const { context } = createHarness("main");
+    const page = appendPage(context);
+    await waitForProviders(page);
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    expect(page.querySelector("[data-provider-template-picker]")).not.toBeNull();
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+
+    page.querySelector<HTMLButtonElement>("[data-template-custom]")!.click();
+    await waitForFast(() => expect(managerIntent(page)).toEqual({ provider: "", view: "create" }));
+    expect(page.querySelector("[data-provider-template-picker]")).toBeNull();
+  });
+
+  it("carries the chosen template id and treats another template as a new intent", async () => {
+    const { context } = createHarness("main");
+    const page = appendPage(context);
+    await waitForProviders(page);
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>('[data-template-id="kimi"]')!.click();
+    await waitForFast(() =>
+      expect(managerIntent(page)).toEqual({ provider: "", view: "create", templateId: "kimi" }),
+    );
+
+    // The editor is already in the empty create view; a second template still
+    // replaces the intent instead of being swallowed as the same selection.
+    await waitForFast(() => expect(addProviderEntry(page).disabled).toBe(false));
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    page.querySelector<HTMLButtonElement>('[data-template-id="deepseek"]')!.click();
+    await waitForFast(() =>
+      expect(managerIntent(page)).toEqual({
+        provider: "",
+        view: "create",
+        templateId: "deepseek",
+      }),
+    );
+  });
+
+  it("opens the provider that already serves a template's endpoint without creating", async () => {
+    const harness = createHarness("main");
+    const originalRequest = harness.request.getMockImplementation()!;
+    const existingKey = "custom-api-deepseek-com";
+    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+      if (method === "config.get") {
+        return {
+          config: {
+            models: {
+              providers: {
+                [existingKey]: {
+                  baseUrl: "https://api.deepseek.com",
+                  models: [{ id: "deepseek-v4-pro", name: "DeepSeek V4 Pro" }],
+                },
+              },
+            },
+          },
+          hash: "occupied-endpoint",
+          valid: true,
+        };
+      }
+      return originalRequest(method, params);
+    });
+    const page = appendPage(harness.context);
+    await waitForProviders(page);
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+    const row = page.querySelector<HTMLButtonElement>('[data-template-id="deepseek"]')!;
+    expect(row.getAttribute("data-template-added")).toBe("true");
+    row.click();
+
+    await waitForFast(() =>
+      expect(managerIntent(page)).toEqual({ provider: existingKey, view: "settings" }),
+    );
+    expect(requestCount(harness.request, "config.patch")).toBe(0);
+  });
+
+  it("keeps panel creation disabled while the provider list is unknown", async () => {
+    const harness = createHarness("main");
+    const originalRequest = harness.request.getMockImplementation()!;
+    harness.request.mockImplementation(async (method: string, params?: unknown) => {
+      if (method === "models.authStatus") {
+        throw new Error("synthetic provider list failure");
+      }
+      return originalRequest(method, params);
+    });
+    const page = appendPage(harness.context);
+    await waitForProviders(page);
+    await waitForFast(() => expect(page.data?.error).toContain("synthetic provider list failure"));
+    await page.updateComplete;
+
+    expect(addProviderEntry(page)).toHaveProperty("disabled", true);
+    (page as ModelProvidersPageTestElement & { templatePickerOpen: boolean }).templatePickerOpen =
+      true;
+    await page.updateComplete;
+    expect(page.querySelector<HTMLButtonElement>("[data-template-custom]")!.disabled).toBe(true);
+    expect(page.querySelector<HTMLButtonElement>('[data-template-id="kimi"]')!.disabled).toBe(true);
+    expect(
+      page.querySelector("[data-provider-template-picker] [role='status']")?.textContent,
+    ).toContain("Refresh and try again");
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+  });
+
+  it("refuses to start creation while the provider list is still loading", async () => {
+    const harness = createHarness("main");
+    const release = harness.deferNextAuthStatus();
+    const page = appendPage(harness.context);
+    // Wait for the shared config load to settle so the add entry is enabled; the
+    // provider list stays in flight, leaving the page without reservation facts.
+    await waitForFast(() => expect(addProviderEntry(page).disabled).toBe(false));
+    expect(page.data).toBeNull();
+
+    addProviderEntry(page).click();
+    await page.updateComplete;
+
+    // The refusal has to stay visible in the page shell: a picker opened here
+    // would hide the message behind its backdrop and offer disabled rows.
+    expect(page.querySelector("[data-provider-template-picker]")).toBeNull();
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+    expect(page.messages.connection?.text).toContain("Refresh and try again");
+
+    release();
+    await page.updateComplete;
+  });
+});

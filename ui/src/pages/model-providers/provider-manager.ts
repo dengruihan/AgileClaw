@@ -44,7 +44,10 @@ import {
 
 registerSettingsEnglish();
 
-export type ProviderManagerIntent = { provider: string; view: "settings" | "models" | "create" };
+export type ProviderManagerIntent = {
+  provider: string;
+  view: "settings" | "models" | "create";
+} & { templateId?: string };
 type CredentialResult = { ok: false; error?: string } | { ok: true; warning: string | null };
 
 /** Matches the config form's auto-save debounce so both lanes feel alike. */

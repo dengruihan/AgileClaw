@@ -953,6 +953,13 @@ const enSettings = {
     notes: {
       defaultModel: "Update defaults from Control UI",
     },
+    templates: {
+      title: "Add a provider",
+      description:
+        "Choose a provider template to prefill its endpoint and models, or configure a custom provider.",
+      customDescription: "Enter the endpoint, protocol, and models yourself.",
+      added: "Added",
+    },
   },
   updates: {
     device: {

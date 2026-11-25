@@ -1,6 +1,7 @@
+import { endpointIdOccupancy } from "@openclaw/model-catalog-core/provider-id";
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, type TemplateResult } from "lit";
-import { t } from "../../i18n/index.ts";
+import { i18n, t } from "../../i18n/index.ts";
 import { listSelectableAgents, normalizeAgentLabel } from "../../lib/agents/display.ts";
 import { currentConfigObject } from "../../lib/config/config-state-model.ts";
 import * as modelCatalog from "../../lib/model-catalog-store.ts";
@@ -23,6 +24,10 @@ import { EMPTY_MODEL_PROVIDERS_DATA } from "./load.ts";
 import { loginOptionChoiceId } from "./login-providers.ts";
 import type { ModelProvidersPage } from "./model-providers-page.ts";
 import { configuredProvider, localOrCustomProvider } from "./provider-model-config.ts";
+import {
+  buildProviderTemplateSections,
+  renderProviderTemplatePicker,
+} from "./provider-template-picker.ts";
 import {
   renderModelProviderScope,
   renderModelProviders,
@@ -87,6 +92,38 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
   const providerReservations = Array.isArray(data.authStatus?.providerCapabilities)
     ? knownProviderIds
     : null;
+  const providerCreationBlockedReason =
+    page.data !== null && !page.providerReservationsKnown()
+      ? page.providerCreationBlockedReason()
+      : null;
+  // The entry points and the panel share one gate: a disabled entry must not
+  // start the flow, because the picker's creation rows are disabled for the
+  // same reason.
+  const providerCreationDisabled =
+    modelProviderConfigBusy(page.context) ||
+    page.mutationBlockedReason() !== null ||
+    providerCreationBlockedReason !== null;
+  // Endpoint occupancy feeds the picker's "added" rows: a template whose
+  // endpoint already has a config entry opens that entry instead of creating.
+  const templatePicker = renderProviderTemplatePicker({
+    open: page.templatePickerOpen,
+    sections: page.templatePickerOpen
+      ? buildProviderTemplateSections({
+          locale: i18n.getLocale(),
+          occupied: endpointIdOccupancy(
+            asConfigRecord(asConfigRecord(configObject?.models)?.providers) ?? undefined,
+          ),
+        })
+      : [],
+    disabled: providerCreationDisabled,
+    blockedReason: providerCreationBlockedReason,
+    onSelectTemplate: (templateId) =>
+      void page.selectProvider({ provider: "", view: "create", templateId }),
+    onOpenProvider: (providerId) =>
+      void page.selectProvider({ provider: providerId, view: "settings" }),
+    onCustomProvider: () => void page.selectProvider({ provider: "", view: "create" }),
+    onClose: () => (page.templatePickerOpen = false),
+  });
   const isLocalOrCustom = (id: string) =>
     localOrCustomProvider(configObject, id, knownProviderIds, catalog?.models ?? []);
   const login = page.login.pageActions;
@@ -152,7 +189,16 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       void page.selectProvider({ provider: card.configKey ?? card.id, view: "settings" });
     },
     onCustomProvider: () => {
-      void page.selectProvider({ provider: "", view: "create" });
+      if (!page.providerReservationsKnown()) {
+        // No reservation facts yet (initial load, agent switch): keep the old
+        // refusal, whose message renders in the page shell, instead of opening
+        // a picker whose creation rows could only be disabled.
+        void page.selectProvider({ provider: "", view: "create" });
+        return;
+      }
+      if (!providerCreationDisabled) {
+        page.templatePickerOpen = true;
+      }
     },
     providerQuery: page.providerQuery,
     onProviderQueryChange: (value) => (page.providerQuery = value),
@@ -188,10 +234,8 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
       configuredProviderIds,
     ),
     mutationBlockedReason: page.mutationBlockedReason(),
-    providerCreationBlockedReason:
-      page.data !== null && !page.providerReservationsKnown()
-        ? page.providerCreationBlockedReason()
-        : null,
+    providerCreationBlockedReason,
+    templatePicker,
     defaultsMutationBlockedReason: modelProviderConfigMutationBlockedReason(page.context),
     busy: page.busy,
     messages: page.messages,
