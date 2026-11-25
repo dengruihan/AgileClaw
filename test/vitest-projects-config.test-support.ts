@@ -108,6 +108,12 @@ async function listFullSuiteTestFileMatches(): Promise<Map<string, string[]>> {
   return matches;
 }
 
+// `ops/` holds self-contained operational packages whose verification suites run with
+// `node --test` from their package READMEs; they are not Vitest projects.
+export function isOpsPackageTestFile(file: string): boolean {
+  return file.startsWith("ops/");
+}
+
 function listNormalFullSuiteTestFiles(): string[] {
   const e2eNamedIntegrationTests = new Set([
     "src/gateway/gateway.test.ts",
@@ -120,6 +126,7 @@ function listNormalFullSuiteTestFiles(): string[] {
     .map(toRepoPath)
     .filter(
       (file) =>
+        !isOpsPackageTestFile(file) &&
         !file.includes(".live.test.") &&
         !file.includes(".e2e.test.") &&
         !file.startsWith("test/fixtures/") &&
