@@ -927,6 +927,9 @@ describe("provider manager dialog forms", () => {
 
     const create = createProviderButton(manager);
     expect(create).not.toBeNull();
+    // The design system's primary button is `.btn.primary`; the create action
+    // must not fall back to the plain secondary key.
+    expect(create!.matches(".btn.primary")).toBe(true);
     create!.click();
     await waitForFast(() => expect(patches).toHaveLength(1));
 
