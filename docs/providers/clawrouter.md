@@ -147,7 +147,7 @@ curl -fsS http://127.0.0.1:18789/readyz
 openclaw models list --all --provider clawrouter --json
 
 # Minimal real inference probe through the configured ClawRouter provider.
-openclaw models status --probe --probe-provider clawrouter --probe-max-tokens 8 --json
+openclaw models status --probe --probe-provider clawrouter --json
 
 # Workload canary using an exact granted model ref.
 openclaw agent --agent main \
