@@ -22,7 +22,7 @@ async function openDraft(
     "sessions.create",
     "sessions.dispatch",
   ],
-  models?: Parameters<typeof installMockGateway>[1]["models"],
+  models?: NonNullable<Parameters<typeof installMockGateway>[1]>["models"],
 ) {
   const context = await suite.browser.newContext(createControlUiE2eContextOptions());
   const page = await context.newPage();
