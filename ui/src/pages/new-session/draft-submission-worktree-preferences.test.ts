@@ -19,12 +19,9 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-it.each([
-  { identified: false, fastMode: true, speedOption: "on" },
-  { identified: true, fastMode: "ultrafast", speedOption: "ultrafast" },
-] as const)(
-  "consumes the accepted name while preserving newer model controls, identity=$identified, speed=$speedOption",
-  async ({ identified, fastMode, speedOption }) => {
+it.each([{ identified: false }, { identified: true }] as const)(
+  "consumes the accepted name while preserving newer model controls, identity=$identified",
+  async ({ identified }) => {
     const prefs = identityPreferences(identified, async () => ({
       models: [
         { id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "openai" },
@@ -61,10 +58,7 @@ it.each([
     )!;
     thinking.value = "1";
     thinking.dispatchEvent(new Event("change", { bubbles: true }));
-    renderControl(control, next.context)
-      .querySelector<HTMLButtonElement>(`[data-chat-speed-option="${speedOption}"]`)!
-      .click();
-    const selected = { model: "openai/gpt-5.6-sol", thinkingLevel: "high", fastMode };
+    const selected = { model: "openai/gpt-5.6-sol", thinkingLevel: "high" };
     await vi.waitFor(() => expect(prefs.stored()).toMatchObject(selected));
     admitted.resolve(acceptedWorktreeSession);
     await submitting;
@@ -73,7 +67,6 @@ it.each([
     expect(loadNewSessionPreference("ws://gateway.example", "main")?.worktreeName).toBeUndefined();
     expect(control.selected).toBe(selected.model);
     expect(control.thinkingLevel).toBe(selected.thinkingLevel);
-    expect(control.fastMode).toBe(selected.fastMode);
   },
 );
 

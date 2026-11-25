@@ -4,6 +4,7 @@ import {
   tooltipTitleText,
 } from "./control-ui-e2e-suite.test-support.ts";
 import {
+  NEW_SESSION_MODEL_CATALOG,
   SESSION_LIST_DEFAULTS,
   createNewSessionPageE2eSuite,
   installMockGateway,
@@ -21,11 +22,13 @@ async function openDraft(
     "sessions.create",
     "sessions.dispatch",
   ],
+  models?: NonNullable<Parameters<typeof installMockGateway>[1]>["models"],
 ) {
   const context = await suite.browser.newContext(createControlUiE2eContextOptions());
   const page = await context.newPage();
   const gateway = await installMockGateway(page, {
     featureMethods,
+    ...(models ? { models } : {}),
     operatorScopes,
     methodResponses: {
       "environments.list": {
@@ -78,8 +81,12 @@ suite.define(() => {
     }
   });
 
-  it("allows write-scoped Fast Mode creation while keeping incognito admin-only", async () => {
-    const { context, gateway, page } = await openDraft(["operator.read", "operator.write"]);
+  it("allows write-scoped creation with an effort change while keeping incognito admin-only", async () => {
+    const { context, gateway, page } = await openDraft(
+      ["operator.read", "operator.write"],
+      undefined,
+      NEW_SESSION_MODEL_CATALOG,
+    );
     try {
       await expect(gateway.waitForRequest("projects.list")).resolves.toMatchObject({
         params: {},
@@ -99,19 +106,14 @@ suite.define(() => {
       expect(await where.locator('[data-action="manage-cloud-workers"]').count()).toBe(0);
       await page.keyboard.press("Escape");
       await effort.click();
-      const fastMode = page.locator('[data-chat-speed-option="on"]');
-      await expect.poll(() => fastMode.isEnabled()).toBe(true);
-      await expect.poll(() => fastMode.getAttribute("role")).toBe("radio");
-      await expect.poll(() => fastMode.getAttribute("aria-checked")).toBe("false");
-      await fastMode.click();
-      await expect
-        .poll(() => page.locator('[data-chat-speed-option="off"]').getAttribute("aria-checked"))
-        .toBe("false");
-      await expect.poll(() => fastMode.getAttribute("aria-checked")).toBe("true");
+      const reasoning = page.locator('[data-chat-thinking-slider="true"]');
+      await expect.poll(() => reasoning.isEnabled()).toBe(true);
+      await reasoning.fill("1");
+      await expect.poll(() => effort.getAttribute("data-chat-thinking-value")).toBe("minimal");
       await submit.click();
 
       await expect(gateway.waitForRequest("sessions.create")).resolves.toMatchObject({
-        params: { agentId: "main", fastMode: true, message: "scope proof" },
+        params: { agentId: "main", thinkingLevel: "minimal", message: "scope proof" },
       });
     } finally {
       await context.close();

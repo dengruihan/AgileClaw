@@ -155,29 +155,23 @@ describe("chat pane model-setting permissions", () => {
         container.querySelector("[data-chat-thinking-select]")?.getAttribute("aria-disabled"),
       ).toBe(String(readOnly));
       const thinking = container.querySelector<HTMLInputElement>("[data-chat-thinking-slider]")!;
-      const fast = container.querySelector<HTMLButtonElement>('[data-chat-speed-option="on"]')!;
       const context = container.querySelector<HTMLButtonElement>(
         "[data-chat-context-window-toggle]",
       )!;
       expect(thinking.disabled).toBe(readOnly);
-      expect(fast.disabled).toBe(readOnly);
       expect(context.disabled).toBe(scope !== "operator.admin");
       context.click();
       if (!readOnly) {
         thinking.value = "1";
         thinking.dispatchEvent(new Event("change", { bubbles: true }));
-        fast.click();
         await getPendingChatPickerPatch(state, state.sessionKey);
-        expect(state.request).toHaveBeenCalledWith(
-          "sessions.patch",
-          expect.objectContaining({ key: selectedSession.key, fastMode: true }),
-        );
         expect(state.request).toHaveBeenCalledWith(
           "sessions.patch",
           expect.objectContaining({ key: selectedSession.key, thinkingLevel: "high" }),
         );
       } else {
-        fast.click();
+        thinking.value = "1";
+        thinking.dispatchEvent(new Event("change", { bubbles: true }));
         expect(state.request).not.toHaveBeenCalled();
       }
       const contextPatches = state.request.mock.calls.filter(
@@ -241,7 +235,6 @@ describe("chat pane model-setting permissions", () => {
       const thinking = container.querySelector<HTMLInputElement>("[data-chat-thinking-slider]")!;
       thinking.value = "1";
       thinking.dispatchEvent(new Event("change", { bubbles: true }));
-      container.querySelector<HTMLButtonElement>('[data-chat-speed-option="on"]')!.click();
       await controls.permissionPicker.onSelect("guarded");
       await getPendingChatPickerPatch(state, state.sessionKey);
       expect(state.request).not.toHaveBeenCalled();

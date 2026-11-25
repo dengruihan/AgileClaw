@@ -3013,7 +3013,6 @@
       "ui/src/e2e/new-session-page.empty-workspace.e2e.test.ts": 4,
       "ui/src/e2e/new-session-page.environment-metadata.e2e.test.ts": 7,
       "ui/src/e2e/new-session-page.environment-picker-loading.e2e.test.ts": 2,
-      "ui/src/e2e/new-session-page.fast-mode-preferences.e2e.test.ts": 6,
       "ui/src/e2e/new-session-page.github-projects.e2e.test.ts": 17,
       "ui/src/e2e/new-session-page.incognito-navigation.e2e.test.ts": 14,
       "ui/src/e2e/new-session-page.instant-thread.e2e.test.ts": 55,
