@@ -41,8 +41,8 @@ vi.mock("./in-process-gateway.js", () => ({
 vi.mock("./gateway.js", () => ({
   callGatewayTool: (...args: unknown[]) => callGatewayTool(...args),
 }));
-vi.mock("../sessions/tools/file-tool-planning.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../sessions/tools/file-tool-planning.js")>()),
+// mock-isolation: file-tool-planning constructs a real WorkerTaskPool at module scope and registers it in the process-global openclaw.workerTaskPools set; this fixture replaces planFileEdit only.
+vi.mock("../sessions/tools/file-tool-planning.js", () => ({
   planFileEdit: (...args: unknown[]) => planFileEdit(...args),
 }));
 
