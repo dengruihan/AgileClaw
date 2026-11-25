@@ -190,6 +190,44 @@ it("names provider rows from the authored provider display name", () => {
   ).toBe("Model A");
 });
 
+it("keeps the model id when one provider's ids share a model name", () => {
+  onTestFinished(
+    registerProviderIconConfigSource(() => ({
+      models: { providers: { "custom-relay-apac-prod-01": { displayName: "Acme Relay" } } },
+    })),
+  );
+  const container = document.createElement("div");
+  mount(
+    container,
+    [
+      {
+        provider: "custom-relay-apac-prod-01",
+        value: "custom-relay-apac-prod-01/gpt-5.5",
+        commitValue: "custom-relay-apac-prod-01/gpt-5.5",
+        label: "GPT-5.5 · gpt-5.5 · Acme Relay",
+        isDefault: false,
+      },
+      {
+        provider: "custom-relay-apac-prod-01",
+        value: "custom-relay-apac-prod-01/gpt-5.5-mini",
+        commitValue: "custom-relay-apac-prod-01/gpt-5.5-mini",
+        label: "GPT-5.5 · gpt-5.5-mini · Acme Relay",
+        isDefault: false,
+      },
+    ],
+    "custom-relay-apac-prod-01/gpt-5.5",
+  );
+  // The provider name repeats the heading; the model id is what separates the rows.
+  expect(
+    Array.from(
+      container.querySelectorAll<HTMLElement>(
+        "[data-chat-model-list] .chat-controls__model-option-name",
+      ),
+      (row) => row.textContent?.trim(),
+    ),
+  ).toEqual(["GPT-5.5 · gpt-5.5", "GPT-5.5 · gpt-5.5-mini"]);
+});
+
 it("keeps provider rows distinguishable when two providers share a display name", () => {
   onTestFinished(
     registerProviderIconConfigSource(() => ({

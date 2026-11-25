@@ -22,7 +22,7 @@ describe("chat-model-ref helpers", () => {
     },
     {
       names: ["Shared name", "Shared name"],
-      labels: ["Shared name · model-a · custom", "Shared name · Model-A · custom"],
+      labels: ["Shared name · model-a · Custom", "Shared name · Model-A · Custom"],
     },
   ] as const)(
     "keeps case-distinct catalog display identities with names $names",
@@ -60,17 +60,37 @@ describe("chat-model-ref helpers", () => {
     ]);
   });
 
-  it("falls back to the provider id when two providers share a display name", () => {
+  it("keeps the provider name when one provider's ids share a display name", () => {
+    const relay = "custom-relay-apac-prod-01";
     const entries = [
-      { id: "gpt-5.5", name: "GPT-5.5", provider: "acme-eu" },
-      { id: "gpt-5.5", name: "GPT-5.5", provider: "acme-us" },
+      { id: "gpt-5.5", name: "GPT-5.5", provider: relay },
+      { id: "gpt-5.5-mini", name: "GPT-5.5", provider: relay },
     ];
 
-    const lookup = buildCatalogDisplayLookup(entries, { "acme-eu": "Acme", "acme-us": "Acme" });
+    const lookup = buildCatalogDisplayLookup(entries, { [relay]: "Acme Relay" });
 
     expect(entries.map((entry) => buildChatModelOptionFromLookup(entry, lookup))).toEqual([
-      { value: "acme-eu/gpt-5.5", label: "GPT-5.5 · acme-eu" },
-      { value: "acme-us/gpt-5.5", label: "GPT-5.5 · acme-us" },
+      { value: `${relay}/gpt-5.5`, label: "GPT-5.5 · gpt-5.5 · Acme Relay" },
+      { value: `${relay}/gpt-5.5-mini`, label: "GPT-5.5 · gpt-5.5-mini · Acme Relay" },
+    ]);
+  });
+
+  it("keeps provider ids when two providers share a display name", () => {
+    const relay = "custom-relay-apac-prod-01";
+    const backup = "custom-relay-eu-west-2-backup";
+    const entries = [
+      { id: "gpt-5.5", name: "GPT-5.5", provider: relay },
+      { id: "gpt-5.5", name: "GPT-5.5", provider: backup },
+    ];
+
+    const lookup = buildCatalogDisplayLookup(entries, {
+      [relay]: "Acme Relay",
+      [backup]: "Acme Relay",
+    });
+
+    expect(entries.map((entry) => buildChatModelOptionFromLookup(entry, lookup))).toEqual([
+      { value: `${relay}/gpt-5.5`, label: `GPT-5.5 · ${relay}` },
+      { value: `${backup}/gpt-5.5`, label: `GPT-5.5 · ${backup}` },
     ]);
   });
 

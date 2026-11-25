@@ -146,8 +146,8 @@ function formatChatModelDisplay(value: string): string {
   return `${trimmed.slice(separator + 1)} · ${trimmed.slice(0, separator)}`;
 }
 
-function formatRawCatalogLabel(entry: ModelCatalogEntry): string {
-  const provider = entry.provider?.trim();
+function formatRawCatalogLabel(entry: ModelCatalogEntry, providerLabel?: string): string {
+  const provider = providerLabel ?? entry.provider?.trim();
   return provider ? `${entry.id} · ${provider}` : entry.id;
 }
 
@@ -173,12 +173,41 @@ function createNameProviderKey(name: string, providerName?: string | null): stri
   return `${name.toLowerCase()}\u0000${providerName?.trim().toLowerCase() ?? ""}`;
 }
 
+type DuplicateDetailInput = {
+  name: string;
+  providerName: string;
+  /** Rows sharing this (name, provider name) pair. */
+  rowsUnderProvider: number;
+  /** Distinct provider ids behind those rows. */
+  distinctProviders: number;
+};
+
+/**
+ * Disambiguating part after a repeated model name. The provider name separates a
+ * name repeated across providers; when several providers resolve to one name only
+ * their ids can, and a model id already equal to the name keeps the provider id
+ * alone. Ids are the last resort, never a shorter stand-in for the name.
+ */
+function resolveDuplicateDetail(entry: ModelCatalogEntry, input: DuplicateDetailInput): string {
+  if (input.rowsUnderProvider <= 1) {
+    return input.providerName || entry.provider?.trim() || entry.id;
+  }
+  if (input.distinctProviders > 1) {
+    return entry.id.trim().toLowerCase() === input.name.toLowerCase()
+      ? entry.provider?.trim() || entry.id
+      : formatRawCatalogLabel(entry);
+  }
+  // One provider's ids share the name: the model id separates them, and the
+  // provider part stays the name it is displayed under.
+  return formatRawCatalogLabel(entry, input.providerName);
+}
+
 type ChatModelDisplayLookup = ReadonlyMap<string, string>;
 
 /**
  * Labels every catalog row, suffixing the provider name only when the friendly
- * name alone would not identify the row. Providers that resolve to the same
- * name fall back to their id so those rows stay distinguishable.
+ * name alone would not identify the row. A provider id appears only when it is
+ * what separates the rows: several providers that resolve to one name.
  */
 export function buildCatalogDisplayLookup(
   catalog: ModelCatalogEntry[],
@@ -186,6 +215,7 @@ export function buildCatalogDisplayLookup(
 ): Map<string, string> {
   const nameToValues = new Map<string, Set<string>>();
   const nameProviderToValues = new Map<string, Set<string>>();
+  const nameProviderIds = new Map<string, Set<string>>();
   // Resolved names walk the provider config, so one lookup per provider per render.
   const providerNames = new Map<string, string>();
   const resolveProviderName = (provider: string) => {
@@ -213,7 +243,7 @@ export function buildCatalogDisplayLookup(
     };
   });
 
-  for (const { name, qualifiedKey, nameKey, providerKey } of entries) {
+  for (const { entry, name, qualifiedKey, nameKey, providerKey } of entries) {
     if (!name) {
       continue;
     }
@@ -224,22 +254,24 @@ export function buildCatalogDisplayLookup(
     const nameProviderValues = nameProviderToValues.get(providerKey) ?? new Set<string>();
     nameProviderValues.add(qualifiedKey);
     nameProviderToValues.set(providerKey, nameProviderValues);
+
+    // Distinct provider ids for one (name, provider name) pair. More than one
+    // means several providers share the name, and only their ids tell rows apart.
+    const nameProviderIdValues = nameProviderIds.get(providerKey) ?? new Set<string>();
+    nameProviderIdValues.add(entry.provider?.trim().toLowerCase() ?? "");
+    nameProviderIds.set(providerKey, nameProviderIdValues);
   }
 
   return new Map(
     entries.map(({ entry, name, providerName, qualifiedKey, nameKey, providerKey }) => {
       let label = name || formatRawCatalogLabel(entry);
       if (name && (nameToValues.get(nameKey)?.size ?? 0) > 1) {
-        // The provider name separates the rows. When two providers resolve to the
-        // same name, only their ids can, and the model id already repeating the
-        // name keeps the provider id alone.
-        const detail =
-          (nameProviderToValues.get(providerKey)?.size ?? 0) <= 1
-            ? providerName || entry.provider?.trim() || entry.id
-            : entry.id.trim().toLowerCase() === name.toLowerCase()
-              ? entry.provider?.trim() || entry.id
-              : formatRawCatalogLabel(entry);
-        label = `${name} · ${detail}`;
+        label = `${name} · ${resolveDuplicateDetail(entry, {
+          name,
+          providerName,
+          rowsUnderProvider: nameProviderToValues.get(providerKey)?.size ?? 0,
+          distinctProviders: nameProviderIds.get(providerKey)?.size ?? 0,
+        })}`;
       }
       return [qualifiedKey, label];
     }),

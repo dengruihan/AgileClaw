@@ -668,7 +668,7 @@ describe("chat-model-select-state", () => {
     expect(resolved.defaultLabel).toBe("Default (GPT-5.5 · OpenRouter)");
   });
 
-  it("falls back to id and provider when duplicate names share the same provider", () => {
+  it("falls back to id and provider name when duplicate names share the same provider", () => {
     const state = createChatModelState({
       chatModelCatalog: createModelCatalog(
         {
@@ -693,16 +693,16 @@ describe("chat-model-select-state", () => {
     const resolved = resolveChatModelSelectState(state);
     expect(resolved.currentOverride).toBe("anthropic/claude-3-7-sonnet");
     expect(resolved.defaultLabel).toBe(
-      "Default (Claude Sonnet · claude-3-7-sonnet-thinking · anthropic)",
+      "Default (Claude Sonnet · claude-3-7-sonnet-thinking · Anthropic)",
     );
     expect(resolved.options).toEqual([
       {
         value: "anthropic/claude-3-7-sonnet",
-        label: "Claude Sonnet · claude-3-7-sonnet · anthropic",
+        label: "Claude Sonnet · claude-3-7-sonnet · Anthropic",
       },
       {
         value: "anthropic/claude-3-7-sonnet-thinking",
-        label: "Claude Sonnet · claude-3-7-sonnet-thinking · anthropic",
+        label: "Claude Sonnet · claude-3-7-sonnet-thinking · Anthropic",
       },
     ]);
   });
