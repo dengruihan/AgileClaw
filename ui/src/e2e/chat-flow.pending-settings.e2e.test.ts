@@ -16,7 +16,7 @@ const suite = createChatFlowE2eSuite();
 const rosterMatch = { includeGlobal: true };
 
 suite.define(() => {
-  it("keeps send pending until reasoning and speed patches finish", async () => {
+  it("keeps send pending until reasoning patches finish", async () => {
     const context = await suite.newBrowserContext(createControlUiE2eContextOptions());
     const page = await context.newPage();
     const gateway = await installMockGateway(page, {
@@ -66,11 +66,11 @@ suite.define(() => {
       expect(requireRecord(firstPatch.params).thinkingLevel).toBe("medium");
 
       await gateway.deferNext("sessions.patch");
-      await main.locator('[data-chat-speed-option="on"]').click();
+      await thinkingSlider.press("ArrowLeft");
       await expectRequestCountStable(gateway, "sessions.patch", 1);
       await page.keyboard.press("Escape");
 
-      const prompt = "send with the new reasoning and speed";
+      const prompt = "send with the new reasoning";
       await page.locator(".agent-chat__composer-combobox textarea").fill(prompt);
       await page.getByRole("button", { name: "Send message" }).click();
       await page.locator(".chat-queue").getByText("Applying chat settings").waitFor({
@@ -81,7 +81,7 @@ suite.define(() => {
       const sessionListCount = (await gateway.getRequests("sessions.list", rosterMatch)).length;
       await gateway.resolveDeferred("sessions.patch", {});
       const patches = await waitForRequests(gateway, "sessions.patch", 2);
-      expect(requireRecord(patches[1]?.params).fastMode).toBe(true);
+      expect(requireRecord(patches[1]?.params).thinkingLevel).toBe("low");
       await expect
         .poll(async () => (await gateway.getRequests("sessions.list", rosterMatch)).length)
         .toBeGreaterThan(sessionListCount);
@@ -111,6 +111,32 @@ suite.define(() => {
     const gateway = await installMockGateway(page, {
       sessionKey: "agent:main:session-a",
       models: [{ id: "gpt-5.6-luna", name: "GPT-5.6 Luna", provider: "openai" }],
+      methodResponses: {
+        "sessions.list": {
+          ...chatSessionListResponse([
+            {
+              key: "agent:main:session-a",
+              kind: "direct",
+              label: "Session A",
+              model: "gpt-5.6-luna",
+              modelProvider: "openai",
+              thinkingLevel: "high",
+              updatedAt: 2,
+            },
+          ]),
+          defaults: {
+            contextTokens: null,
+            model: "gpt-5.6-luna",
+            modelProvider: "openai",
+            thinkingDefault: "high",
+            thinkingLevels: [
+              { id: "low", label: "low" },
+              { id: "medium", label: "medium" },
+              { id: "high", label: "high" },
+            ],
+          },
+        },
+      },
     });
     try {
       await page.goto(controlUiSessionUrl(suite.server.baseUrl, "agent:main:session-a"));
@@ -119,7 +145,9 @@ suite.define(() => {
       const listsBefore = (await gateway.getRequests("sessions.list", rosterMatch)).length;
       await gateway.deferNext("sessions.list", rosterMatch);
       await gateway.deferNext("sessions.list", rosterMatch);
-      await main.locator('[data-chat-speed-option="on"]').click();
+      const thinkingSlider = main.locator('[data-chat-thinking-slider="true"]');
+      await expect.poll(() => thinkingSlider.isVisible()).toBe(true);
+      await thinkingSlider.press("ArrowLeft");
       await gateway.waitForRequest("sessions.patch");
       await waitForRequests(gateway, "sessions.list", listsBefore + 1, rosterMatch);
       await page.keyboard.press("Escape");

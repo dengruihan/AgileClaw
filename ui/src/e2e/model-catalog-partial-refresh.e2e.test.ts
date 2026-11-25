@@ -56,7 +56,6 @@ function readControls(page: Page) {
               disabled: effort.getAttribute("aria-disabled"),
               reserved: effort.closest("details")?.getAttribute("aria-hidden"),
               value: effort.getAttribute("data-chat-thinking-value"),
-              fast: effort.getAttribute("data-chat-fast-mode"),
             }
           : null,
       };
