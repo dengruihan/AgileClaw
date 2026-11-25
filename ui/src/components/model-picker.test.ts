@@ -1,7 +1,8 @@
 /* @vitest-environment jsdom */
 
 import { render } from "lit";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { registerProviderIconConfigSource } from "../lib/provider-icon-source.ts";
 import { updatePickers, choosePickerValue } from "../test-helpers/select-picker.ts";
 import { renderModelPicker } from "./model-picker.ts";
 import type { SelectPicker } from "./select-picker.ts";
@@ -152,5 +153,50 @@ describe("renderModelPicker", () => {
       dispose();
       host.remove();
     }
+  });
+});
+
+async function openGroupHeadings(options: Array<{ provider: string }>) {
+  const container = document.createElement("div");
+  render(
+    renderModelPicker({
+      label: "Model",
+      value: "",
+      groupByProvider: true,
+      options: options.map(({ provider }, index) => ({
+        value: `${provider}/model-${index}`,
+        label: `Model ${index}`,
+        provider,
+      })),
+      onChange: vi.fn(),
+    }),
+    container,
+  );
+  await updatePickers(container);
+  const picker = container.querySelector<SelectPicker>("openclaw-select-picker")!;
+  picker.querySelector<HTMLButtonElement>(".picker-select__trigger")!.click();
+  await picker.updateComplete;
+  return [...picker.querySelectorAll('[role="group"]')].map((group) =>
+    group.getAttribute("aria-label"),
+  );
+}
+
+describe("renderModelPicker provider group headings", () => {
+  it("names a custom provider group from its authored display name", async () => {
+    onTestFinished(
+      registerProviderIconConfigSource(() => ({
+        models: { providers: { "acme-relay-eu-west-1": { displayName: "Acme Relay" } } },
+      })),
+    );
+
+    await expect(openGroupHeadings([{ provider: "acme-relay-eu-west-1" }])).resolves.toEqual([
+      "Acme Relay",
+    ]);
+  });
+
+  it("keeps brand names for providers without a config entry", async () => {
+    await expect(
+      openGroupHeadings([{ provider: "openai" }, { provider: "google" }, { provider: "bare" }]),
+    ).resolves.toEqual(["OpenAI", "Google", "Bare"]);
   });
 });

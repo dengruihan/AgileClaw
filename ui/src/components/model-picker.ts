@@ -1,5 +1,5 @@
 import { html, nothing } from "lit";
-import { providerDisplayLabel, renderProviderBrandIcon } from "./provider-icon.ts";
+import { renderProviderBrandIcon, resolveProviderDisplayName } from "./provider-icon.ts";
 import { renderPicker } from "./select-picker.ts";
 
 export type ModelPickerOption = {
@@ -66,7 +66,7 @@ export function renderModelPicker(params: ModelPickerParams) {
               option.provider
                 ? {
                     id: option.provider,
-                    label: providerDisplayLabel(option.provider),
+                    label: resolveProviderDisplayName(option.provider),
                     leading: renderProviderBrandIcon(option.provider, {
                       className: "model-picker__provider-icon",
                     }),
