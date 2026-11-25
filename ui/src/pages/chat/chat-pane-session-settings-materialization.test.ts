@@ -16,12 +16,8 @@ import {
   readChatPaneMutationAccess,
   renderChatPaneComposerControls,
 } from "./chat-pane-session-controls.ts";
-import {
-  switchChatContextWindow,
-  switchChatFastMode,
-  switchChatThinkingLevel,
-} from "./chat-session.ts";
-import { getPendingChatPickerPatch } from "./chat-settings-patches.ts";
+import { switchChatContextWindow, switchChatThinkingLevel } from "./chat-session.ts";
+import { getPendingChatPickerPatch, patchChatSessionSettings } from "./chat-settings-patches.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
 import {
   installTranscriptDomMocks,
@@ -412,7 +408,12 @@ it.each([
       expect(selectedChatSessionRow(pane.state)?.sessionId).toBeUndefined();
       first = switchChatThinkingLevel(pane.state, "high");
       queued.push(switchChatThinkingLevel(pane.state, "low"));
-      queued.push(switchChatFastMode(pane.state, "on"));
+      queued.push(
+        patchChatSessionSettings(pane.state, key, { fastMode: true }).then(
+          (receipt) => receipt !== null,
+          () => false,
+        ),
+      );
       queued.push(switchChatContextWindow(pane.state, "128k"));
       expect(patch).toHaveBeenCalledOnce();
       expect(patch.mock.calls[0]?.[1]).toEqual({ key, thinkingLevel: "high" });
@@ -467,10 +468,14 @@ it.each([
         } else {
           // A later speed or context choice does not supersede the rejected reasoning choice.
           const failedIndex = outcome === "reasoning rejection" ? 0 : index;
-          expect(pane.state.chatError).toContain(
-            `Synthetic queued setting ${failedIndex} rejection`,
-          );
-          expect(pane.state.lastError).toBe(pane.state.chatError);
+          // The canonical settings writer reports failure to its caller; `/fast` is what
+          // turns that into the user-facing message.
+          if (failedIndex !== 1) {
+            expect(pane.state.chatError).toContain(
+              `Synthetic queued setting ${failedIndex} rejection`,
+            );
+            expect(pane.state.lastError).toBe(pane.state.chatError);
+          }
         }
       }
       expect(getPendingChatPickerPatch(pane.state, key, "main")).toBeUndefined();

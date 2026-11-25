@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Page } from "playwright";
 import { expect, it } from "vitest";
 import partialConfig from "../../../test/fixtures/config-corpus/provider-partially-unavailable.json" with { type: "json" };
-import { type ModelCatalogResult } from "../api/types.ts";
+import type { ModelCatalogResult } from "../api/types.ts";
 import { controlUiSessionUrl, installMockGateway } from "../test-helpers/control-ui-e2e.ts";
 import { createControlUiE2eSuite } from "./control-ui-e2e-suite.test-support.ts";
 
@@ -40,24 +40,25 @@ const catalog: ModelCatalogResult = {
   ],
 };
 
+type EffortAvailability = "usable" | "disabled" | "absent";
+
 function readControls(page: Page) {
   return page
     .locator(".agent-chat__input")
     .first()
     .evaluate((composer) => {
-      const effort = composer.querySelector<HTMLElement>("[data-chat-thinking-select]");
+      const trigger = composer.querySelector<HTMLElement>("[data-chat-model-select]");
+      const slider = composer.querySelector<HTMLInputElement>("[data-chat-thinking-slider]");
       return {
-        text: composer.textContent,
         notice: composer.querySelector("[data-chat-model-catalog-state]")?.textContent,
-        effort: effort
-          ? {
-              label: effort.getAttribute("aria-label"),
-              visible: effort.checkVisibility({ visibilityProperty: true }),
-              disabled: effort.getAttribute("aria-disabled"),
-              reserved: effort.closest("details")?.getAttribute("aria-hidden"),
-              value: effort.getAttribute("data-chat-thinking-value"),
-            }
-          : null,
+        // The merged control keeps one trigger for model selection plus the
+        // effort section that appears inside its menu.
+        trigger: {
+          disabled: trigger?.getAttribute("aria-disabled") ?? null,
+          thinkingDisabled: trigger?.getAttribute("data-chat-thinking-disabled") ?? null,
+        },
+        panel: composer.querySelector(".chat-controls__reasoning-panel") !== null,
+        sliderDisabled: slider?.disabled ?? null,
       };
     });
 }
@@ -71,10 +72,47 @@ async function captureControls(page: Page, stage: string) {
   });
 }
 
+function effortControls(controls: Awaited<ReturnType<typeof readControls>>) {
+  return {
+    trigger: {
+      disabled: controls.trigger.disabled,
+      thinkingDisabled: controls.trigger.thinkingDisabled,
+    },
+    panel: controls.panel,
+    sliderDisabled: controls.sliderDisabled,
+  };
+}
+
+function expectedEffortControls(effort: EffortAvailability) {
+  const trigger = { disabled: "false" };
+  if (effort === "absent") {
+    return {
+      trigger: { ...trigger, thinkingDisabled: "true" },
+      panel: false,
+      sliderDisabled: null,
+    };
+  }
+  return {
+    trigger: { ...trigger, thinkingDisabled: effort === "disabled" ? "true" : "false" },
+    panel: true,
+    sliderDisabled: effort === "disabled",
+  };
+}
+
 suite.define(() => {
-  it.each(["empty", "rejected", "retained rejection", "selected unavailable", "non-reasoning"])(
-    "does not expose usable effort for %s",
-    async (condition) => {
+  it.each([
+    // A loaded catalog snapshot is what gates effort, not the model's presence:
+    // the session row owns its thinking profile, so effort stays usable while a
+    // snapshot exists even when that model is missing or marked unavailable.
+    { condition: "empty", effort: "usable" },
+    { condition: "rejected", effort: "disabled" },
+    // A failed refresh retains the previous snapshot, so effort stays usable.
+    { condition: "retained rejection", effort: "usable" },
+    { condition: "selected unavailable", effort: "usable" },
+    { condition: "non-reasoning", effort: "absent" },
+  ] as const)(
+    "gates the merged effort control by the catalog snapshot for $condition",
+    async ({ condition, effort }) => {
       await suite.withPage({ locale: "en-US" }, async ({ page }) => {
         const selected = {
           ...catalog.models[0]!,
@@ -125,9 +163,7 @@ suite.define(() => {
         const model = page.locator("[data-chat-model-select]");
         await expect.poll(() => model.getAttribute("aria-busy")).toBe("false");
         if (condition === "retained rejection") {
-          await expect
-            .poll(() => page.locator("[data-chat-thinking-select]").isVisible())
-            .toBe(true);
+          await expect.poll(async () => (await readControls(page)).panel).toBe(true);
           await gateway.setMethodResponse("models.list", failure);
         }
         await model.click();
@@ -137,20 +173,13 @@ suite.define(() => {
         } else {
           expect(await notice.count()).toBe(0);
         }
-        await expect
-          .poll(async () => {
-            const { effort } = await readControls(page);
-            return !effort || effort.reserved === "true" || effort.disabled === "true";
-          })
-          .toBe(true);
+        // The merged trigger always serves model selection, so catalog state
+        // must never disable it; only the effort section reflects usability.
+        const expected = expectedEffortControls(effort);
+        await expect.poll(async () => effortControls(await readControls(page))).toEqual(expected);
         await captureControls(page, `${condition}-open`);
         await model.click();
-        await expect
-          .poll(async () => {
-            const { effort } = await readControls(page);
-            return !effort || effort.disabled === "true";
-          })
-          .toBe(true);
+        await expect.poll(async () => effortControls(await readControls(page))).toEqual(expected);
         await captureControls(page, `${condition}-closed`);
         expect(await gateway.getRequests("sessions.patch")).toHaveLength(0);
       });

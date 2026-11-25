@@ -28,7 +28,6 @@ import {
   createSessionsListResult,
   DEFAULT_CHAT_MODEL_CATALOG,
 } from "../../test-helpers/chat-model.ts";
-import { createTestGatewayClient } from "../../test-helpers/gateway-client.ts";
 import { sessionMutationGatewayHello } from "../../test-helpers/gateway-methods.ts";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import {
@@ -43,11 +42,12 @@ import {
   selectAttachmentMenuOption,
   selectFile,
 } from "./chat-attachment-picker.test-support.ts";
+import { dispatchChatSlashCommand } from "./chat-commands.ts";
 import { makeChatHost } from "./chat-host.test-support.ts";
 import { createChatModelSetupBanner } from "./chat-model-setup.ts";
 import { applyChatPendingInputs, getChatPendingInputs } from "./chat-pending-inputs.ts";
 import * as chatProgress from "./chat-progress.ts";
-import { switchChatFastMode, switchChatModel, switchChatThinkingLevel } from "./chat-session.ts";
+import { switchChatModel, switchChatThinkingLevel } from "./chat-session.ts";
 import { groupMessages } from "./chat-thread-grouping.ts";
 import * as chatThread from "./chat-thread.ts";
 import { resetChatViewState } from "./chat-view-state.ts";
@@ -506,25 +506,6 @@ function createChatHeaderState(
     state.sessionsResult = next.result;
   });
   return { state, request };
-}
-
-function createReasoningHeaderState(options: { models: ModelCatalogEntry[] }) {
-  const result = createChatHeaderState({
-    model: "gpt-5.5",
-    modelProvider: "openai",
-    models: options.models,
-    thinkingDefault: "high",
-  });
-  result.state.sessionsResult = createSessionsListResult({
-    defaultsModel: "gpt-5.5",
-    defaultsProvider: "openai",
-    defaultsThinkingDefault: "high",
-    defaultsThinkingLevels: [
-      { id: "low", label: "low" },
-      { id: "high", label: "high" },
-    ],
-  });
-  return result;
 }
 
 type ChatModelControlsProps = Parameters<typeof renderChatModelControls>[0];
@@ -3763,24 +3744,6 @@ describe("chat welcome", () => {
 });
 
 describe("chat model controls", () => {
-  const subscriptionProfiles = [
-    { profileId: "openai:work", type: "oauth", status: "ok", email: "work@example.com" },
-    { profileId: "openai:personal", type: "oauth", status: "ok", email: "peter@steipete.me" },
-  ] satisfies ModelAuthStatusResult["providers"][number]["profiles"];
-  const authStatus: ModelAuthStatusResult = {
-    ts: 1,
-    providers: [
-      {
-        provider: "openai-codex",
-        displayName: "OpenAI",
-        status: "ok",
-        profiles: subscriptionProfiles,
-        profileOrder: ["openai:personal", "openai:work"],
-        usage: { providerId: "openai", windows: [], plan: "ChatGPT Pro" },
-      },
-    ],
-  };
-
   it("preserves the executing provider when its model id exists in another provider's catalog", () => {
     const { state } = createChatHeaderState({
       model: "shared",
@@ -4083,7 +4046,9 @@ describe("chat model controls", () => {
 
     const modelSwitch = switchChatModel(host, "openai/gpt-5.6-sol");
     const thinkingPatch = switchChatThinkingLevel(host, "ultra");
-    const fastModePatch = switchChatFastMode(host, "on");
+    const fastModePatch = dispatchChatSlashCommand(host, "fast", "on", {
+      sendResetMessage: async () => undefined,
+    });
     const laterModelSwitch = switchChatModel(host, "google/gemini-3-pro");
 
     expect(patches).toEqual([{ model: "openai/gpt-5.6-sol" }]);
@@ -4094,7 +4059,10 @@ describe("chat model controls", () => {
     thinkingUpdate.resolve(patchResult);
     await expect(thinkingPatch).resolves.toBe(true);
     await waitForFast(() => expect(patches).toHaveLength(4));
-    await expect(Promise.all([fastModePatch, laterModelSwitch])).resolves.toEqual([true, true]);
+    await expect(Promise.all([fastModePatch, laterModelSwitch])).resolves.toEqual([
+      "completed",
+      true,
+    ]);
     expect(patches.at(-1)).toEqual({ model: "google/gemini-3-pro" });
     expect(patches).toEqual([
       { model: "openai/gpt-5.6-sol" },
@@ -4209,9 +4177,9 @@ describe("chat model controls", () => {
     },
   );
 
-  it("keeps the newest speed selection when an older patch fails late", async () => {
+  it("keeps the newest /fast selection when an older patch fails late", async () => {
     const pendingPatches: Array<{ resolve: () => void; reject: (error: Error) => void }> = [];
-    const operations: Promise<boolean>[] = [];
+    const operations: Promise<unknown>[] = [];
     let canonical: GatewaySessionRow = {
       key: "main",
       agentId: "main",
@@ -4278,17 +4246,21 @@ describe("chat model controls", () => {
       await Promise.allSettled(operations);
     });
 
-    const first = switchChatFastMode(host, "on");
+    const first = dispatchChatSlashCommand(host, "fast", "on", {
+      sendResetMessage: async () => undefined,
+    });
     operations.push(first);
     await waitForFast(() => expect(pendingPatches).toHaveLength(1));
-    const second = switchChatFastMode(host, "off");
+    const second = dispatchChatSlashCommand(host, "fast", "off", {
+      sendResetMessage: async () => undefined,
+    });
     operations.push(second);
 
     pendingPatches[0]?.reject(new Error("boom"));
-    await expect(first).resolves.toBe(false);
+    await expect(first).resolves.toBe("failed");
     await waitForFast(() => expect(pendingPatches).toHaveLength(2));
     pendingPatches[1]?.resolve();
-    await expect(second).resolves.toBe(true);
+    await expect(second).resolves.toBe("completed");
 
     // The newer selection keeps its own validation turn after the older failure.
     const row = host.sessionsResult?.sessions.find((entry) => entry.key === "main");

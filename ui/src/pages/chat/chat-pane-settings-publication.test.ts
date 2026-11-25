@@ -5,8 +5,9 @@ import { createDeferred } from "../../../../test/helpers/promise.js";
 import type { GatewaySessionRow } from "../../api/types.ts";
 import { sessionsResult } from "../../lib/sessions/session-capability.test-support.ts";
 import type { GatewayRequestHandler } from "../../test-helpers/gateway-client.ts";
+import { dispatchChatSlashCommand } from "./chat-commands.ts";
 import { createMountedPanes, refreshPane } from "./chat-pane-mounted.test-support.ts";
-import { switchChatFastMode, switchChatThinkingLevel } from "./chat-session.ts";
+import { switchChatThinkingLevel } from "./chat-session.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
 import {
   installTranscriptDomMocks,
@@ -252,7 +253,7 @@ it.each(["thinking", "speed"] as const)(
     const { sessions, mount, emitGatewayEvent } = createMountedPanes(rows, "main", undefined, {
       "sessions.patch": patch,
     });
-    let operation: Promise<boolean> | undefined;
+    let operation: Promise<unknown> | undefined;
     try {
       await sessions.refresh({ agentId: "main", force: true });
       const panes = [mount(initial.key), mount(initial.key)];
@@ -264,7 +265,9 @@ it.each(["thinking", "speed"] as const)(
       operation =
         setting === "thinking"
           ? switchChatThinkingLevel(state, "off")
-          : switchChatFastMode(state, "on");
+          : dispatchChatSlashCommand(state, "fast", "on", {
+              sendResetMessage: async () => undefined,
+            });
       expect(patch).toHaveBeenCalledOnce();
       rows[0] = newer;
       emitGatewayEvent("sessions.changed", {
@@ -283,7 +286,7 @@ it.each(["thinking", "speed"] as const)(
       };
       assertRows({ ...newer, ...pendingFields });
       acknowledgement.reject(new Error("Synthetic rejected local settings patch"));
-      await expect(operation).resolves.toBe(false);
+      await expect(operation).resolves.toBe(setting === "thinking" ? false : "failed");
       assertRows(newer);
     } finally {
       acknowledgement.resolve({ ok: true, key: initial.key, path: "", entry: rows[0] });

@@ -35,6 +35,7 @@ import {
 } from "./attachment-payload-store.ts";
 import * as chatCommandExecutor from "./chat-command-executor.ts";
 import type { executeSlashCommand } from "./chat-command-executor.ts";
+import { dispatchChatSlashCommand } from "./chat-commands.ts";
 import {
   createDeliveryAttachmentBatch,
   reloadChatDocumentStorage,
@@ -72,7 +73,7 @@ import type { ChatHost } from "./chat-send-contract.ts";
 import { handleSendChat } from "./chat-send-submit.ts";
 import * as chatSendSupport from "./chat-send-support.ts";
 import { recordChatSendServerTiming } from "./chat-send-timing.ts";
-import { switchChatFastMode, switchChatThinkingLevel } from "./chat-session.ts";
+import { switchChatThinkingLevel } from "./chat-session.ts";
 import { getPendingChatPickerPatch, patchChatSessionSettings } from "./chat-settings-patches.ts";
 import { handlePageGatewayEvent } from "./chat-state-events.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
@@ -1412,10 +1413,10 @@ describe("handleSendChat", () => {
       chatMessage: "use the new reasoning and speed",
       sessionsResult,
     });
-    const settingsHost: Parameters<typeof switchChatThinkingLevel>[0] = host;
-
-    const thinkingPatch = switchChatThinkingLevel(settingsHost, "high");
-    const fastModePatch = switchChatFastMode(settingsHost, "on");
+    const thinkingPatch = switchChatThinkingLevel(host, "high");
+    const fastModePatch = dispatchChatSlashCommand(host, "fast", "on", {
+      sendResetMessage: async () => undefined,
+    });
     const send = handleSendChat(host);
     await Promise.resolve();
 
