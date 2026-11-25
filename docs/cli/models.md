@@ -111,10 +111,10 @@ Options:
 | `--probe-profile <id>`    | Probe specific auth profile ids (repeat or comma-separated).                                                  |
 | `--probe-timeout <ms>`    | Per-probe timeout.                                                                                            |
 | `--probe-concurrency <n>` | Concurrent probes.                                                                                            |
-| `--probe-max-tokens <n>`  | Probe max tokens (best effort).                                                                               |
+| `--probe-max-tokens <n>`  | Requested probe output cap; values below 2048 do not lower the probe budget (see below).                      |
 | `--agent <id>`            | Configured agent id; overrides `OPENCLAW_AGENT_DIR`.                                                          |
 
-`--probe-timeout` requires a positive number; `--probe-concurrency` and `--probe-max-tokens` require positive integers. Omit these options to use their defaults (`8000`, `2`, and `8`, respectively); explicitly empty values are rejected.
+`--probe-timeout` requires a positive number; `--probe-concurrency` and `--probe-max-tokens` require positive integers. Omit these options to use their defaults (`8000`, `2`, and `8`, respectively); explicitly empty values are rejected. The `8` default is only the requested cap: probes raise the budget to 2048 output tokens (room for reasoning-first models to think before they reply) or to the model's configured maximum output when that is lower, and `--probe-max-tokens` can ask for more. The effective cap is `max(n, min(2048, configured maximum output))`; JSON output reports the requested value, not the effective cap.
 
 Probe rows can come from auth profiles, env credentials, or `models.json`. Probe status buckets: `ok`, `auth`, `rate_limit`, `billing`, `timeout`, `format`, `unknown`, `no_model`.
 

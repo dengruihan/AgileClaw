@@ -23,6 +23,8 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 const MIN_TIMEOUT_MS = 5_000;
 const MAX_TIMEOUT_MS = 60_000;
 const PROBE_CONCURRENCY = 2;
+// Requested output cap for the probe; list.probe.ts raises it to leave room for
+// models that spend tokens thinking before their first visible token.
 const PROBE_MAX_TOKENS = 8;
 
 const FAILURE_PRIORITY: readonly AuthProbeStatus[] = [

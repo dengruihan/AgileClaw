@@ -43,7 +43,11 @@ type RunnerParams = {
   authProfileIdSource?: string;
   config?: OpenClawConfig;
   preparedModelRuntimeMode?: string;
+  streamParams?: { maxTokens?: number };
 };
+/** The incomplete-turn payload the runner returns when reasoning consumes the output cap. */
+const REASONING_ONLY_TURN_TEXT = "⚠️ Agent couldn't generate a response. Please try again.";
+const THINKING_TOKENS = 1_024;
 type ProbeParams = Parameters<typeof probeModule.runAuthProbes>[0];
 function probeInput(
   overrides: Omit<Partial<ProbeParams>, "options"> & { options?: Partial<ProbeParams["options"]> },
@@ -211,6 +215,75 @@ describe("runAuthProbes", () => {
           modelSelectionLocked: true,
         }),
       );
+    });
+  });
+
+  it("probes a reasoning-first model with enough output budget to return visible text", async () => {
+    await withProbeRuntime("profile", async ({ probe, runner }) => {
+      // Models that stream thinking before their first visible token spend the
+      // output cap on reasoning; the runner then exhausts its reasoning-only
+      // retries and ends the probe with an incomplete-turn error payload. The
+      // fake provider needs room for thinking before it can answer OK.
+      runner.mockImplementation(async (params) =>
+        (params.streamParams?.maxTokens ?? 0) > THINKING_TOKENS
+          ? { payloads: [{ text: "OK" }] }
+          : {
+              payloads: [{ text: REASONING_ONLY_TURN_TEXT, isError: true }],
+              meta: { error: { kind: "incomplete_turn", message: REASONING_ONLY_TURN_TEXT } },
+            },
+      );
+
+      const result = await probe.runAuthProbes(probeInput({}));
+
+      expect(result.results[0]).toMatchObject({ status: "ok" });
+      expect(runner.mock.calls[0]?.[0].streamParams?.maxTokens).toBeGreaterThan(THINKING_TOKENS);
+    });
+  });
+
+  it("keeps the raised probe budget within the model's configured output cap", async () => {
+    await withProbeRuntime("profile", async ({ probe, runner }) => {
+      // anthropic-messages and openai-responses forward an explicit cap without
+      // clamping, so a budget above the model's own output limit would fail the
+      // probe as an invalid request instead of measuring the connection.
+      const cfg: OpenClawConfig = {
+        models: {
+          providers: {
+            openai: {
+              baseUrl: "https://api.openai.com/v1",
+              api: "openai-completions",
+              models: [
+                {
+                  id: "gpt-5.5",
+                  name: "GPT-5.5",
+                  reasoning: false,
+                  input: ["text"],
+                  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+                  contextWindow: 128_000,
+                  maxTokens: 512,
+                },
+              ],
+            },
+          },
+        },
+      };
+
+      const result = await probe.runAuthProbes(probeInput({ cfg }));
+
+      expect(result.results[0]).toMatchObject({ status: "ok" });
+      expect(runner.mock.calls[0]?.[0].streamParams?.maxTokens).toBe(512);
+    });
+  });
+
+  it("still reports a reasoning-only reply as a failed probe", async () => {
+    await withProbeRuntime("profile", async ({ probe, runner }) => {
+      runner.mockResolvedValue({
+        payloads: [{ text: REASONING_ONLY_TURN_TEXT, isError: true }],
+        meta: { error: { kind: "incomplete_turn", message: REASONING_ONLY_TURN_TEXT } },
+      });
+
+      const result = await probe.runAuthProbes(probeInput({}));
+
+      expect(result.results[0]).toMatchObject({ status: "unknown" });
     });
   });
 
