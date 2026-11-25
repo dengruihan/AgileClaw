@@ -407,6 +407,7 @@ suite.define(() => {
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         await page.locator(".model-providers__navigation [data-custom-provider]").click();
+        await page.locator("[data-template-custom]").click();
         const editor = page.locator(".provider-manager--inline");
         // The create form asks for a readable name only; the config key is generated.
         await expect.poll(() => editor.locator('[name="providerId"]').count()).toBe(0);
@@ -561,6 +562,7 @@ suite.define(() => {
           });
         }
         await headerAdd.click();
+        await page.locator("[data-template-custom]").click();
         const editor = page.locator(".provider-manager--inline");
         await editor.locator('[name="displayName"]').waitFor();
         await gateway.deferNext("config.patch");
@@ -624,6 +626,7 @@ suite.define(() => {
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         const editor = page.locator(".provider-manager--inline");
         await page.locator(".model-providers__navigation [data-custom-provider]").click();
+        await page.locator("[data-template-custom]").click();
         await gateway.deferNext("config.patch");
         await editor.locator('[name="displayName"]').fill(chineseName);
         await editor.locator('[name="baseUrl"]').fill(relayUrl);
@@ -647,6 +650,7 @@ suite.define(() => {
 
         // A second provider with the same readable name and endpoint claims its own key.
         await page.locator(".settings-section__actions [data-custom-provider]").click();
+        await page.locator("[data-template-custom]").click();
         await gateway.deferNext("config.patch");
         await editor.locator('[name="displayName"]').fill(chineseName);
         await editor.locator('[name="baseUrl"]').fill(relayUrl);
@@ -741,6 +745,7 @@ suite.define(() => {
           await page.goto(`${suite.server.baseUrl}settings/model-providers`);
           const editor = page.locator(".provider-manager--inline");
           await page.locator(".model-providers__navigation [data-custom-provider]").click();
+          await page.locator("[data-template-custom]").click();
           await editor.locator('[name="displayName"]').waitFor();
           if (recordVisuals) {
             await page.screenshot({

@@ -100,7 +100,7 @@ export function renderModelProviders(props: ModelProvidersViewProps) {
       ${props.installedAgents} ${props.catalogSettings ?? nothing}
     `,
     { wide: true },
-  )}${renderAddProvider(props)}`;
+  )}${renderAddProvider(props)}${props.templatePicker ?? nothing}`;
 }
 
 /** The Settings selection scopes provider access, never the global defaults above it. */

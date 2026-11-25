@@ -403,6 +403,7 @@ suite.define(() => {
         await gateway.resolveDeferred("config.patch", { config: saved, hash: "model-row-saved" });
         await fourth.getByText("Fourth updated", { exact: true }).waitFor();
         await page.locator(".settings-section__actions [data-custom-provider]").click();
+        await page.locator("[data-template-custom]").click();
         await manager.locator('[name="displayName"]').waitFor();
         await page.locator(`[data-provider-select="${providerId}"]`).click();
         await fourth.getByRole("button", { name: "Edit model", exact: true }).click();
@@ -608,6 +609,7 @@ suite.define(() => {
         });
         await page.goto(`${suite.server.baseUrl}settings/model-providers`);
         await page.locator(".settings-section__actions [data-custom-provider]").click();
+        await page.locator("[data-template-custom]").click();
         const manager = page.locator(".provider-manager--inline");
         const url = manager.getByRole("textbox", { name: "Base URL", exact: true });
         const apiKey = manager.locator('input[name="apiKey"]');

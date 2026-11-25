@@ -45,6 +45,8 @@ export type ModelProvidersViewProps = Omit<
   onAddProvider: () => void;
   providerScope?: TemplateResult;
   providerEditor?: TemplateResult;
+  /** Provider template panel opened by the add-provider entry points. */
+  templatePicker?: TemplateResult | typeof nothing;
   selectedProvider?: string;
   creatingProvider?: boolean;
   accountRecovery?: TemplateResult | typeof nothing;

@@ -307,6 +307,7 @@ describeControlUiE2e("Control UI model provider icons mocked Gateway E2E", () =>
       await page.goto(`${server.baseUrl}settings/model-providers`);
       await page.locator(".model-providers__workspace").waitFor();
       await page.locator("[data-custom-provider]").first().click();
+      await page.locator("[data-template-custom]").click();
       const editor = page.locator(".model-providers__editor");
       await editor.locator("openclaw-provider-manager").waitFor();
 
