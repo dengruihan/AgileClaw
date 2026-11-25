@@ -5,6 +5,7 @@ import { resetProcessRegistryForTests } from "../agents/bash-process-registry.te
 import { sweepSessionScopeBackgroundProcesses } from "./session-scope-process-sweep.js";
 
 const { cancel } = vi.hoisted(() => ({ cancel: vi.fn(() => true) }));
+// mock-isolation: Keep the process-wide supervisor singleton and process-adapter initialization outside this fixture.
 vi.mock("../process/supervisor/index.js", () => ({
   getProcessSupervisor: () => ({ cancel }),
 }));

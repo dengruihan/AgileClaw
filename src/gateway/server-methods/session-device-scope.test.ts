@@ -45,11 +45,13 @@ const SESSION_LINEAGE: Record<
 
 const updateSessionEntryMock = vi.hoisted(() => vi.fn());
 
-vi.mock("../../config/sessions/session-accessor.js", () => ({
+vi.mock("../../config/sessions/session-accessor.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../config/sessions/session-accessor.js")>()),
   updateSessionEntry: updateSessionEntryMock,
 }));
 
-vi.mock("../session-sharing.js", () => ({
+vi.mock("../session-sharing.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../session-sharing.js")>()),
   resolveSessionSharingTarget: (params: { sessionKey: string }) =>
     SESSION_LINEAGE[params.sessionKey] ?? null,
 }));

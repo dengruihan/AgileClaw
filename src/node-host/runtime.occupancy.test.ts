@@ -18,7 +18,8 @@ import {
   prepareNodeHostRuntime,
 } from "./runtime.test-support.js";
 
-vi.mock("../logger.js", () => ({
+vi.mock("../logger.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../logger.js")>()),
   logInfo: vi.fn(),
   logDebug: vi.fn(),
   logWarn: vi.fn(),
