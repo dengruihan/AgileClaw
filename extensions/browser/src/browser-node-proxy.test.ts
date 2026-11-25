@@ -52,8 +52,8 @@ vi.mock("./browser-proxy-upload.js", () => uploadMocks);
 const deviceScopeControl = vi.hoisted(() => ({
   scope: undefined as { deviceId: string; rootSessionKey: string; leaseToken: string } | undefined,
 }));
-vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
+// mock-isolation: the node proxy reads only readBrowserDeviceControlScope; keep the embedded agent runtime graph that the real barrel imports out of this fixture.
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
   readBrowserDeviceControlScope: () => deviceScopeControl.scope,
 }));
 

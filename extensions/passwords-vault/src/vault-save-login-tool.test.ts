@@ -4,13 +4,13 @@ const mocks = vi.hoisted(() => ({
   callGatewayTool: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
+// mock-isolation: the save tool reads only callGatewayTool; keep the embedded agent runtime graph that the real barrel imports out of this fixture.
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
   callGatewayTool: mocks.callGatewayTool,
 }));
 
-vi.mock("openclaw/plugin-sdk/channel-actions", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("openclaw/plugin-sdk/channel-actions")>()),
+// mock-isolation: the save tool reads only jsonResult and readStringParam; keep the real channel-actions barrel and its core channel modules out of this fixture.
+vi.mock("openclaw/plugin-sdk/channel-actions", () => ({
   jsonResult: (details: unknown) => ({ content: [], details }),
   readStringParam: (
     params: Record<string, unknown>,

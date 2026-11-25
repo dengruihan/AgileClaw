@@ -9,13 +9,13 @@ vi.mock("./browser-tool.vault-fill.js", async (importOriginal) => ({
   executeVaultAutofillAction: mocks.executeVaultAutofillAction,
 }));
 
-vi.mock("./browser-tool.routing.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./browser-tool.routing.js")>()),
+// mock-isolation: the login tool reads only resolveBrowserBaseUrl; keep browser-node-routing's agent-harness barrel out of this fixture.
+vi.mock("./browser-tool.routing.js", () => ({
   resolveBrowserBaseUrl: () => undefined,
 }));
 
-vi.mock("./browser-tool.runtime.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./browser-tool.runtime.js")>()),
+// mock-isolation: the login tool reads only the names overridden below; keep the runtime barrel's browser-client and SDK import graph out of this fixture.
+vi.mock("./browser-tool.runtime.js", () => ({
   getRuntimeConfig: () => ({}),
   resolveBrowserConfig: () => ({ defaultProfile: "shared", profiles: { shared: {} } }),
   resolveProfile: () => ({}),

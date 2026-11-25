@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("./browser-tool.runtime.js", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("./browser-tool.runtime.js")>()),
+// mock-isolation: the autofill tool reads only the names overridden below; keep the runtime barrel's browser-client and SDK import graph out of this fixture.
+vi.mock("./browser-tool.runtime.js", () => ({
   callGatewayTool: mocks.callGatewayTool,
   browserVaultObserve: mocks.browserVaultObserve,
   browserVaultSubmit: mocks.browserVaultSubmit,
