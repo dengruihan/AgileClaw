@@ -4,11 +4,13 @@ const mocks = vi.hoisted(() => ({
   callGatewayTool: vi.fn(),
 }));
 
-vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
   callGatewayTool: mocks.callGatewayTool,
 }));
 
-vi.mock("openclaw/plugin-sdk/channel-actions", () => ({
+vi.mock("openclaw/plugin-sdk/channel-actions", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openclaw/plugin-sdk/channel-actions")>()),
   jsonResult: (details: unknown) => ({ content: [], details }),
   readStringParam: (
     params: Record<string, unknown>,
@@ -56,7 +58,7 @@ describe("vault_save_login tool", () => {
   it("requires only the site in the schema and exposes no reveal surface", () => {
     const tool = createVaultSaveLoginTool();
     expect(tool.name).toBe("vault_save_login");
-    const parsed = JSON.parse(JSON.stringify(tool.parameters)) as {
+    const parsed = structuredClone(tool.parameters) as {
       required: string[];
       properties: Record<string, unknown>;
     };

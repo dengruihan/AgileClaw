@@ -4,15 +4,18 @@ const mocks = vi.hoisted(() => ({
   executeVaultAutofillAction: vi.fn(),
 }));
 
-vi.mock("./browser-tool.vault-fill.js", () => ({
+vi.mock("./browser-tool.vault-fill.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./browser-tool.vault-fill.js")>()),
   executeVaultAutofillAction: mocks.executeVaultAutofillAction,
 }));
 
-vi.mock("./browser-tool.routing.js", () => ({
+vi.mock("./browser-tool.routing.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./browser-tool.routing.js")>()),
   resolveBrowserBaseUrl: () => undefined,
 }));
 
-vi.mock("./browser-tool.runtime.js", () => ({
+vi.mock("./browser-tool.runtime.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./browser-tool.runtime.js")>()),
   getRuntimeConfig: () => ({}),
   resolveBrowserConfig: () => ({ defaultProfile: "shared", profiles: { shared: {} } }),
   resolveProfile: () => ({}),

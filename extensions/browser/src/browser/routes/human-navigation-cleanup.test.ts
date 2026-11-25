@@ -17,7 +17,8 @@ const h = vi.hoisted(() => ({
   download: false,
 }));
 
-vi.mock("../pw-session-connection.js", () => ({
+vi.mock("../pw-session-connection.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pw-session-connection.js")>()),
   getPageForTargetId: async () => ({
     url: () => h.pageUrl,
     context: () => ({
@@ -33,7 +34,8 @@ vi.mock("../pw-session-connection.js", () => ({
   }),
 }));
 
-vi.mock("../pw-ai-module.js", () => ({
+vi.mock("../pw-ai-module.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pw-ai-module.js")>()),
   getPwAiModule: async () => ({
     navigateViaPlaywright: async () => ({
       targetId: "target-1",

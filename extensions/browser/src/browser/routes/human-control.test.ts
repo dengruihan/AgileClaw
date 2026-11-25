@@ -24,7 +24,8 @@ const h = vi.hoisted(() => ({
   resolveCookiesStarted: null as (() => void) | null,
 }));
 
-vi.mock("../pw-session-connection.js", () => ({
+vi.mock("../pw-session-connection.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../pw-session-connection.js")>()),
   getPageForTargetId: async () => ({
     url: () => h.pageUrl,
     evaluate: async () => {

@@ -52,7 +52,8 @@ vi.mock("./browser-proxy-upload.js", () => uploadMocks);
 const deviceScopeControl = vi.hoisted(() => ({
   scope: undefined as { deviceId: string; rootSessionKey: string; leaseToken: string } | undefined,
 }));
-vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
+vi.mock("openclaw/plugin-sdk/agent-harness-runtime", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("openclaw/plugin-sdk/agent-harness-runtime")>()),
   readBrowserDeviceControlScope: () => deviceScopeControl.scope,
 }));
 

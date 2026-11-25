@@ -59,7 +59,8 @@ const screencastPage = vi.hoisted(() => {
   };
   return page;
 });
-vi.mock("./pw-ai-module.js", () => ({
+vi.mock("./pw-ai-module.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./pw-ai-module.js")>()),
   getPwAiModule: async () => ({ getPageForTargetId: async () => screencastPage }),
   getLoadedPwAiModule: () => undefined,
 }));

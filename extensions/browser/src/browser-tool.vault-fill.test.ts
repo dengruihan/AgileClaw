@@ -11,7 +11,8 @@ const mocks = vi.hoisted(() => ({
   })),
 }));
 
-vi.mock("./browser-tool.runtime.js", () => ({
+vi.mock("./browser-tool.runtime.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./browser-tool.runtime.js")>()),
   callGatewayTool: mocks.callGatewayTool,
   browserVaultObserve: mocks.browserVaultObserve,
   browserVaultSubmit: mocks.browserVaultSubmit,
