@@ -1507,10 +1507,6 @@ export const UI_E2E_OWNER_WATCHES: readonly UiE2eOwnerWatch[] = [
     "chat",
     "new-session",
   ]),
-  pageWatch("ui/src/e2e/new-session-page.fast-mode-preferences.e2e.test.ts", [
-    "chat",
-    "new-session",
-  ]),
   pageWatch("ui/src/e2e/new-session-page.github-projects.e2e.test.ts", ["chat", "new-session"]),
   pageWatch(
     "ui/src/e2e/new-session-page.incognito-navigation.e2e.test.ts",

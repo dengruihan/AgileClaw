@@ -12,7 +12,7 @@ import {
   readChatPaneMutationAccess,
   renderChatPaneComposerControls,
 } from "./chat-pane-session-controls.ts";
-import { switchChatFastMode, switchChatModel, switchChatThinkingLevel } from "./chat-session.ts";
+import { switchChatModel, switchChatThinkingLevel } from "./chat-session.ts";
 import { getPendingChatPickerPatch, patchChatSessionSettings } from "./chat-settings-patches.ts";
 import type { ChatPageHost } from "./chat-state-host.ts";
 import { selectedChatSessionRow } from "./chat-state-route.ts";
@@ -110,9 +110,8 @@ describe("chat pane model-setting permissions", () => {
       const results = [
         await switchChatModel(state, "openai/gpt-test-b"),
         await switchChatThinkingLevel(state, "high"),
-        await switchChatFastMode(state, "on"),
       ];
-      expect(results).toEqual([allowed, allowed, allowed]);
+      expect(results).toEqual([allowed, allowed]);
 
       const target = {
         key: sessionKey,
@@ -124,7 +123,6 @@ describe("chat pane model-setting permissions", () => {
           ? [
               ["sessions.patch", { ...target, model: "openai/gpt-test-b" }],
               ["sessions.patch", { ...target, thinkingLevel: "high" }],
-              ["sessions.patch", { ...target, fastMode: true }],
             ]
           : [],
       );
@@ -250,7 +248,6 @@ describe("chat pane model-setting permissions", () => {
       const first = patchChatSessionSettings(state, state.sessionKey, { thinkingLevel: "low" });
       const model = switchChatModel(state, "openai/gpt-test-b");
       const effort = switchChatThinkingLevel(state, "high");
-      const fast = switchChatFastMode(state, "on");
       const permission = controls.permissionPicker.onSelect("guarded");
       if (change === "scope") {
         state.hello = sessionMutationGatewayHello(["operator.sessions.read"]);
@@ -260,7 +257,7 @@ describe("chat pane model-setting permissions", () => {
         selectedSession.sessionId = "replacement-session";
       }
       held.resolve({ ok: true, path: "", key: selectedSession.key, entry: selectedSession });
-      await Promise.all([first, model, effort, fast, permission]);
+      await Promise.all([first, model, effort, permission]);
       expect(
         state.request.mock.calls.filter(([method]) => method === "sessions.patch"),
       ).toHaveLength(1);

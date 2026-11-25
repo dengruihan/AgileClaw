@@ -1343,6 +1343,23 @@ describe("executeSlashCommand directives", () => {
     });
   });
 
+  it("patches the ultrafast tier for /fast ultrafast", async () => {
+    const request = vi.fn().mockResolvedValue({ ok: true });
+
+    const result = await executeSlashCommand(
+      createTestGatewayClient(request),
+      "agent:main:main",
+      "fast",
+      "ultrafast",
+    );
+
+    expect(result.content).toBe(t("chat.commandResults.fast.enabled"));
+    expect(request).toHaveBeenCalledWith("sessions.patch", {
+      key: "agent:main:main",
+      fastMode: "ultrafast",
+    });
+  });
+
   it("clears fast mode override for /fast default", async () => {
     const request = vi.fn(async (method: string, payload?: unknown) => {
       if (method === "sessions.patch") {

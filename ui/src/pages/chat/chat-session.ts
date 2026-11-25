@@ -4,7 +4,7 @@ import {
 } from "../../../../packages/gateway-protocol/src/index.js";
 import { normalizeThinkLevel } from "../../../../src/auto-reply/thinking.shared.js";
 import { GatewayRequestError } from "../../api/gateway.ts";
-import type { FastMode, GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
+import type { GatewaySessionRow, SessionsListResult } from "../../api/types.ts";
 import { t } from "../../i18n/index.ts";
 import { registerModelControlsEnglish } from "../../i18n/locales/en-model-controls.ts";
 import { resolvePreferredServerChatModelValue } from "../../lib/chat/model-ref.ts";
@@ -191,8 +191,8 @@ async function applyChatSetting(
   host: ChatModelSettingsHost,
   sessionKey: string,
   captured: ReturnType<typeof captureChatSettingsTarget>,
-  patch: Pick<SessionPatch, "thinkingLevel" | "fastMode" | "contextWindow">,
-  settingName: "thinking level" | "speed" | "context window",
+  patch: Pick<SessionPatch, "thinkingLevel" | "contextWindow">,
+  settingName: "thinking level" | "context window",
   synchronize?: (receipt?: SessionPatchResult | null) => void,
 ): Promise<boolean> {
   const canDispatch = (receipt?: SessionPatchResult | null) =>
@@ -228,27 +228,6 @@ async function applyChatSetting(
   } finally {
     synchronize?.(receipt);
   }
-}
-
-export function switchChatFastMode(
-  host: ChatModelSettingsHost,
-  nextFastMode: "" | "on" | "off" | "auto" | "ultrafast",
-  targetSessionKey = host.sessionKey,
-): Promise<boolean> {
-  if (!host.client || !host.connected) {
-    return Promise.resolve(false);
-  }
-  const captured = captureChatSettingsTarget(host, targetSessionKey);
-  const next: FastMode | undefined =
-    nextFastMode === ""
-      ? undefined
-      : nextFastMode === "auto" || nextFastMode === "ultrafast"
-        ? nextFastMode
-        : nextFastMode === "on";
-  if (captured.settings.fastMode === next) {
-    return Promise.resolve(true);
-  }
-  return applyChatSetting(host, targetSessionKey, captured, { fastMode: next ?? null }, "speed");
 }
 
 type ChatModelSelection = ReturnType<typeof claimChatModelSelection>;
