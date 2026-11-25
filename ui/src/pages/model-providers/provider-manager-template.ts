@@ -10,8 +10,8 @@ import { i18n } from "../../i18n/index.ts";
 import { providerCreateEntry } from "./provider-model-config.ts";
 import { localizedTemplateName } from "./provider-template-picker.ts";
 
-/** Create-intent fields this module reads; the manager's intent type extends it. */
-export type ProviderTemplateIntent = {
+/** Fields of a provider-manager intent that template seeding and create inputs read. */
+type ProviderTemplateIntent = {
   view: "settings" | "models" | "create";
   templateId?: string;
 };

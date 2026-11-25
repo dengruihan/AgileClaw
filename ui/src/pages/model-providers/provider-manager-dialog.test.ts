@@ -993,10 +993,10 @@ describe("provider manager dialog forms", () => {
     expect(JSON.parse(String(patches[0]!.raw)).models.providers["custom-api-kimi-com"]).toEqual(
       kimiCodeCreateEntry(),
     );
-    expect(methodCalls("models.authSetApiKey")[0]![1]).toMatchObject({
-      provider: "custom-api-kimi-com",
-      apiKey: "sk-template",
-    });
+    expect(harness.request).toHaveBeenCalledWith(
+      "models.authSetApiKey",
+      expect.objectContaining({ provider: "custom-api-kimi-com", apiKey: "sk-template" }),
+    );
 
     // The debounce fired once: no trailing save and no sign-out follow it.
     await vi.advanceTimersByTimeAsync(2000);
@@ -1031,6 +1031,6 @@ describe("provider manager dialog forms", () => {
     const current = structuredClone(occupied.current) as {
       models: { providers: Record<string, unknown> };
     };
-    expect(current.models.providers["custom-open-bigmodel-cn-coding"]).toMatchObject(existing);
+    expect(current.models.providers["custom-open-bigmodel-cn-coding"]).toEqual(existing);
   });
 });
