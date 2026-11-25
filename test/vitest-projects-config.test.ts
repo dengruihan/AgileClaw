@@ -1,5 +1,5 @@
 // Vitest project config tests validate aggregate Vitest project wiring.
-import { globSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, assert, describe, expect, it } from "vitest";
 import { resolveConfig } from "vitest/node";
@@ -14,6 +14,8 @@ import { createPatternFileHelper } from "./helpers/pattern-file.js";
 import { normalizeConfigPath, normalizeConfigPaths } from "./helpers/vitest-config-paths.js";
 import {
   auditFullSuiteTestFileOwnership,
+  isOpsPackageTestFile,
+  listInventoryTestFiles,
   listVitestConfigTestFiles,
 } from "./vitest-projects-config.test-support.js";
 import { createAgentsCoreVitestConfig } from "./vitest/vitest.agents-core.config.ts";
@@ -416,6 +418,16 @@ describe("projects vitest config", () => {
           config.include = previousInclude;
         }
       });
+    }
+  });
+
+  it("keeps ops package verification suites out of the Vitest full-suite inventory", () => {
+    const excluded = listInventoryTestFiles().filter(isOpsPackageTestFile);
+    expect(excluded.length).toBeGreaterThan(0);
+    for (const file of excluded) {
+      expect(file.startsWith("ops/"), file).toBe(true);
+      // The exclusion stays honest only while every suite under ops/ is a `node --test` suite.
+      expect(readFileSync(file, "utf8"), file).toMatch(/from\s+["']node:test["']/u);
     }
   });
 
