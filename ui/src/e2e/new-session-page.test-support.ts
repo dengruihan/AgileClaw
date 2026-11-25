@@ -252,29 +252,6 @@ export function createdSessionListResult(sessionKey: string) {
   };
 }
 
-export async function expectPendingSessionPlacementStartupBeforeRuntime(
-  owner: { readonly artifactDir: string },
-  page: Page,
-  gateway: MockGatewayControls,
-  sessionKey: string,
-) {
-  await waitForCommittedChatRoute(page);
-  expect(page.url()).toContain(controlUiSessionPath(sessionKey));
-  const startupStatus = page.locator('.chat-thread .chat-working-indicator[role="status"]');
-  await expect.poll(() => startupStatus.count()).toBe(1);
-  await pollLocatorText(startupStatus).toContain("Provisioning environment…");
-  expect(await page.locator(".chat-cloud-startup, .agent-chat__composer-status-band").count()).toBe(
-    0,
-  );
-  await expect
-    .poll(() => page.locator(".agent-chat__composer-combobox textarea").isDisabled())
-    .toBe(true);
-  expect(await gateway.getRequests("sessions.dispatch")).toHaveLength(0);
-  expect(await gateway.getRequests("sessions.send")).toHaveLength(0);
-  await captureUiProof(owner, page, "02-cloud-startup-chunk-pending.png");
-  return startupStatus;
-}
-
 export async function captureUiProof(
   owner: { readonly artifactDir: string },
   page: Page,
