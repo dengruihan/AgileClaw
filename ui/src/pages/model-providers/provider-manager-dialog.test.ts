@@ -1,5 +1,6 @@
 /* @vitest-environment jsdom */
 
+import { PROVIDER_TEMPLATES } from "@openclaw/model-catalog-core/provider-templates";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { waitForFast } from "../../test-helpers/wait-for.ts";
 import { configRouteData } from "../config/route-data.ts";
@@ -15,6 +16,7 @@ import "./provider-manager.ts";
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 type DialogTestConfig = {
@@ -80,7 +82,7 @@ async function openDialog(config: DialogTestConfig, provider: string) {
 }
 
 /** Opens the new-provider editor, which writes the whole draft once on submit. */
-async function openCreateDialog(config: DialogTestConfig) {
+async function openCreateDialog(config: DialogTestConfig, templateId?: string) {
   const harness = createHarness("main");
   const { current, patches } = stubDialogConfig(harness, config);
   const page = appendPage(harness.context);
@@ -90,6 +92,7 @@ async function openCreateDialog(config: DialogTestConfig) {
   (page as ModelProvidersPageTestElement & { managerIntent: unknown }).managerIntent = {
     provider: "",
     view: "create",
+    ...(templateId ? { templateId } : {}),
   };
   await page.updateComplete;
   const manager = await waitForFast(() => {
@@ -100,6 +103,7 @@ async function openCreateDialog(config: DialogTestConfig) {
   });
   return {
     harness,
+    current,
     manager,
     page,
     patches,
@@ -162,6 +166,32 @@ function dialogControls(
     await page.updateComplete;
   };
   return { input, setInput, commitInput, save };
+}
+
+/** The explicit create action a template-prefilled create view offers. */
+function createProviderButton(manager: Element): HTMLButtonElement | null {
+  return (
+    [...manager.querySelectorAll<HTMLButtonElement>("button")].find(
+      (candidate) => candidate.textContent?.trim() === "Create provider",
+    ) ?? null
+  );
+}
+
+/** The entry a kimi-code template create writes, for both the button and auto-save paths. */
+function kimiCodeCreateEntry(): Record<string, unknown> {
+  const template = PROVIDER_TEMPLATES.find((row) => row.id === "kimi-code")!;
+  return {
+    displayName: "Kimi Code",
+    icon: "kimi",
+    baseUrl: "https://api.kimi.com/coding/",
+    api: "anthropic-messages",
+    headers: { "User-Agent": "claude-code/0.1.0" },
+    models: template.provider.models,
+  };
+}
+
+function heading(manager: Element): string | undefined {
+  return manager.querySelector(".provider-manager__header h2")?.textContent?.trim();
 }
 
 function editButton(manager: Element, modelId: string): HTMLButtonElement {
@@ -834,11 +864,13 @@ describe("provider manager dialog forms", () => {
   });
 
   it("writes the matched icon with a new provider's first save", async () => {
-    const { input, setInput, patches, save } = await openCreateDialog({
+    const { manager, input, setInput, patches, save } = await openCreateDialog({
       providers: {},
       catalog: [],
     });
 
+    // A blank custom entry keeps type-to-save: no explicit create action.
+    expect(createProviderButton(manager)).toBeNull();
     setInput("baseUrl", "https://relay.example.test/v1");
     setInput("displayName", "我的 GPT 中转");
     input("displayName").dispatchEvent(new Event("change", { bubbles: true }));
@@ -879,5 +911,126 @@ describe("provider manager dialog forms", () => {
       icon: "mistral",
       iconManual: true,
     });
+  });
+
+  it("prefills a template into the create draft and writes its endpoint and models", async () => {
+    const { manager, input, patches } = await openCreateDialog(
+      { providers: {}, catalog: [] },
+      "kimi-code",
+    );
+
+    expect(input("displayName").value).toBe("Kimi Code");
+    expect(input("baseUrl").value).toBe("https://api.kimi.com/coding/");
+    expect(manager.querySelector<HTMLSelectElement>('select[name="api"]')!.value).toBe(
+      "anthropic-messages",
+    );
+
+    const create = createProviderButton(manager);
+    expect(create).not.toBeNull();
+    create!.click();
+    await waitForFast(() => expect(patches).toHaveLength(1));
+
+    const entry = JSON.parse(String(patches[0]!.raw)).models.providers["custom-api-kimi-com"];
+    expect(entry).toEqual(kimiCodeCreateEntry());
+    expect(entry).not.toHaveProperty("iconManual");
+    expect(entry).not.toHaveProperty("templateId");
+  });
+
+  it("claims a distinct key for each Zhipu template", async () => {
+    const expected = [
+      ["zhipu-coding-cn", "custom-open-bigmodel-cn-coding"],
+      ["zai-coding", "custom-api-z-ai-coding"],
+      ["zhipu-api-cn", "custom-open-bigmodel-cn"],
+      ["zai-api", "custom-api-z-ai"],
+    ];
+    const keys: string[] = [];
+    for (const [templateId] of expected) {
+      const { manager, patches } = await openCreateDialog(
+        { providers: {}, catalog: [] },
+        templateId,
+      );
+      createProviderButton(manager)!.click();
+      await waitForFast(() => expect(patches).toHaveLength(1));
+      keys.push(...Object.keys(JSON.parse(String(patches[0]!.raw)).models.providers));
+    }
+    expect(keys).toEqual(expected.map(([, key]) => key));
+  });
+
+  it("keeps the blank create heading generic while a template create shows its template", async () => {
+    const blank = await openCreateDialog({ providers: {}, catalog: [] });
+    expect(heading(blank.manager)).toBe("Custom provider");
+
+    blank.setInput("displayName", "我的中转");
+    blank.input("displayName").dispatchEvent(new Event("change", { bubbles: true }));
+    await blank.manager.updateComplete;
+    expect(blank.input("displayName").value).toBe("我的中转");
+    expect(heading(blank.manager)).toBe("Custom provider");
+
+    const templated = await openCreateDialog({ providers: {}, catalog: [] }, "kimi-code");
+    expect(heading(templated.manager)).toBe("Kimi Code");
+  });
+
+  it("auto-saves a template create from a typed API key without a second write", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { harness, input, patches } = await openCreateDialog(
+      { providers: {}, catalog: [] },
+      "kimi-code",
+    );
+    const methodCalls = (method: string) =>
+      harness.request.mock.calls.filter(([candidate]) => candidate === method);
+
+    input("apiKey").value = "sk-template";
+    input("apiKey").dispatchEvent(new Event("input", { bubbles: true }));
+    expect(patches).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(800);
+    await waitForFast(() => expect(patches).toHaveLength(1));
+    await waitForFast(() => expect(methodCalls("models.authSetApiKey")).toHaveLength(1));
+
+    expect(Object.keys(JSON.parse(String(patches[0]!.raw)).models.providers)).toEqual([
+      "custom-api-kimi-com",
+    ]);
+    expect(JSON.parse(String(patches[0]!.raw)).models.providers["custom-api-kimi-com"]).toEqual(
+      kimiCodeCreateEntry(),
+    );
+    expect(harness.request).toHaveBeenCalledWith(
+      "models.authSetApiKey",
+      expect.objectContaining({ provider: "custom-api-kimi-com", apiKey: "sk-template" }),
+    );
+
+    // The debounce fired once: no trailing save and no sign-out follow it.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(patches).toHaveLength(1);
+    expect(methodCalls("models.authSetApiKey")).toHaveLength(1);
+    expect(methodCalls("models.authLogout")).toHaveLength(0);
+  });
+
+  it("uses a template key seed only while the draft keeps the template endpoint", async () => {
+    const edited = await openCreateDialog({ providers: {}, catalog: [] }, "zhipu-coding-cn");
+    edited.setInput("baseUrl", "https://relay.example.test/v1");
+    createProviderButton(edited.manager)!.click();
+    await waitForFast(() => expect(edited.patches).toHaveLength(1));
+    expect(Object.keys(JSON.parse(String(edited.patches[0]!.raw)).models.providers)).toEqual([
+      "custom-relay-example-test",
+    ]);
+
+    const existing = {
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      displayName: "Existing plan",
+      models: [{ id: "glm-5.3", name: "GLM 5.3" }],
+    };
+    const occupied = await openCreateDialog(
+      { providers: { "custom-open-bigmodel-cn-coding": structuredClone(existing) }, catalog: [] },
+      "zhipu-coding-cn",
+    );
+    createProviderButton(occupied.manager)!.click();
+    await waitForFast(() => expect(occupied.patches).toHaveLength(1));
+    expect(Object.keys(JSON.parse(String(occupied.patches[0]!.raw)).models.providers)).toEqual([
+      "custom-open-bigmodel-cn-coding-2",
+    ]);
+    const current = structuredClone(occupied.current) as {
+      models: { providers: Record<string, unknown> };
+    };
+    expect(current.models.providers["custom-open-bigmodel-cn-coding"]).toEqual(existing);
   });
 });

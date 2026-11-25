@@ -9,6 +9,7 @@ import {
   waitForProviders,
   type ModelProvidersPageTestElement,
 } from "./model-providers-page.test-support.ts";
+import type { ProviderManagerIntent } from "./provider-manager.ts";
 
 afterEach(() => {
   document.body.replaceChildren();
@@ -49,7 +50,7 @@ describe("ModelProvidersPage provider-key reservations", () => {
         patches.push(patch);
         return { config: JSON.parse(patch.raw ?? "{}"), hash: `patched-${patches.length}` };
       }
-      return originalRequest(method, params);
+      return originalRequest(method);
     });
 
     const page = appendPage(harness.context);
@@ -118,5 +119,50 @@ describe("ModelProvidersPage provider-key reservations", () => {
         },
       },
     });
+  });
+
+  it("refuses a template create while the provider list is unknown", async () => {
+    const harness = createHarness("main");
+    const originalRequest = harness.request.getMockImplementation()!;
+    harness.request.mockImplementation(async (method: string) => {
+      if (method === "models.authStatus") {
+        throw new Error("synthetic provider list failure");
+      }
+      return originalRequest(method);
+    });
+
+    const page = appendPage(harness.context);
+    await waitForProviders(page);
+    await waitForFast(() => expect(page.data?.error).toContain("synthetic provider list failure"));
+    await page.updateComplete;
+
+    // A template selection from the picker is refused before any editor opens.
+    const intent: ProviderManagerIntent = {
+      provider: "",
+      view: "create",
+      templateId: "zhipu-coding-cn",
+    };
+    await page.selectProvider(intent);
+    await page.updateComplete;
+    expect(page.querySelector("openclaw-provider-manager")).toBeNull();
+    expect(page.messages.connection?.text).toContain("Refresh and try again");
+
+    // A template intent that bypasses the picker hits the same reservation gate.
+    (page as ModelProvidersPageTestElement & { managerIntent: unknown }).managerIntent = {
+      provider: "",
+      view: "create",
+      templateId: "zhipu-coding-cn",
+    };
+    await page.updateComplete;
+    const form = page.querySelector<HTMLFormElement>(
+      "openclaw-provider-manager .provider-manager--inline",
+    );
+    expect(form).not.toBeNull();
+    form!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await page.updateComplete;
+    expect(page.querySelector("openclaw-provider-manager [role='alert']")?.textContent).toContain(
+      "Refresh and try again",
+    );
+    expect(requestCount(harness.request, "config.patch")).toBe(0);
   });
 });

@@ -4,6 +4,7 @@ import { icons } from "../../components/icons.ts";
 import { t } from "../../i18n/index.ts";
 import type { ModelProviderCard } from "./data.ts";
 import { stringInputValue } from "./provider-manager-model-form.ts";
+import { providerTemplate } from "./provider-manager-template.ts";
 
 /** Interactive members the provider-manager connection form reads and calls. */
 export type ProviderConnectionActions = {
@@ -31,6 +32,8 @@ export type ProviderConnectionState = {
   nameDraft: string;
   providerCreated: boolean;
   revealKey: boolean;
+  /** Curated template seeding this create view, if any; absent for a blank custom entry. */
+  templateId?: string;
 };
 
 /** Provider protocol options shown with friendly labels; values are config `api` values. */
@@ -60,6 +63,9 @@ export function providerConnectionFields(params: {
 }): TemplateResult {
   const { actions, state } = params;
   const { creating } = state;
+  // A template create arrives with its endpoint and models already drafted, so it
+  // gets an explicit create action; the blank custom flow keeps type-to-save.
+  const templatePrefilled = creating && providerTemplate(state.templateId) !== undefined;
   // A custom provider has no catalog protocol to inherit, so creation starts
   // from the OpenAI-compatible default the save path already applies.
   const selectedApi =
@@ -173,8 +179,21 @@ export function providerConnectionFields(params: {
         : nothing
     }
     ${
-      creating && !state.providerCreated
+      creating && !state.providerCreated && !templatePrefilled
         ? html`<p class="muted">${t("modelProviders.manager.addModelsAfterSave")}</p>`
+        : nothing
+    }
+    ${
+      templatePrefilled && !state.providerCreated
+        ? html`<div>
+            <button
+              type="submit"
+              class="btn btn--primary"
+              ?disabled=${state.disabled || state.busy}
+            >
+              ${t("modelProviders.manager.createProvider")}
+            </button>
+          </div>`
         : nothing
     }`;
 }
