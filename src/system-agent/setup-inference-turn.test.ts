@@ -31,6 +31,7 @@ import { resolvePluginRuntimeLoadContext } from "../plugins/runtime/load-context
 import { captureAsyncWorkTracker } from "../shared/async-work-scope.js";
 import { withOpenClawTestState } from "../test-utils/openclaw-test-state.js";
 import type { SystemAgentConfiguredRoute } from "./inference-route.js";
+import type { ActivateSetupInferenceDeps } from "./setup-inference-core.js";
 import {
   loadSetupInferencePluginGeneration,
   revalidateStableSetupInferenceOwner,
@@ -411,4 +412,118 @@ describe("setup probe projection", () => {
       }
     },
   );
+});
+
+type EmbeddedProbeRunParams = Parameters<
+  NonNullable<ActivateSetupInferenceDeps["runEmbeddedAgent"]>
+>[0];
+
+/** The incomplete-turn payload the runner returns when reasoning consumes the output cap. */
+const REASONING_ONLY_TURN_TEXT = "⚠️ Agent couldn't generate a response. Please try again.";
+const THINKING_TOKENS = 1_024;
+
+function visibleProbeResult(route: SystemAgentConfiguredRoute) {
+  return {
+    payloads: [{ text: "OK" }],
+    meta: {
+      durationMs: 1,
+      executionTrace: { winnerProvider: route.provider, winnerModel: route.model },
+    },
+  };
+}
+
+function reasoningOnlyProbeResult() {
+  return {
+    payloads: [{ text: REASONING_ONLY_TURN_TEXT, isError: true }],
+    meta: {
+      durationMs: 1,
+      error: { kind: "incomplete_turn" as const, message: REASONING_ONLY_TURN_TEXT },
+    },
+  };
+}
+
+describe("setup probe output budget", () => {
+  it("leaves a reasoning-first model room to think before it replies", async () => {
+    const route = embeddedRoute("openclaw");
+    // A reasoning-first model spends its first THINKING_TOKENS output tokens on
+    // thinking before any visible text; with a smaller cap the turn ends
+    // reasoning-only and the runner reports an incomplete turn.
+    const budgets: Array<number | undefined> = [];
+    const runEmbeddedAgent = vi.fn(async (params: EmbeddedProbeRunParams) => {
+      budgets.push(params.streamParams?.maxTokens);
+      return (params.streamParams?.maxTokens ?? 0) > THINKING_TOKENS
+        ? visibleProbeResult(route)
+        : reasoningOnlyProbeResult();
+    });
+
+    const result = await runSetupInferenceTurn({
+      route,
+      requireExecutionOwner: false,
+      deps: {
+        createTempDir: async () => "/tmp/openclaw-setup-inference-test",
+        removeTempDir: async () => {},
+        runEmbeddedAgent,
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, text: "OK" });
+    expect(budgets[0]).toBeGreaterThan(THINKING_TOKENS);
+  });
+
+  it("keeps the raised budget within the model's configured output cap", async () => {
+    const route = embeddedRoute("openclaw");
+    // anthropic-messages and openai-responses forward an explicit cap without
+    // clamping, so a budget above the model's own output limit would fail the
+    // probe as an invalid request instead of measuring the route.
+    route.runConfig.models = {
+      providers: {
+        openai: {
+          baseUrl: "https://api.openai.com/v1",
+          api: "openai-completions",
+          models: [
+            {
+              id: "gpt-5.6-sol",
+              name: "GPT-5.6 Sol",
+              reasoning: true,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 128_000,
+              maxTokens: 512,
+            },
+          ],
+        },
+      },
+    };
+    const runEmbeddedAgent = vi.fn(async (_params: EmbeddedProbeRunParams) =>
+      visibleProbeResult(route),
+    );
+
+    const result = await runSetupInferenceTurn({
+      route,
+      requireExecutionOwner: false,
+      deps: {
+        createTempDir: async () => "/tmp/openclaw-setup-inference-test",
+        removeTempDir: async () => {},
+        runEmbeddedAgent,
+      },
+    });
+
+    expect(result).toMatchObject({ ok: true, text: "OK" });
+    expect(runEmbeddedAgent.mock.calls[0]?.[0].streamParams?.maxTokens).toBe(512);
+  });
+
+  it("still reports a reasoning-only reply as a failed probe", async () => {
+    const route = embeddedRoute("openclaw");
+    const result = await runSetupInferenceTurn({
+      route,
+      requireExecutionOwner: false,
+      deps: {
+        createTempDir: async () => "/tmp/openclaw-setup-inference-test",
+        removeTempDir: async () => {},
+        runEmbeddedAgent: async () => reasoningOnlyProbeResult(),
+      },
+    });
+
+    expect(result).toMatchObject({ ok: false });
+  });
 });
