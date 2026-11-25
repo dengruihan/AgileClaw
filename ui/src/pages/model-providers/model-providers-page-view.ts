@@ -1,4 +1,4 @@
-import { endpointIdOccupancy } from "@openclaw/model-catalog-core/provider-id";
+import { endpointIdOccupancy, normalizeProviderId } from "@openclaw/model-catalog-core/provider-id";
 import { asNullableRecord as asConfigRecord } from "@openclaw/normalization-core/record-coerce";
 import { html, type TemplateResult } from "lit";
 import { i18n, t } from "../../i18n/index.ts";
@@ -119,8 +119,18 @@ export function renderModelProvidersPageContent(page: ModelProvidersPage): Templ
     blockedReason: providerCreationBlockedReason,
     onSelectTemplate: (templateId) =>
       void page.selectProvider({ provider: "", view: "create", templateId }),
-    onOpenProvider: (providerId) =>
-      void page.selectProvider({ provider: providerId, view: "settings" }),
+    // Endpoint occupancy reports normalized ids, while a hand-written config key
+    // keeps its own spelling; open the card's exact key so the manager finds it.
+    onOpenProvider: (providerId) => {
+      const card = cards.find(
+        (entry) =>
+          normalizeProviderId(entry.configKey ?? entry.id) === normalizeProviderId(providerId),
+      );
+      void page.selectProvider({
+        provider: card?.configKey ?? card?.id ?? providerId,
+        view: "settings",
+      });
+    },
     onCustomProvider: () => void page.selectProvider({ provider: "", view: "create" }),
     onClose: () => (page.templatePickerOpen = false),
   });
