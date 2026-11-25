@@ -12,7 +12,7 @@ import { localizedTemplateName } from "./provider-template-picker.ts";
 
 /** Create-intent fields this module reads; the manager's intent type extends it. */
 export type ProviderTemplateIntent = {
-  view: string;
+  view: "settings" | "models" | "create";
   templateId?: string;
 };
 

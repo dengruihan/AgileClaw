@@ -493,9 +493,11 @@ export class ProviderManager extends OpenClawLightDomElement {
       return nothing;
     }
     const creating = this.intent.view === "create" && !this.providerCreated;
-    // A template create is named by the template it prefilled from.
+    // A template create is named by the template it prefilled from; the blank
+    // custom flow keeps the generic heading even after a name is committed.
+    const templateId = creating ? this.intent?.templateId : undefined;
     const title = creating
-      ? this.committedName || t("modelProviders.manager.customProvider")
+      ? (templateId ? this.committedName : "") || t("modelProviders.manager.customProvider")
       : (this.card?.displayName ?? this.providerId);
     // Built-in providers have no editable name, so their icon is not a user choice.
     const canRename = creating || this.customProvider;
@@ -577,7 +579,7 @@ export class ProviderManager extends OpenClawLightDomElement {
                 nameDraft: this.nameDraft,
                 providerCreated: this.providerCreated,
                 revealKey: this.credential.revealed,
-                templateId: creating ? this.intent?.templateId : undefined,
+                templateId,
               },
             })}
           </div>

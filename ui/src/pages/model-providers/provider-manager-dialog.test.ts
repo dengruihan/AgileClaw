@@ -16,6 +16,7 @@ import "./provider-manager.ts";
 afterEach(() => {
   document.body.replaceChildren();
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 type DialogTestConfig = {
@@ -102,6 +103,7 @@ async function openCreateDialog(config: DialogTestConfig, templateId?: string) {
   });
   return {
     harness,
+    current,
     manager,
     page,
     patches,
@@ -173,6 +175,23 @@ function createProviderButton(manager: Element): HTMLButtonElement | null {
       (candidate) => candidate.textContent?.trim() === "Create provider",
     ) ?? null
   );
+}
+
+/** The entry a kimi-code template create writes, for both the button and auto-save paths. */
+function kimiCodeCreateEntry(): Record<string, unknown> {
+  const template = PROVIDER_TEMPLATES.find((row) => row.id === "kimi-code")!;
+  return {
+    displayName: "Kimi Code",
+    icon: "kimi",
+    baseUrl: "https://api.kimi.com/coding/",
+    api: "anthropic-messages",
+    headers: { "User-Agent": "claude-code/0.1.0" },
+    models: template.provider.models,
+  };
+}
+
+function heading(manager: Element): string | undefined {
+  return manager.querySelector(".provider-manager__header h2")?.textContent?.trim();
 }
 
 function editButton(manager: Element, modelId: string): HTMLButtonElement {
@@ -895,7 +914,6 @@ describe("provider manager dialog forms", () => {
   });
 
   it("prefills a template into the create draft and writes its endpoint and models", async () => {
-    const template = PROVIDER_TEMPLATES.find((row) => row.id === "kimi-code")!;
     const { manager, input, patches } = await openCreateDialog(
       { providers: {}, catalog: [] },
       "kimi-code",
@@ -913,14 +931,7 @@ describe("provider manager dialog forms", () => {
     await waitForFast(() => expect(patches).toHaveLength(1));
 
     const entry = JSON.parse(String(patches[0]!.raw)).models.providers["custom-api-kimi-com"];
-    expect(entry).toEqual({
-      displayName: "Kimi Code",
-      icon: "kimi",
-      baseUrl: "https://api.kimi.com/coding/",
-      api: "anthropic-messages",
-      headers: { "User-Agent": "claude-code/0.1.0" },
-      models: template.provider.models,
-    });
+    expect(entry).toEqual(kimiCodeCreateEntry());
     expect(entry).not.toHaveProperty("iconManual");
     expect(entry).not.toHaveProperty("templateId");
   });
@@ -943,5 +954,83 @@ describe("provider manager dialog forms", () => {
       keys.push(...Object.keys(JSON.parse(String(patches[0]!.raw)).models.providers));
     }
     expect(keys).toEqual(expected.map(([, key]) => key));
+  });
+
+  it("keeps the blank create heading generic while a template create shows its template", async () => {
+    const blank = await openCreateDialog({ providers: {}, catalog: [] });
+    expect(heading(blank.manager)).toBe("Custom provider");
+
+    blank.setInput("displayName", "我的中转");
+    blank.input("displayName").dispatchEvent(new Event("change", { bubbles: true }));
+    await blank.manager.updateComplete;
+    expect(blank.input("displayName").value).toBe("我的中转");
+    expect(heading(blank.manager)).toBe("Custom provider");
+
+    const templated = await openCreateDialog({ providers: {}, catalog: [] }, "kimi-code");
+    expect(heading(templated.manager)).toBe("Kimi Code");
+  });
+
+  it("auto-saves a template create from a typed API key without a second write", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const { harness, input, patches } = await openCreateDialog(
+      { providers: {}, catalog: [] },
+      "kimi-code",
+    );
+    const methodCalls = (method: string) =>
+      harness.request.mock.calls.filter(([candidate]) => candidate === method);
+
+    input("apiKey").value = "sk-template";
+    input("apiKey").dispatchEvent(new Event("input", { bubbles: true }));
+    expect(patches).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(800);
+    await waitForFast(() => expect(patches).toHaveLength(1));
+    await waitForFast(() => expect(methodCalls("models.authSetApiKey")).toHaveLength(1));
+
+    expect(Object.keys(JSON.parse(String(patches[0]!.raw)).models.providers)).toEqual([
+      "custom-api-kimi-com",
+    ]);
+    expect(JSON.parse(String(patches[0]!.raw)).models.providers["custom-api-kimi-com"]).toEqual(
+      kimiCodeCreateEntry(),
+    );
+    expect(methodCalls("models.authSetApiKey")[0]![1]).toMatchObject({
+      provider: "custom-api-kimi-com",
+      apiKey: "sk-template",
+    });
+
+    // The debounce fired once: no trailing save and no sign-out follow it.
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(patches).toHaveLength(1);
+    expect(methodCalls("models.authSetApiKey")).toHaveLength(1);
+    expect(methodCalls("models.authLogout")).toHaveLength(0);
+  });
+
+  it("uses a template key seed only while the draft keeps the template endpoint", async () => {
+    const edited = await openCreateDialog({ providers: {}, catalog: [] }, "zhipu-coding-cn");
+    edited.setInput("baseUrl", "https://relay.example.test/v1");
+    createProviderButton(edited.manager)!.click();
+    await waitForFast(() => expect(edited.patches).toHaveLength(1));
+    expect(Object.keys(JSON.parse(String(edited.patches[0]!.raw)).models.providers)).toEqual([
+      "custom-relay-example-test",
+    ]);
+
+    const existing = {
+      baseUrl: "https://open.bigmodel.cn/api/coding/paas/v4",
+      displayName: "Existing plan",
+      models: [{ id: "glm-5.3", name: "GLM 5.3" }],
+    };
+    const occupied = await openCreateDialog(
+      { providers: { "custom-open-bigmodel-cn-coding": structuredClone(existing) }, catalog: [] },
+      "zhipu-coding-cn",
+    );
+    createProviderButton(occupied.manager)!.click();
+    await waitForFast(() => expect(occupied.patches).toHaveLength(1));
+    expect(Object.keys(JSON.parse(String(occupied.patches[0]!.raw)).models.providers)).toEqual([
+      "custom-open-bigmodel-cn-coding-2",
+    ]);
+    const current = structuredClone(occupied.current) as {
+      models: { providers: Record<string, unknown> };
+    };
+    expect(current.models.providers["custom-open-bigmodel-cn-coding"]).toMatchObject(existing);
   });
 });
