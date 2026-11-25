@@ -4,14 +4,17 @@ const mocks = vi.hoisted(() => ({
   executeVaultAutofillAction: vi.fn(),
 }));
 
-vi.mock("./browser-tool.vault-fill.js", () => ({
+vi.mock("./browser-tool.vault-fill.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./browser-tool.vault-fill.js")>()),
   executeVaultAutofillAction: mocks.executeVaultAutofillAction,
 }));
 
+// mock-isolation: the login tool reads only resolveBrowserBaseUrl; keep browser-node-routing's agent-harness barrel out of this fixture.
 vi.mock("./browser-tool.routing.js", () => ({
   resolveBrowserBaseUrl: () => undefined,
 }));
 
+// mock-isolation: the login tool reads only the names overridden below; keep the runtime barrel's browser-client and SDK import graph out of this fixture.
 vi.mock("./browser-tool.runtime.js", () => ({
   getRuntimeConfig: () => ({}),
   resolveBrowserConfig: () => ({ defaultProfile: "shared", profiles: { shared: {} } }),

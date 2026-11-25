@@ -4,10 +4,12 @@ const mocks = vi.hoisted(() => ({
   callGatewayTool: vi.fn(),
 }));
 
+// mock-isolation: the save tool reads only callGatewayTool; keep the embedded agent runtime graph that the real barrel imports out of this fixture.
 vi.mock("openclaw/plugin-sdk/agent-harness-runtime", () => ({
   callGatewayTool: mocks.callGatewayTool,
 }));
 
+// mock-isolation: the save tool reads only jsonResult and readStringParam; keep the real channel-actions barrel and its core channel modules out of this fixture.
 vi.mock("openclaw/plugin-sdk/channel-actions", () => ({
   jsonResult: (details: unknown) => ({ content: [], details }),
   readStringParam: (
@@ -56,7 +58,7 @@ describe("vault_save_login tool", () => {
   it("requires only the site in the schema and exposes no reveal surface", () => {
     const tool = createVaultSaveLoginTool();
     expect(tool.name).toBe("vault_save_login");
-    const parsed = JSON.parse(JSON.stringify(tool.parameters)) as {
+    const parsed = structuredClone(tool.parameters) as {
       required: string[];
       properties: Record<string, unknown>;
     };
