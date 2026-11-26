@@ -177,7 +177,8 @@ describe("provider login choices", () => {
         providerId: entry.provider,
         methodId: entry.method,
         choiceId: entry.choiceId,
-        choiceLabel: entry.choiceLabel,
+        // Declared choices fall back to their id when the manifest omits a label.
+        choiceLabel: entry.choiceLabel ?? entry.choiceId,
       };
       if (entry.appGuidedSecret) {
         option.appGuidedSecret = true;
