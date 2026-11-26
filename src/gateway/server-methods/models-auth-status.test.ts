@@ -111,10 +111,7 @@ function createApiKeyProfile(provider: string) {
 }
 
 function expiredOAuthProfile(profileId: string, provider = "claude-cli") {
-  return healthProfile(provider, "oauth", "expired", profileId, {
-    expiresAt: 1,
-    remainingMs: -1,
-  });
+  return healthProfile(provider, "oauth", "expired", profileId, { expiresAt: 1, remainingMs: -1 });
 }
 
 function setExternalCliProfile(profileId: string) {
