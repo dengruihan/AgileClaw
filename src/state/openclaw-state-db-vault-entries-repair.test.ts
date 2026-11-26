@@ -122,6 +122,20 @@ function readSecretRefs(database: DatabaseSync) {
     .map((row) => String(row.item_ref));
 }
 
+function readSchemaObjectSql(
+  database: DatabaseSync,
+  type: "table" | "index",
+  name: string,
+): string {
+  const sql = database
+    .prepare("SELECT sql FROM main.sqlite_schema WHERE type = ? AND name = ?")
+    .get(type, name)?.sql;
+  if (typeof sql !== "string") {
+    throw new Error(`shared-state ${type} ${name} is missing its schema SQL`);
+  }
+  return sql;
+}
+
 function expectCanonicalEntriesSchema(database: DatabaseSync, pathname: string): void {
   expect(needsVaultEntriesAccountRepair(database)).toBe(false);
   expect(() => {
@@ -153,18 +167,10 @@ function expectCanonicalEntriesSchema(database: DatabaseSync, pathname: string):
     ]);
     database.exec("DELETE FROM vault_entries WHERE item_ref LIKE 'vault_blank%';");
   }).not.toThrow();
-  const tableSql = database
-    .prepare("SELECT sql FROM main.sqlite_schema WHERE type = 'table' AND name = 'vault_entries'")
-    .get()?.sql;
-  expect(typeof tableSql === "string" && tableSql.includes("BETWEEN 0 AND 512")).toBe(true);
-  const indexSql = database
-    .prepare(
-      "SELECT sql FROM main.sqlite_schema WHERE type = 'index' AND name = 'vault_entries_owner_active_account_idx'",
-    )
-    .get()?.sql;
-  expect(
-    typeof indexSql === "string" && normalizeSchemaSql(indexSql).includes("account <> ''"),
-  ).toBe(true);
+  const tableSql = readSchemaObjectSql(database, "table", "vault_entries");
+  expect(tableSql).toContain("BETWEEN 0 AND 512");
+  const indexSql = readSchemaObjectSql(database, "index", "vault_entries_owner_active_account_idx");
+  expect(normalizeSchemaSql(indexSql)).toContain("account <> ''");
   expect(pathname.length).toBeGreaterThan(0);
 }
 
