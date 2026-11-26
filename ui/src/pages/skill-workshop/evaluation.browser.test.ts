@@ -7,7 +7,7 @@ import type {
   SkillWorkshopProposal,
 } from "../../lib/skill-workshop/index.ts";
 import { getRenderedModalDialog } from "../../test-helpers/modal-dialog.ts";
-import type { SkillWorkshopProps } from "./view-types.ts";
+import type { SkillExperienceViewProps, SkillWorkshopProps } from "./view-types.ts";
 import { renderSkillWorkshop } from "./view.ts";
 
 const DRAFT_HASH = "a".repeat(64);
@@ -88,6 +88,53 @@ const proposal: SkillWorkshopProposal = {
   bodyLoaded: true,
 };
 
+function idleExperienceProps(): SkillExperienceViewProps {
+  return {
+    experiences: [],
+    counts: null,
+    loaded: false,
+    loading: false,
+    error: null,
+    query: "",
+    filter: "active",
+    selectedId: null,
+    inspectingId: null,
+    canCreate: false,
+    canUpdate: false,
+    canPromote: false,
+    canRetire: false,
+    canRestore: false,
+    agentName: "Research",
+    installedSkills: [],
+    draft: null,
+    promoteDraft: null,
+    retireDraft: null,
+    busy: null,
+    notice: null,
+    onQueryChange: vi.fn(),
+    onFilterChange: vi.fn(),
+    onSelect: vi.fn(),
+    onRetry: vi.fn(),
+    onNew: vi.fn(),
+    onEdit: vi.fn(),
+    onCancelDraft: vi.fn(),
+    onDraftChange: vi.fn(),
+    onSave: vi.fn(),
+    onReloadConflict: vi.fn(),
+    onPromoteOpen: vi.fn(),
+    onPromoteCancel: vi.fn(),
+    onPromoteDraftChange: vi.fn(),
+    onPromoteSubmit: vi.fn(),
+    onRetireOpen: vi.fn(),
+    onRetireCancel: vi.fn(),
+    onRetireReasonChange: vi.fn(),
+    onRetireSubmit: vi.fn(),
+    onRestore: vi.fn(),
+    onOpenProposal: vi.fn(),
+    onOpenSession: vi.fn(),
+  };
+}
+
 function propsFor(mode: SkillWorkshopMode): SkillWorkshopProps {
   return {
     access: {
@@ -118,6 +165,7 @@ function propsFor(mode: SkillWorkshopMode): SkillWorkshopProps {
     assistantName: "AgileClaw",
     workshopAgentName: "Research",
     selfLearning: null,
+    experience: idleExperienceProps(),
     onRetry: vi.fn(),
     onQueryChange: vi.fn(),
     onFilePreviewQueryChange: vi.fn(),

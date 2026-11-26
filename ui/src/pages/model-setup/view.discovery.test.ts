@@ -27,7 +27,6 @@ describe("Gateway discovery inside Models", () => {
     };
     const container = mount(
       props({
-        embedded: true,
         agentLabel: "Writer",
         credentialChoices: ["openai-oauth", "other-device", "openai", "gemini-api-key"],
 
@@ -64,7 +63,6 @@ describe("Gateway discovery inside Models", () => {
     const onClose = vi.fn();
     const container = mount(
       props({
-        embedded: true,
         onClose,
         onWizardCancel,
         wizard: {
@@ -88,7 +86,6 @@ describe("Gateway discovery inside Models", () => {
     const onOpenChat = vi.fn();
     const container = mount(
       props({
-        embedded: true,
         onOpenChat,
         activation: { phase: "success", modelRef: "openai/gpt-5.6-luna" },
       }),
@@ -105,7 +102,6 @@ describe("Gateway discovery inside Models", () => {
     const onManualConnect = vi.fn();
     const container = mount(
       props({
-        embedded: true,
         credentialChoices: ["openai-oauth"],
         manualProviderId: "special-token",
         manualApiKey: "synthetic-token",
@@ -145,17 +141,17 @@ describe("Gateway discovery inside Models", () => {
         candidates: [...detected.candidates, utility],
       },
     };
-    const container = mount(props({ embedded: true, page, onActivateCandidate }));
+    const container = mount(props({ page, onActivateCandidate }));
     const utilityButton = container.querySelector<HTMLButtonElement>(
       '[data-candidate-kind="provider-auto:local"] button',
     )!;
     expect(utilityButton.textContent).toContain("Use as utility");
     expect(
       container.querySelector('[data-candidate-kind="codex-cli"] button')?.textContent,
-    ).toContain("Test & use for this agent");
+    ).toContain("Test & use");
     utilityButton.click();
     expect(onActivateCandidate).toHaveBeenCalledExactlyOnceWith(utility);
-    const scanning = mount(props({ embedded: true, detecting: true, page }));
+    const scanning = mount(props({ detecting: true, page }));
     const buttons = scanning.querySelectorAll<HTMLButtonElement>("[data-candidate-kind] button");
     expect(buttons).toHaveLength(2);
     expect([...buttons].every((button) => button.disabled)).toBe(true);
@@ -166,7 +162,6 @@ describe("Gateway discovery inside Models", () => {
     const onOpenSetupAssistant = vi.fn();
     const container = mount(
       props({
-        embedded: true,
         onOpenChat,
         onOpenSetupAssistant,
         activation: { phase: "success", modelRef: "local/setup", modelTarget: "utility" },

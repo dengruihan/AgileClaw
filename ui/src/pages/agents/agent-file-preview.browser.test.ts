@@ -77,9 +77,11 @@ function renderPreview(
       agentFileDrafts: { "AGENTS.md": draft },
       agentFileSaving: false,
       agentFileConflict: null,
+      agentIdentity: null,
       canWrite: true,
       onLoadFiles: () => undefined,
       onSelectFile: () => undefined,
+      onOpenIdentityForm: () => undefined,
       onFileDraftChange: (name, content) => {
         onChange(name, content);
         renderPreview(content, onChange, overrides);
