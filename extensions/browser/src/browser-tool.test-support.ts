@@ -173,10 +173,14 @@ const nodesUtilsMocks = vi.hoisted(() => ({
   listNodes: vi.fn(async (..._args: unknown[]): Promise<Array<Record<string, unknown>>> => []),
 }));
 
+type CallGatewayToolMock = (
+  ...args: Parameters<typeof import("openclaw/plugin-sdk/agent-harness-runtime").callGatewayTool>
+) => Promise<Record<string, unknown>>;
+
 const gatewayMocks = vi.hoisted(() => ({
   readGatewayToolOperatorScopes: vi.fn<() => readonly string[] | undefined>(() => undefined),
   hasGatewayToolRoutingContext: vi.fn(() => true),
-  callGatewayTool: vi.fn(async (): Promise<Record<string, unknown>> => ({
+  callGatewayTool: vi.fn<CallGatewayToolMock>(async () => ({
     ok: true,
     payload: { result: { ok: true, running: true } },
   })),

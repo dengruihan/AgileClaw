@@ -85,6 +85,14 @@ function createStopHarness(profile: ReturnType<typeof makeBrowserProfile>) {
   return { profileCtx: ctx.forProfile(profile.name), state };
 }
 
+type StopOwnedChromeResult = Awaited<
+  ReturnType<typeof import("./chrome.js").stopOwnedOpenClawChrome>
+>;
+
+function managedStopResult(status: "not-running" | "unverified"): StopOwnedChromeResult {
+  return status === "unverified" ? { status, reason: "process identity changed" } : { status };
+}
+
 describe("createProfileAvailability.stopRunningBrowser", () => {
   it.each([
     { name: "attach-only", overrides: { attachOnly: true } },
@@ -147,10 +155,7 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
     async ({ overrides, status }) => {
       humanControlRegistry.revokeAll();
       clearAllVaultFillSessions();
-      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({
-        status,
-        ...(status === "unverified" ? { reason: "process identity changed" } : {}),
-      });
+      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue(managedStopResult(status));
       const { profileCtx } = createStopHarness(makeBrowserProfile(overrides));
       const name = profileCtx.profile.name;
       humanControlRegistry.claim({
@@ -183,10 +188,7 @@ describe("createProfileAvailability.stopRunningBrowser", () => {
   ])(
     "keeps masking with an active screencast when $name cannot prove destruction",
     async ({ overrides, status }) => {
-      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue({
-        status,
-        ...(status === "unverified" ? { reason: "process identity changed" } : {}),
-      });
+      chromeMocks.stopOwnedOpenClawChrome.mockResolvedValue(managedStopResult(status));
       const { profileCtx, state } = createStopHarness(makeBrowserProfile(overrides));
       const name = profileCtx.profile.name;
       registerVaultFillSecret("target-screencast", "screencast-stop-canary", "doc-1", name);
