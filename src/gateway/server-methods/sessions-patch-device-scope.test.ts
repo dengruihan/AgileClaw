@@ -123,6 +123,7 @@ describe("beginSessionPatchRequestDeviceScope", () => {
     const result = await beginSessionPatchRequestDeviceScope({
       request: { many: true, params: { targets: [], patch: { scopeDeviceId: "device-a" } } },
       context: { getRuntimeConfig: () => ({}), nodeRegistry: registry() } as never,
+      assertCurrent: vi.fn(),
     });
     expect(result).toMatchObject({ ok: false, error: patchManyDeviceScopeError() });
   });
@@ -132,6 +133,7 @@ describe("beginSessionPatchRequestDeviceScope", () => {
       beginSessionPatchRequestDeviceScope({
         request: { many: false, params: { key: "agent:main:root", label: "x" } },
         context: { getRuntimeConfig: () => ({}), nodeRegistry: registry() } as never,
+        assertCurrent: vi.fn(),
       }),
     ).resolves.toBeUndefined();
   });

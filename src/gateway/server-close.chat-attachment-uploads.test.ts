@@ -48,7 +48,7 @@ it("fences and cleans direct uploads before the HTTP listener closes", async () 
     const origin = `http://127.0.0.1:${port}`;
     const post = async (
       query: Record<string, string | number>,
-      body?: Buffer,
+      body?: BodyInit,
     ): Promise<UploadResponse> => {
       const response = await fetch(
         `${origin}/api/chat/attachments/upload?${new URLSearchParams(
@@ -70,7 +70,7 @@ it("fences and cleans direct uploads before the HTTP listener closes", async () 
     const stagingBaseline = await stagingFiles();
 
     // One upload is committed but never sent; another is left mid-staging.
-    const payload = Buffer.from("%PDF-1.4\nunsent attachment\n");
+    const payload = new Uint8Array(Buffer.from("%PDF-1.4\nunsent attachment\n"));
     const begin = await post({
       action: "begin",
       sizeBytes: payload.length,

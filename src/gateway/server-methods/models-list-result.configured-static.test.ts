@@ -17,6 +17,7 @@ import {
   catalogEntry,
   createModelsListTestContext,
   listModels,
+  modelDefinitionConfig,
   providerCatalogEntry,
   WITHOUT_OPENAI_ENV_AUTH,
 } from "./models-list-result.openai-routes.test-support.js";
@@ -366,7 +367,7 @@ describe("models.list configured static entries", () => {
   });
 
   it("keeps hidden config models out of the default view but in the all view", async () => {
-    const config = {
+    const config: OpenClawConfig = {
       agents: { defaults: { model: { primary: "custom/shown" } } },
       models: {
         providers: {
@@ -374,13 +375,13 @@ describe("models.list configured static entries", () => {
             baseUrl: "https://custom.example/v1",
             api: "openai-completions",
             models: [
-              { id: "shown", name: "Shown" },
-              { id: "secret", name: "Secret", hidden: true },
+              modelDefinitionConfig("shown", "Shown"),
+              modelDefinitionConfig("secret", "Secret", { hidden: true }),
             ],
           },
         },
       },
-    } as OpenClawConfig;
+    };
     const catalog = [
       { ...providerCatalogEntry("custom", "shown"), name: "Discovered Shown" },
       { ...providerCatalogEntry("custom", "secret"), name: "Discovered Secret" },

@@ -3,6 +3,7 @@ import { loadAuthProfileStoreWithoutExternalProfiles } from "../../agents/auth-p
 import type { AuthProfileStore } from "../../agents/auth-profiles/types.js";
 import type { ModelCatalogEntry } from "../../agents/model-catalog.types.js";
 import type { createOpenAIModelRoutesResolver } from "../../agents/openai-model-routes.js";
+import type { ModelDefinitionConfig } from "../../config/types.models.js";
 import type { OpenClawConfig } from "../../config/types.openclaw.js";
 import type { PluginMetadataSnapshot } from "../../plugins/plugin-metadata-snapshot.types.js";
 import { createPluginMetadataSnapshotFixture } from "../../plugins/plugin-metadata.test-support.js";
@@ -32,6 +33,23 @@ export function catalogEntry(id: string, api: ModelCatalogEntry["api"]): ModelCa
 
 export function providerCatalogEntry(provider: string, id: string): ModelCatalogEntry {
   return { ...catalogEntry(id, "openai-completions"), provider };
+}
+
+/** Complete runtime model definition for authored-provider fixtures. */
+export function modelDefinitionConfig(
+  id: string,
+  name: string,
+  overrides: Partial<ModelDefinitionConfig> = {},
+): ModelDefinitionConfig {
+  return {
+    id,
+    name,
+    reasoning: false,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    maxTokens: 4096,
+    ...overrides,
+  };
 }
 
 type ListModelsParams = {
