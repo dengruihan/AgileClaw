@@ -1,11 +1,14 @@
 import { createHash } from "node:crypto";
 import { normalizeOptionalString } from "@openclaw/normalization-core";
 import { isRecord } from "@openclaw/normalization-core/record-coerce";
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { buildControlUiSessionPath } from "@openclaw/session-url-contract";
 import type { WebPushNotificationCategory } from "../../packages/gateway-protocol/src/schema/push.js";
+import type { SessionEntry } from "../config/sessions.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import { createCronExecutionId } from "../cron/run-id.js";
 import { lookupCronRunExecSource } from "../infra/cron-run-exec-source.js";
+import { sanitizeExecApprovalDisplayText } from "../infra/exec-approval-text-sanitize.js";
 import {
   isWebPushQuietHours,
   normalizeWebPushDisplayLabel,
@@ -19,20 +22,24 @@ import {
 } from "../infra/push-web.js";
 import { createSubsystemLogger, type SubsystemLogger } from "../logging/subsystem.js";
 import { normalizeAgentId, parseAgentSessionKey } from "../routing/session-key.js";
+import { formatRawAssistantErrorForUi } from "../shared/assistant-error-format.js";
 import { isTranscriptOnlyOpenClawAssistantMessage } from "../shared/transcript-only-openclaw-assistant.js";
 import { resolveControlUiWebPushUrl } from "./control-ui-shared.js";
 import { QUESTIONS_SCOPE } from "./method-scopes.js";
 import { ADMIN_SCOPE, READ_SCOPE } from "./operator-scopes.js";
 import type { GatewayBroadcastOpts } from "./server-broadcast-types.js";
 import { canReceiveSessionEvent } from "./session-sharing.js";
+import { deriveSessionTitle } from "./session-utils-core.js";
 import {
   listCurrentWebPushTargets,
   withCurrentWebPushAuthority,
   webPushTargetClient,
   webPushSessionAccess,
+  type WebPushAuthority,
 } from "./web-push-authority.js";
 
 const EVENT_PUSH_TTL_SECONDS = 5 * 60;
+const AGENT_FAILURE_REASON_MAX_UTF16 = 160;
 const defaultLog = createSubsystemLogger("gateway/web-push");
 
 type EventNotification = {
@@ -42,6 +49,8 @@ type EventNotification = {
   identifiedBody?: string;
   tag: string;
   path?: string;
+  /** A failed run uses failure liveness (cron dedupe, high urgency) while keeping its category. */
+  failed?: true;
 };
 
 type FocusedSessionViewers = {
@@ -67,6 +76,41 @@ function canonicalFocusedSessionKey(sessionKey: string, agentId: string | undefi
   return parseAgentSessionKey(sessionKey) || !agentId
     ? sessionKey
     : `agent:${normalizeAgentId(agentId)}:${sessionKey}`;
+}
+
+/**
+ * Resolves the one canonical title shared by the completion's prepared facts. A completion
+ * address can carry several store keys for the same row, so uniqueness is by physical row,
+ * not by key count; ambiguous completions keep the generic title instead of guessing.
+ */
+function resolveCompletedSessionTitle(authority: WebPushAuthority): string | undefined {
+  const entries = new Map<string, SessionEntry>();
+  for (const facts of authority.sessions.values()) {
+    const { target } = facts;
+    if (target) {
+      entries.set(`${target.storePath}\u0000${target.storeKey}`, target.entry);
+    }
+  }
+  if (entries.size !== 1) {
+    return undefined;
+  }
+  const [entry] = [...entries.values()];
+  // Title metadata is already the persisted canonical title; only display bounding remains.
+  const title = deriveSessionTitle(entry)
+    ?.replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  return normalizeWebPushDisplayLabel(title);
+}
+
+function formatAgentFailureReason(errorMessage: string): string {
+  // Reuse the UI's error formatter (HTML/provider payloads become user copy), then redact and
+  // bound before the text reaches a lock screen. Nothing raw survives this path.
+  const formatted = formatRawAssistantErrorForUi(errorMessage).replace(/\s+/gu, " ").trim();
+  return truncateUtf16Safe(
+    sanitizeExecApprovalDisplayText(formatted).replace(/\s+/gu, " ").trim(),
+    AGENT_FAILURE_REASON_MAX_UTF16,
+  ).trim();
 }
 
 function resolveCompletedSessionKeys(
@@ -109,6 +153,19 @@ function resolveEventWebPushNotification(
       ...(questionId ? { path: `ask/${encodeURIComponent(questionId)}` } : {}),
     };
   }
+  if (event === "chat" && value.state === "error") {
+    const runId = normalizeWebPushDisplayLabel(value.runId) ?? "failed";
+    const errorMessage = normalizeOptionalString(value.errorMessage);
+    const reason = errorMessage ? formatAgentFailureReason(errorMessage) : "";
+    return {
+      category: "agent-finished",
+      failed: true,
+      title: "AgileClaw agent failed",
+      body: "An agent run failed.",
+      identifiedBody: reason ? `Task failed: ${reason}` : "Task failed.",
+      tag: `openclaw-agent-failed-${runId}`,
+    };
+  }
   if (
     event === "chat" &&
     value.state === "final" &&
@@ -120,6 +177,7 @@ function resolveEventWebPushNotification(
       category: "agent-finished",
       title: "AgileClaw agent finished",
       body: "An agent completed its response.",
+      identifiedBody: "Task completed.",
       tag: `openclaw-agent-finished-${runId}`,
     };
   }
@@ -222,6 +280,10 @@ export function createEventWebPushDelivery(params: {
                 : [READ_SCOPE],
             ...(mention ? { visibilityScopes: [ADMIN_SCOPE] } : {}),
           });
+          const sessionTitle =
+            notification.category === "agent-finished"
+              ? resolveCompletedSessionTitle(authority)
+              : undefined;
           const agentLabel = normalizeWebPushDisplayLabel(agentId);
           const groups = new Map<
             string,
@@ -273,7 +335,12 @@ export function createEventWebPushDelivery(params: {
               continue;
             }
             const prefix = preferences.label ? `${preferences.label} · ` : "";
-            const title = `${prefix}${notification.title}`;
+            // Only names-level detail may show the session title; private keeps generic copy.
+            const title = `${prefix}${
+              sessionTitle && preferences.detailLevel !== "private"
+                ? sessionTitle
+                : notification.title
+            }`;
             const body =
               preferences.detailLevel === "private"
                 ? notification.body
@@ -308,7 +375,10 @@ export function createEventWebPushDelivery(params: {
                     },
                     deliveryOptions: {
                       TTL: EVENT_PUSH_TTL_SECONDS,
-                      urgency: notification.category.includes("failed") ? "high" : "normal",
+                      urgency:
+                        notification.failed || notification.category.includes("failed")
+                          ? "high"
+                          : "normal",
                       topic,
                     },
                   }),
@@ -344,13 +414,18 @@ export function createEventWebPushDelivery(params: {
           notification.category === "agent-finished" && isRecord(payload)
             ? normalizeOptionalString(payload.runId)
             : undefined;
+        const cronSource = runId ? lookupCronRunExecSource(runId) : undefined;
+        if (notification.failed && cronSource) {
+          // The cron event already notifies this run's failure through scheduled-task-failed.
+          return;
+        }
         deliver(
           notification,
           event,
           payload,
           opts,
           undefined,
-          lookupCronRunExecSource(runId)?.notifyOnComplete !== false,
+          cronSource?.notifyOnComplete !== false,
         );
       }
     },

@@ -361,12 +361,9 @@ describe("event Web Push classification", () => {
     );
   });
 
-  it.each([
-    { agentId: "agent\n\u202E", label: "agent\\u{A}\\u{202E}" },
-    { agentId: "🦞".repeat(50), label: "🦞".repeat(40) },
-  ])(
-    "bounds event display labels while preserving the raw agent filter: $agentId",
-    async ({ agentId, label }) => {
+  it.each(["agent\n\u202E", "🦞".repeat(50)])(
+    "keeps a raw agent ID authoritative for filtering without a body prefix: $agentId",
+    async (agentId) => {
       const subscription = boundSubscription("browser-device");
       listBoundWebPushSubscriptionsMock.mockResolvedValue([
         {
@@ -384,46 +381,52 @@ describe("event Web Push classification", () => {
       await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
       expect(preparedWebPushSendMock).toHaveBeenCalledWith(
         expect.objectContaining({
-          payload: expect.objectContaining({ body: `${label}: An agent completed its response.` }),
+          payload: expect.objectContaining({
+            title: "AgileClaw agent finished",
+            body: "Task completed.",
+          }),
         }),
       );
     },
   );
 
-  it("suppresses only the completed session for a focused recipient identity", async () => {
-    listBoundWebPushSubscriptionsMock.mockResolvedValue([
-      boundSubscription("browser-device", "bob"),
-    ]);
-    const isFocusedForIdentity = vi.fn(
-      (
-        identity: { userProfileId: string | null; deviceId: string },
-        sessionKeys: ReadonlySet<string>,
-      ) => identity.userProfileId === "bob" && sessionKeys.has("agent:research:thread.1"),
-    );
-    const delivery = createEventWebPushDelivery({
-      getRuntimeConfig: () => ({}),
-      getFocusedSessionViewers: () => ({ isFocusedForIdentity }),
-    });
+  it.each(["final", "error"] as const)(
+    "suppresses only the completed session for a focused recipient identity (%s)",
+    async (state) => {
+      listBoundWebPushSubscriptionsMock.mockResolvedValue([
+        boundSubscription("browser-device", "bob"),
+      ]);
+      const isFocusedForIdentity = vi.fn(
+        (
+          identity: { userProfileId: string | null; deviceId: string },
+          sessionKeys: ReadonlySet<string>,
+        ) => identity.userProfileId === "bob" && sessionKeys.has("agent:research:thread.1"),
+      );
+      const delivery = createEventWebPushDelivery({
+        getRuntimeConfig: () => ({}),
+        getFocusedSessionViewers: () => ({ isFocusedForIdentity }),
+      });
+      const runPayload = (runId: string, sessionKey: string) =>
+        state === "final"
+          ? { state: "final", runId, sessionKey }
+          : { state: "error", runId, sessionKey, errorMessage: "boom" };
 
-    delivery.handleEvent(
-      "chat",
-      { state: "final", runId: "focused-run", sessionKey: "agent:research:thread.1" },
-      { agentId: "research" },
-    );
-    await authorityCompleted.promise;
-    expect(preparedWebPushSendMock).not.toHaveBeenCalled();
+      delivery.handleEvent("chat", runPayload("focused-run", "agent:research:thread.1"), {
+        agentId: "research",
+      });
+      await authorityCompleted.promise;
+      expect(preparedWebPushSendMock).not.toHaveBeenCalled();
 
-    delivery.handleEvent(
-      "chat",
-      { state: "final", runId: "other-run", sessionKey: "agent:research:thread.2" },
-      { agentId: "research" },
-    );
-    await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
-    expect(isFocusedForIdentity).toHaveBeenLastCalledWith(
-      expect.objectContaining({ userProfileId: "bob", deviceId: "browser-device" }),
-      new Set(["agent:research:thread.2"]),
-    );
-  });
+      delivery.handleEvent("chat", runPayload("other-run", "agent:research:thread.2"), {
+        agentId: "research",
+      });
+      await vi.waitFor(() => expect(preparedWebPushSendMock).toHaveBeenCalledOnce());
+      expect(isFocusedForIdentity).toHaveBeenLastCalledWith(
+        expect.objectContaining({ userProfileId: "bob", deviceId: "browser-device" }),
+        new Set(["agent:research:thread.2"]),
+      );
+    },
+  );
 
   it.each([
     { event: "question.requested", payload: { id: "question-1" } },
