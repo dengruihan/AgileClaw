@@ -166,6 +166,10 @@ describe("stageChatAttachment", () => {
         signal: controller.signal,
       }),
     ).rejects.toThrow(/aborted/i);
-    expect(actions).toEqual(["begin", "part"]);
+    // The cancelled transfer is released through the same authenticated
+    // transport, and it never commits.
+    await vi.waitFor(() => expect(actions).toContain("discard"));
+    expect(actions.slice(0, 2)).toEqual(["begin", "part"]);
+    expect(actions).not.toContain("commit");
   });
 });

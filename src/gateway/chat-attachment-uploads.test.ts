@@ -14,6 +14,7 @@ import {
   commitStagedChatAttachment,
   consumeStagedChatAttachment,
   discardChatAttachmentUploads,
+  discardChatAttachmentUpload,
   resetChatAttachmentUploadsForTests,
   runStagedChatAttachmentMutation,
   shutdownChatAttachmentUploads,
@@ -126,7 +127,7 @@ async function postJson(
 function streamPart(
   query: Record<string, string | number>,
   chunks: readonly Buffer[],
-  options: { betweenChunks?: () => Promise<void>; destroyAfterFirst?: boolean } = {},
+  options: { betweenChunks?: () => Promise<void> } = {},
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   return new Promise((resolve, reject) => {
     const request = http.request(uploadUrl(query), { method: "POST" }, (response) => {
@@ -144,12 +145,8 @@ function streamPart(
     });
     request.on("error", reject);
     void (async () => {
-      for (const [index, chunk] of chunks.entries()) {
+      for (const chunk of chunks) {
         request.write(chunk);
-        if (options.destroyAfterFirst && index === 0) {
-          request.destroy();
-          return;
-        }
         if (options.betweenChunks) {
           await options.betweenChunks();
         }
@@ -313,19 +310,190 @@ describe("direct chat attachment uploads", () => {
     );
   });
 
-  it("drops a partially written staging file when the client aborts", async () => {
+  it("releases the staged slot when the client's part transfer is interrupted", async () => {
     const begin = await postJson({ action: "begin", sizeBytes: 900 });
     const uploadId = begin.body.uploadId as string;
-    await streamPart({ action: "part", uploadId, offset: 0 }, [Buffer.alloc(300)], {
-      destroyAfterFirst: true,
-    }).catch(() => undefined);
-    // The part mutation settles when the aborted stream errors; the commit that
-    // follows serializes behind it and can only see an incomplete upload.
-    await expect(postJson({ action: "commit", uploadId })).resolves.toMatchObject({
-      status: 409,
+    const request = http.request(
+      uploadUrl({ action: "part", uploadId, offset: 0 }),
+      { method: "POST" },
+      (response) => response.resume(),
+    );
+    request.on("error", () => undefined);
+    request.write(Buffer.alloc(300));
+    // Wait until the server durably holds the first chunk, then vanish mid-body.
+    await vi.waitFor(async () => {
+      const [file] = await stagingFiles();
+      expect(file ? (await fs.stat(path.join(stagingRoot, file))).size : 0).toBe(300);
     });
+    request.destroy();
+
+    // No client is finishing an interrupted transfer, so its staged bytes and
+    // slot go immediately instead of riding the one-hour staging expiry.
+    await vi.waitFor(async () => expect(await stagingFiles()).toEqual([]));
+    await expect(postJson({ action: "commit", uploadId })).resolves.toMatchObject({
+      status: 404,
+    });
+  });
+
+  it("releases the staged slot when a part stream breaks mid-transfer", async () => {
+    const begin = await beginStagedChatAttachment({
+      scope: PARSE_SCOPE,
+      declaredBytes: 900,
+      maxBytes: 1024,
+    });
+    await expect(
+      writeStagedChatAttachmentPart({
+        uploadId: begin.uploadId,
+        offset: 0,
+        stream: (async function* () {
+          yield Buffer.alloc(300);
+          throw new Error("socket hang up");
+        })(),
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).rejects.toMatchObject({ code: "invalid-request" });
+    expect(await stagingFiles()).toEqual([]);
+    // The confirmed bytes are gone with the slot, so a retry cannot resume them.
+    await expect(
+      writeStagedChatAttachmentPart({
+        uploadId: begin.uploadId,
+        offset: 300,
+        stream: (async function* () {})(),
+        scope: PARSE_SCOPE,
+        maxBytes: 1024,
+      }),
+    ).rejects.toMatchObject({ code: "unknown-upload" });
+  });
+
+  it("cancels a fully written upload that has not committed yet", async () => {
+    const begin = await postJson({ action: "begin", sizeBytes: 4 });
+    const uploadId = begin.body.uploadId as string;
+    await expect(
+      streamPart({ action: "part", uploadId, offset: 0 }, [Buffer.alloc(4)]),
+    ).resolves.toMatchObject({ status: 200 });
     expect(await stagingFiles()).toHaveLength(1);
-    await discardChatAttachmentUploads();
+
+    const cancelled = await postJson({ action: "discard", uploadId });
+    expect(cancelled).toEqual({ status: 200, body: { uploadId, discarded: true } });
+    // The handle is closed and the file removed, so the queued commit sees no upload.
+    expect(await stagingFiles()).toEqual([]);
+    await expect(postJson({ action: "commit", uploadId })).resolves.toMatchObject({ status: 404 });
+  });
+
+  it("releases a cancelled upload's staged slot for the next begin", async () => {
+    const begin = () => postJson({ action: "begin", sizeBytes: 8, sessionKey: "agent:main:one" });
+    const uploadIds: string[] = [];
+    for (let index = 0; index < 8; index += 1) {
+      const started = await begin();
+      expect(started.status).toBe(200);
+      uploadIds.push(started.body.uploadId as string);
+    }
+    await expect(begin()).resolves.toMatchObject({ status: 503 });
+
+    const cancelled = await postJson({
+      action: "discard",
+      uploadId: uploadIds[0]!,
+      sessionKey: "agent:main:one",
+    });
+    expect(cancelled).toEqual({
+      status: 200,
+      body: { uploadId: uploadIds[0], discarded: true },
+    });
+    expect(await stagingFiles()).toHaveLength(7);
+    // The freed slot is admissible immediately, before any TTL sweep runs.
+    await expect(begin()).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("keeps a cancel bound to the scope that staged the upload", async () => {
+    const begin = await postJson({
+      action: "begin",
+      sizeBytes: 4,
+      sessionKey: "agent:main:one",
+      agentId: "main",
+    });
+    const uploadId = begin.body.uploadId as string;
+
+    const foreign = await postJson({
+      action: "discard",
+      uploadId,
+      sessionKey: "agent:main:two",
+      agentId: "main",
+    });
+    expect(foreign.status).toBe(403);
+    expect((foreign.body.error as { code?: string }).code).toBe("scope-mismatch");
+
+    // The refused cancel deleted nothing: the admitting scope can still finish.
+    await expect(
+      streamPart(
+        { action: "part", uploadId, offset: 0, sessionKey: "agent:main:one", agentId: "main" },
+        [Buffer.alloc(4)],
+      ),
+    ).resolves.toMatchObject({ status: 200 });
+    await expect(
+      postJson({ action: "commit", uploadId, sessionKey: "agent:main:one", agentId: "main" }),
+    ).resolves.toMatchObject({ status: 200 });
+  });
+
+  it("releases a removed ready attachment's committed slot and bytes", async () => {
+    const uploadIds: string[] = [];
+    for (let index = 0; index < 12; index += 1) {
+      uploadIds.push(await stageUpload(Buffer.alloc(4), "application/pdf", "tiny.pdf"));
+    }
+    const begin = () => postJson({ action: "begin", sizeBytes: 4, ...PARSE_SCOPE });
+    await expect(begin()).resolves.toMatchObject({ status: 503 });
+
+    const removed = uploadIds[0]!;
+    const mediaBefore = await inboundFiles();
+    await expect(
+      postJson({ action: "discard", uploadId: removed, ...PARSE_SCOPE }),
+    ).resolves.toEqual({ status: 200, body: { uploadId: removed, discarded: true } });
+    // Published media and the committed capacity are free again.
+    expect(await inboundFiles()).toHaveLength(mediaBefore.length - 1);
+    expect(() => consumeStagedChatAttachment(removed, PARSE_SCOPE, { maxBytes: 4 })).toThrow(
+      /unknown, expired, or already used/,
+    );
+    await expect(begin()).resolves.toMatchObject({ status: 200 });
+    // Repeating the release after a lost response is still a success.
+    await expect(
+      postJson({ action: "discard", uploadId: removed, ...PARSE_SCOPE }),
+    ).resolves.toEqual({ status: 200, body: { uploadId: removed, discarded: false } });
+  });
+
+  it("never deletes an upload a send already adopted", async () => {
+    const uploadId = await stageUpload(Buffer.alloc(4, 5), "application/pdf", "sent.pdf");
+    const media = consumeStagedChatAttachment(uploadId, PARSE_SCOPE, { maxBytes: 4 });
+    const bytes = await fs.readFile(media.path);
+
+    // The send owns these bytes now; a late cancel must not touch them.
+    await expect(postJson({ action: "discard", uploadId, ...PARSE_SCOPE })).resolves.toEqual({
+      status: 200,
+      body: { uploadId, discarded: false },
+    });
+    expect(await fs.readFile(media.path)).toEqual(bytes);
+    await fs.rm(media.path, { force: true });
+  });
+
+  it("refuses a cancel from another authenticated owner of the same session", async () => {
+    const begin = await beginStagedChatAttachment({
+      scope: { ownerKey: "profile:alice", sessionKey: PARSE_SCOPE.sessionKey },
+      declaredBytes: 4,
+      maxBytes: 1024,
+    });
+    await expect(
+      discardChatAttachmentUpload({
+        uploadId: begin.uploadId,
+        scope: { ownerKey: "profile:bob", sessionKey: PARSE_SCOPE.sessionKey },
+      }),
+    ).rejects.toMatchObject({ code: "scope-mismatch" });
+    expect(await stagingFiles()).toHaveLength(1);
+
+    await expect(
+      discardChatAttachmentUpload({
+        uploadId: begin.uploadId,
+        scope: { ownerKey: "profile:alice", sessionKey: PARSE_SCOPE.sessionKey },
+      }),
+    ).resolves.toEqual({ uploadId: begin.uploadId, discarded: true });
     expect(await stagingFiles()).toEqual([]);
   });
 

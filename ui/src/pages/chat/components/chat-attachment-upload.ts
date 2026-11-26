@@ -3,13 +3,16 @@
 // streams to the Gateway in parts instead; the send then references it by ID.
 import {
   ChatAttachmentUploadClientError,
+  discardChatAttachmentUpload,
   uploadChatAttachmentInParts,
   type ChatAttachmentUploadResponse,
+  type ChatAttachmentUploadScope,
   type StagedChatAttachmentUpload,
 } from "../../../../../src/shared/chat-attachment-upload-client.ts";
 import { fetchControlUiResource } from "../../../app/browser-http.ts";
 import { resolveControlUiAuthToken } from "../../../app/control-ui-auth.ts";
 import { t } from "../../../i18n/index.ts";
+import type { ChatAttachment } from "../../../lib/chat/chat-types.ts";
 import { buildChatMediaFetchHeaders } from "./chat-media-playback.ts";
 
 export { CHAT_ATTACHMENT_UPLOAD_PATH } from "../../../../../src/shared/chat-attachment-upload-client.ts";
@@ -60,9 +63,17 @@ async function postUpload(
   return { status: response.status, body };
 }
 
+function uploadScope(target: ChatAttachmentUploadTarget): ChatAttachmentUploadScope {
+  return {
+    ...(target.sessionKey ? { sessionKey: target.sessionKey } : {}),
+    ...(target.agentId ? { agentId: target.agentId } : {}),
+  };
+}
+
 /**
  * Streams one file to the Gateway staging store. Progress is reported per part;
- * a failed part resumes from the byte offset the Gateway reports.
+ * a part whose response was lost resumes from the byte offset the Gateway
+ * reports, while a cancelled or broken transfer releases its capacity instead.
  */
 export async function stageChatAttachment(params: {
   file: File;
@@ -78,10 +89,7 @@ export async function stageChatAttachment(params: {
       sizeBytes: file.size,
       mimeType: file.type || "application/octet-stream",
       ...(file.name ? { fileName: file.name } : {}),
-      scope: {
-        ...(target.sessionKey ? { sessionKey: target.sessionKey } : {}),
-        ...(target.agentId ? { agentId: target.agentId } : {}),
-      },
+      scope: uploadScope(target),
       signal,
       send: (request) => postUpload(target, request),
       ...(params.onProgress ? { onProgress: params.onProgress } : {}),
@@ -102,4 +110,27 @@ export async function stageChatAttachment(params: {
       cause: error,
     });
   }
+}
+
+/**
+ * Releases the Gateway capacity an attachment the user removed before sending
+ * still holds — its in-progress bytes or its uploaded-but-unsent file. Removing
+ * the slot already dropped the only reference, so this stays best effort and
+ * silent: the Gateway also drops an interrupted transfer itself, and a release
+ * failure must not surface as a new upload error.
+ */
+export function releaseChatAttachmentUpload(
+  attachment: Pick<ChatAttachment, "uploadId">,
+  target: ChatAttachmentUploadTarget | undefined,
+): void {
+  const uploadId = attachment.uploadId?.trim();
+  if (!uploadId || !target) {
+    return;
+  }
+  void discardChatAttachmentUpload({
+    basePath: target.basePath,
+    uploadId,
+    scope: uploadScope(target),
+    send: (request) => postUpload(target, request),
+  }).catch(() => undefined);
 }

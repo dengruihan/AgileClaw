@@ -159,6 +159,25 @@ function committedBytes(): number {
   return total;
 }
 
+/** Removes one staged entry and its file, dropping the slot it reserved. */
+async function releaseStagedUpload(entry: StagedUpload): Promise<void> {
+  if (staged.get(entry.id) === entry) {
+    staged.delete(entry.id);
+  }
+  const handle = entry.handle;
+  entry.handle = undefined;
+  await handle?.close().catch(() => undefined);
+  await fs.rm(entry.filePath, { force: true }).catch(() => undefined);
+}
+
+/** Removes one committed-but-unsent entry and its published media. */
+async function releaseCommittedUpload(entry: CommittedUpload): Promise<void> {
+  if (committed.get(entry.id) === entry) {
+    committed.delete(entry.id);
+  }
+  await fs.rm(entry.media.path, { force: true }).catch(() => undefined);
+}
+
 /**
  * Bytes this owner has reserved but not yet sent: published media plus the
  * declared size of every in-progress staging file. Counted together so
@@ -338,6 +357,8 @@ export async function writeStagedChatAttachmentPart(params: {
   stream: AsyncIterable<unknown>;
   scope: ChatAttachmentUploadScope;
   maxBytes: number;
+  /** Reports whether the intake received the complete body, not a broken one. */
+  isComplete?: () => boolean;
 }): Promise<{ uploadId: string; receivedBytes: number }> {
   const generation = currentAdmissionGeneration();
   await sweepExpired();
@@ -399,16 +420,24 @@ export async function writeStagedChatAttachmentPart(params: {
       partBytes += buffer.byteLength;
     }
   } catch (error) {
-    // Keep bytes already durably written; the client resumes from this offset.
-    entry.receivedBytes += partBytes;
     if (error instanceof ChatAttachmentUploadError) {
+      // A protocol rejection keeps the staged bytes: the client can still retry
+      // or commit this upload from the offset the error reports.
+      entry.receivedBytes += partBytes;
       throw error;
     }
-    throw new ChatAttachmentUploadError(
-      "invalid-request",
-      "attachment upload was interrupted",
-      entry.receivedBytes,
-    );
+    // A broken or aborted part stream means no client is finishing these bytes.
+    // Release the slot and its file now; a resumable retry cannot reach an
+    // entry the transport already abandoned.
+    await releaseStagedUpload(entry);
+    throw new ChatAttachmentUploadError("invalid-request", "attachment upload was interrupted");
+  }
+  // A transport can end a body early without erroring the stream, so the intake
+  // reports the truncation it saw. Either way no client is finishing these
+  // bytes: release the slot instead of holding it for the staging TTL.
+  if (params.isComplete && !params.isComplete()) {
+    await releaseStagedUpload(entry);
+    throw new ChatAttachmentUploadError("invalid-request", "attachment upload was interrupted");
   }
   try {
     assertUploadsOpen(generation);
@@ -459,8 +488,11 @@ export async function commitStagedChatAttachment(params: {
       entry.receivedBytes,
     );
   }
-  await entry.handle?.close().catch(() => undefined);
+  // Take ownership of the staging handle before awaiting its close so a
+  // concurrent discard never closes the same handle a second time.
+  const stagingHandle = entry.handle;
   entry.handle = undefined;
+  await stagingHandle?.close().catch(() => undefined);
   params.assertCommitAllowed?.();
   // Closing the staging handle is another await: re-check admission before the
   // publication read, which a final discard may already have unlinked.
@@ -564,6 +596,36 @@ export function consumeStagedChatAttachment(
 }
 
 /**
+ * Cancels one upload for its owner and releases the capacity it holds. A staged
+ * entry loses its bytes and slot; a committed-but-unsent entry loses its
+ * published media, its committed slot, and its reserved bytes. An upload a send
+ * already adopted is not in either map, so consuming it wins the race; both map
+ * removals are synchronous before the filesystem work, so a concurrent consume
+ * can never see a half-deleted entry. An upload that is already gone is a
+ * success, so a cancel racing a commit, or a retried cancel after a lost
+ * response, never surfaces as a new user-facing error.
+ */
+export async function discardChatAttachmentUpload(params: {
+  uploadId: string;
+  scope: ChatAttachmentUploadScope;
+}): Promise<{ uploadId: string; discarded: boolean }> {
+  const id = assertChatAttachmentUploadId(params.uploadId);
+  const stagedEntry = staged.get(id);
+  if (stagedEntry) {
+    assertScope(stagedEntry, params.scope, "attachment upload");
+    await releaseStagedUpload(stagedEntry);
+    return { uploadId: id, discarded: true };
+  }
+  const committedEntry = committed.get(id);
+  if (committedEntry) {
+    assertScope(committedEntry, params.scope, "attachment upload");
+    await releaseCommittedUpload(committedEntry);
+    return { uploadId: id, discarded: true };
+  }
+  return { uploadId: id, discarded: false };
+}
+
+/**
  * Drops staging and committed bytes that no message will reference. A scoped
  * discard only touches entries (and files) owned by that admission generation,
  * so an older shutdown can never clear state a replacement generation admitted.
@@ -575,18 +637,10 @@ export async function discardChatAttachmentUploads(options?: {
     options?.generation === undefined || entry.generation === options.generation;
   const stagedEntries = [...staged.values()].filter(owns);
   const committedEntries = [...committed.values()].filter(owns);
-  const files = [
-    ...stagedEntries.map((entry) => entry.filePath),
-    ...committedEntries.map((entry) => entry.media.path),
-  ];
-  for (const entry of stagedEntries) {
-    void entry.handle?.close().catch(() => undefined);
-    staged.delete(entry.id);
-  }
-  for (const entry of committedEntries) {
-    committed.delete(entry.id);
-  }
-  await Promise.allSettled(files.map((filePath) => fs.rm(filePath, { force: true })));
+  await Promise.allSettled([
+    ...stagedEntries.map((entry) => releaseStagedUpload(entry)),
+    ...committedEntries.map((entry) => releaseCommittedUpload(entry)),
+  ]);
 }
 
 let shutdownInFlight: Promise<void> | undefined;

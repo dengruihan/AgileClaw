@@ -27,6 +27,7 @@ import {
   readChatAttachmentFile,
 } from "./chat-attachment-reads.ts";
 import { encodeTextAsDataUrl } from "./chat-attachment-text.ts";
+import { releaseChatAttachmentUpload } from "./chat-attachment-upload.ts";
 import { renderComposerPastedText } from "./chat-composer-pasted-text.ts";
 import { isPastedTextAttachment } from "./chat-pasted-text.ts";
 import { renderChatSelectionAnnotations } from "./chat-selection-annotations.ts";
@@ -511,6 +512,7 @@ export function renderAttachmentPreview(props: ChatAttachmentControlsProps) {
                           const next = currentAttachments(props).filter((a) => a.id !== att.id);
                           releaseChatAttachmentPayload(att.id);
                           props.onAttachmentsChange?.(next);
+                          releaseChatAttachmentUpload(att, props.attachmentUpload);
                         }}
                       >
                         ${icons.x}
