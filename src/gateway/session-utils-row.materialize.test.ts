@@ -668,7 +668,9 @@ test("projects a device-scoped row and the held-lease stop affordance", async ()
     });
     expect(buildGatewaySessionRow(rowParams).scopeDeviceName).toBeUndefined();
     expect(
-      buildGatewaySessionSnapshot({ sessionRow: { key, kind: "direct" } }).scopeDeviceName,
+      buildGatewaySessionSnapshot({
+        sessionRow: { key, kind: "direct", updatedAt: null },
+      }).scopeDeviceName,
     ).toBeNull();
 
     // Device-reported names are unbounded; the row schema caps the label at 128.

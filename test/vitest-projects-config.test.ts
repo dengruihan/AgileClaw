@@ -98,7 +98,6 @@ const scopedGatewayMethodsIsolatedTestFiles = [
   "server-methods/health.owner-routing.test.ts",
   "server-methods/sessions.send-yield-resume.test.ts",
   "server-methods/system-agent-nested-inference.integration.test.ts",
-  "server-methods/system-agent-setup-control-ui.test.ts",
   "server-methods/transcripts.test.ts",
   "server-methods/users-preferences.test.ts",
   "server-methods/users-role.worker.test.ts",
@@ -295,9 +294,6 @@ describe("projects vitest config", () => {
     expect(methodsConfig.exclude).toContain(
       "src/gateway/server-methods/chat.reset-visible-yield.test.ts",
     );
-    expect(methodsConfig.exclude).toContain(
-      "src/gateway/server-methods/system-agent-setup-control-ui.test.ts",
-    );
     expect(gatewayFallback.exclude).toContain("src/gateway/server-methods/agent.test.ts");
     expect(gatewayFallback.exclude).toContain(
       "src/gateway/server-methods/health.owner-routing.test.ts",
@@ -307,9 +303,6 @@ describe("projects vitest config", () => {
     );
     expect(gatewayFallback.exclude).toContain(
       "src/gateway/server-methods/chat.reset-visible-yield.test.ts",
-    );
-    expect(gatewayFallback.exclude).toContain(
-      "src/gateway/server-methods/system-agent-setup-control-ui.test.ts",
     );
     expect(gatewayFallback.exclude).toContain(
       "src/gateway/server.sessions.compaction-read-errors.test.ts",

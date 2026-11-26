@@ -7,6 +7,7 @@ import { withEnvAsync } from "../../test-utils/env.js";
 import { buildModelsListResult } from "./models-list-result.js";
 import {
   createModelsListTestContext,
+  modelDefinitionConfig,
   WITHOUT_OPENAI_ENV_AUTH,
 } from "./models-list-result.openai-routes.test-support.js";
 
@@ -22,7 +23,7 @@ const AUTHORED_ORDER = [
 ] as const;
 
 function configuredFixture() {
-  const cfg = {
+  const cfg: OpenClawConfig = {
     agents: {
       defaults: { model: { primary: "zeta/z-strong" } },
     },
@@ -33,22 +34,22 @@ function configuredFixture() {
           baseUrl: "https://zeta.invalid/v1",
           apiKey: "synthetic-key",
           models: [
-            { id: "m-current", name: "Zeta current" },
-            { id: "z-strong", name: "Zeta strong" },
-            { id: "a-small", name: "Zeta small" },
+            modelDefinitionConfig("m-current", "Zeta current"),
+            modelDefinitionConfig("z-strong", "Zeta strong"),
+            modelDefinitionConfig("a-small", "Zeta small"),
           ],
         },
         openai: {
           api: "openai-completions",
           baseUrl: "https://api.openai.com/v1",
           models: [
-            { id: "z-last", name: "OpenAI last" },
-            { id: "a-first", name: "OpenAI first" },
+            modelDefinitionConfig("z-last", "OpenAI last"),
+            modelDefinitionConfig("a-first", "OpenAI first"),
           ],
         },
       },
     },
-  } as OpenClawConfig;
+  };
   const catalog = AUTHORED_ORDER.map(
     (ref) =>
       ({
@@ -109,7 +110,9 @@ describe("models.list configured picker order", () => {
     "keeps non-alphabetical authored order when the Chat session selects %s",
     async (selected) => {
       await withEnvAsync(WITHOUT_OPENAI_ENV_AUTH, async () => {
-        const [provider, model] = selected.split("/");
+        const separator = selected.indexOf("/");
+        const provider = selected.slice(0, separator);
+        const model = selected.slice(separator + 1);
         const models = await readConfiguredModels({
           includeManualSelection: true,
           sessionEntry: { modelOverride: model, providerOverride: provider },

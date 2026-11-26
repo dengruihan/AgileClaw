@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { validateModelsAuthSetApiKeyResult } from "../../../packages/gateway-protocol/src/index.js";
 import type { AuthHealthSummary } from "../../agents/auth-health.js";
 import { createAuthProfileStoreFixture } from "../../agents/auth-profiles/credential-fixtures.test-support.js";
+import type { AuthProfileStore } from "../../agents/auth-profiles/types.js";
 import type { OpenClawConfig } from "../../config/config.js";
 import {
   resetConfigRuntimeState,

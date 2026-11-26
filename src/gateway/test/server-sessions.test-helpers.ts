@@ -4,6 +4,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { afterEach, beforeEach, expect, vi } from "vitest";
+import type { ErrorShape } from "../../../packages/gateway-protocol/src/schema/frames.js";
 import { registerAcpSessionResetControls } from "../../acp/control-plane/manager.reset-controls.js";
 import type { InternalSessionEntry as SessionEntry } from "../../config/sessions.js";
 import type { InternalHookEvent } from "../../hooks/internal-hooks.js";
@@ -583,7 +584,7 @@ export async function directSessionReq<TPayload = unknown>(
 ): Promise<{
   ok: boolean;
   payload?: TPayload;
-  error?: { code?: string; message?: string; details?: unknown };
+  error?: ErrorShape;
 }> {
   const sessionsHandlers = await getSessionsHandlers();
   const { getRuntimeConfig } = await getGatewayConfigModule();
@@ -591,7 +592,7 @@ export async function directSessionReq<TPayload = unknown>(
     | {
         ok: boolean;
         payload?: TPayload;
-        error?: { code?: string; message?: string; details?: unknown };
+        error?: ErrorShape;
       }
     | undefined;
   const handler = sessionsHandlers[method];

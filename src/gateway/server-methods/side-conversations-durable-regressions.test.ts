@@ -45,12 +45,14 @@ vi.mock("../../config/sessions/side-conversation-registry.js", async (importOrig
     await importOriginal<typeof import("../../config/sessions/side-conversation-registry.js")>();
   return {
     ...actual,
-    removeSideConversationIntent: vi.fn(async (params: { intentId: string }) => {
-      if (mockState.failIntentCleanup === params.intentId) {
-        throw new Error("registry cleanup boom");
-      }
-      return actual.removeSideConversationIntent(params);
-    }),
+    removeSideConversationIntent: vi.fn(
+      async (params: Parameters<typeof actual.removeSideConversationIntent>[0]) => {
+        if (mockState.failIntentCleanup === params.intentId) {
+          throw new Error("registry cleanup boom");
+        }
+        return actual.removeSideConversationIntent(params);
+      },
+    ),
   };
 });
 
@@ -388,7 +390,6 @@ test("close refuses worker work that appears at the final commit guard", async (
   const closed = await closePersistentSideConversation({
     cfg: getRuntimeConfig(),
     context,
-    client: null,
     parentSessionKey: parentKey,
     sessionKey: childKey,
     assertCurrent: () => {},
@@ -430,7 +431,6 @@ test("close refuses terminal work that appears at the final commit guard", async
   const closed = await closePersistentSideConversation({
     cfg: getRuntimeConfig(),
     context,
-    client: null,
     parentSessionKey: parentKey,
     sessionKey: childKey,
     assertCurrent: () => {},
