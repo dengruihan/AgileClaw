@@ -289,7 +289,8 @@ suite.define(() => {
         controlUiEnabled: false,
         sidecarStartup: "defer",
       });
-      operator = await connectOperator({ port, token, stateDir: state.stateDir });
+      const operatorClient = await connectOperator({ port, token, stateDir: state.stateDir });
+      operator = operatorClient;
 
       await suite.withPage(newPageOptions(), async ({ page }) => {
         const gatewayUrl = `ws://127.0.0.1:${port}`;
@@ -349,14 +350,14 @@ suite.define(() => {
 
         // The approved node advertises the restricted executor surface.
         await expect
-          .poll(async () => readNode(operator!, node.identity.deviceId), { timeout: 20_000 })
+          .poll(async () => readNode(operatorClient, node.identity.deviceId), { timeout: 20_000 })
           .toMatchObject({
             connected: true,
             paired: true,
             approvalState: "approved",
             displayName: NODE_DISPLAY_NAME,
           });
-        const inventoryNode = await readNode(operator, node.identity.deviceId);
+        const inventoryNode = await readNode(operatorClient, node.identity.deviceId);
         expect(inventoryNode?.commands).toEqual(
           expect.arrayContaining([
             "system.run",
@@ -383,7 +384,7 @@ suite.define(() => {
           sidecarStartup: "defer",
         });
         await expect
-          .poll(async () => readNode(operator!, node.identity.deviceId), { timeout: 25_000 })
+          .poll(async () => readNode(operatorClient, node.identity.deviceId), { timeout: 25_000 })
           .toMatchObject({ connected: true, displayName: NODE_DISPLAY_NAME });
         await page.reload();
         await confirmGatewayUrl(page, { required: false });
@@ -447,7 +448,8 @@ suite.define(() => {
         controlUiEnabled: false,
         sidecarStartup: "defer",
       });
-      operator = await connectOperator({ port, token, stateDir: state.stateDir });
+      const operatorClient = await connectOperator({ port, token, stateDir: state.stateDir });
+      operator = operatorClient;
 
       await suite.withPage(newPageOptions(), async ({ page }) => {
         await installBrowserPairing(page, port);
@@ -482,14 +484,14 @@ suite.define(() => {
         expect(hello.features.methods).toContain("node.invoke");
         await dialog.getByText(NODE_DISPLAY_NAME, { exact: true }).waitFor({ timeout: 20_000 });
         await expect
-          .poll(async () => readNode(operator!, node.identity.deviceId), { timeout: 20_000 })
+          .poll(async () => readNode(operatorClient, node.identity.deviceId), { timeout: 20_000 })
           .toMatchObject({
             connected: true,
             paired: true,
             approvalState: "approved",
             displayName: NODE_DISPLAY_NAME,
           });
-        const inventory = await readNode(operator, node.identity.deviceId);
+        const inventory = await readNode(operatorClient, node.identity.deviceId);
         expect(inventory?.commands).toEqual(
           expect.arrayContaining(["system.run", "occupancy.acquire.v1"]),
         );

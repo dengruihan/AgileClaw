@@ -221,8 +221,12 @@ suite.define(() => {
         expect(new Set(settleFrames).size, JSON.stringify(result.anchorReads)).toBe(
           settleReads.length,
         );
-        for (let index = 1; index < settleFrames.length; index += 1) {
-          expect(settleFrames[index] - settleFrames[index - 1]).toBeGreaterThanOrEqual(1);
+        let previousFrame: number | undefined;
+        for (const frame of settleFrames) {
+          if (previousFrame !== undefined) {
+            expect(frame - previousFrame).toBeGreaterThanOrEqual(1);
+          }
+          previousFrame = frame;
         }
         // Rail writes are the production evidence: the eased widths must never
         // publish, and the settle must land exactly on the drawn column.

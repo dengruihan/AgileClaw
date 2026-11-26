@@ -344,7 +344,7 @@ suite.define(() => {
             });
           return {
             insideHeader:
-              Boolean(header) &&
+              header !== undefined &&
               fullscreen.left >= header.left &&
               fullscreen.right <= header.right &&
               fullscreen.top >= header.top &&
@@ -387,7 +387,7 @@ suite.define(() => {
                 fullscreen.top >= topnav.top &&
                 fullscreen.bottom <= topnav.bottom,
               overlapsDrawer:
-                Boolean(drawer) &&
+                drawer !== undefined &&
                 drawer.left < fullscreen.right &&
                 fullscreen.left < drawer.right &&
                 drawer.top < fullscreen.bottom &&
