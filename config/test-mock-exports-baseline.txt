@@ -8168,7 +8168,6 @@
 ["src/gateway/server-methods/system-agent-session-ownership.test.ts","../../system-agent/transcript-store.js","29225065f81ebdc744ea8aa59a81811cd4a058180854e1711cfb91d4a32d1dd4",1]
 ["src/gateway/server-methods/system-agent-setup-auth-retry.test.ts","../../system-agent/setup-inference.js","773e192cc48491b135c6d36b4fa61839bb9def15c1fcb6abd47fad3a34d1d2a6",1]
 ["src/gateway/server-methods/system-agent-setup-concurrent.test.ts","../../plugins/provider-auth-choice.js","21c2e993b0a4efd9952ecc2ba1f7948ca9f87545c6fb92b27fc513d682464726",1]
-["src/gateway/server-methods/system-agent-setup-control-ui.test.ts","../../system-agent/setup-inference.js","76ec93b7650bb295163dea755aba7344158e0cc480624727f4467ecec2b66e0a",1]
 ["src/gateway/server-methods/system-agent-setup-prepare.test.ts","../../plugins/provider-auth-choice.js","c5696cc9f7d028f5ecaed97f6899233f9a8e6ca1074582076730a0624db3679b",1]
 ["src/gateway/server-methods/system-agent-setup-prepare.test.ts","../../wizard/setup.shared.js","7e72628e8010da6988cb14126db5e773a9f30863399c1bc14d01f5d4c1f36d92",1]
 ["src/gateway/server-methods/system-agent-setup-resolution.test.ts","../../plugins/provider-auth-choice.js","c5696cc9f7d028f5ecaed97f6899233f9a8e6ca1074582076730a0624db3679b",1]
