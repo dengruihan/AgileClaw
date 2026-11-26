@@ -10,7 +10,7 @@ import { parseStoredDraft } from "./composer-draft-store-codec.ts";
 
 const UPLOAD_ID = "9c1f0d1e-0000-4000-8000-000000000021";
 
-function storedDraft(attachments: unknown[]) {
+function storedDraft(attachments: unknown[] | null) {
   return {
     key: "chat:v4:agent:main:main",
     ownerKey: "[]",

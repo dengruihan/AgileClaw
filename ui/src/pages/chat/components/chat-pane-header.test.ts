@@ -77,7 +77,6 @@ function mountIntegratedPresenceHeader(params: {
         session,
         false,
         undefined,
-        false,
         null,
       ),
       container,

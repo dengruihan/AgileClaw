@@ -30,7 +30,7 @@ function createTerminalPane(client: GatewayBrowserClient) {
   const paint = (
     row: GatewaySessionRow | undefined,
     workspace = createPaneHeaderWorkspaceFixture(state),
-  ) => render(pane.renderPaneHeader(workspace, row, false, undefined, false, null), container);
+  ) => render(pane.renderPaneHeader(workspace, row, false, undefined, null), container);
   return { pane, state, container, paint };
 }
 

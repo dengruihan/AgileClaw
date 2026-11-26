@@ -40,12 +40,14 @@ describe("session workspace artifacts", () => {
       title: params.title ?? "Unicode artifact",
       download: { mode: params.http ? "url" : "bytes" },
     };
-    const request = vi.fn(async (_method: string, query: { transport?: string }) => ({
-      artifact,
-      ...(params.http && query.transport === "http"
-        ? { url }
-        : { data: params.data, encoding: "base64" }),
-    }));
+    const request = vi.fn(
+      async (_method: string, query: { transport?: string; preview?: "office" }) => ({
+        artifact,
+        ...(params.http && query.transport === "http"
+          ? { url }
+          : { data: params.data, encoding: "base64" }),
+      }),
+    );
     const fetchMock = vi.fn(async () => {
       const bytes = Uint8Array.from(atob(params.data), (char) => char.charCodeAt(0));
       return {

@@ -193,6 +193,11 @@ describe("chat composer sizing", () => {
   it("resizes the draft when responsive layout changes the textarea width", () => {
     let resizeCallback: ResizeObserverCallback | undefined;
     let animationFrameCallback: FrameRequestCallback | undefined;
+    const runPendingFrame = (time: number) => {
+      const callback = animationFrameCallback;
+      animationFrameCallback = undefined;
+      callback?.(time);
+    };
     let nextAnimationFrameId = 0;
     const requestAnimationFrameMock = vi.fn((callback: FrameRequestCallback) => {
       animationFrameCallback = callback;
@@ -232,8 +237,7 @@ describe("chat composer sizing", () => {
     // task, so one real frame is already queued here. Run that initial work and
     // make the drained mock state the zero point for the width contract below.
     expect(requestAnimationFrameMock).toHaveBeenCalledOnce();
-    animationFrameCallback?.(0);
-    animationFrameCallback = undefined;
+    runPendingFrame(0);
     requestAnimationFrameMock.mockClear();
     cancelAnimationFrameMock.mockClear();
     nextAnimationFrameId = 0;
@@ -254,7 +258,7 @@ describe("chat composer sizing", () => {
     expect(requestAnimationFrameMock).toHaveBeenCalledOnce();
     expect(textarea.style.height).toBe("42px");
 
-    animationFrameCallback?.(0);
+    runPendingFrame(0);
     expect(textarea.style.height).toBe("120px");
     expect(textarea.style.overflowY).toBe("hidden");
 

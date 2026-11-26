@@ -306,15 +306,24 @@ function pauseDockMotionAt(docks: readonly MotionTestDock[], time: number): void
   }
 }
 
-function drawnDockGeometry(docks: readonly MotionTestDock[]): {
+function drawnDockGeometry([first, second]: readonly [MotionTestDock, MotionTestDock]): {
   margin: number;
-  rights: number[];
-  widths: number[];
+  rights: [number, number];
+  widths: [number, number];
 } {
+  const geometry = (dock: MotionTestDock) => {
+    const panel = panelOf(dock)!;
+    return {
+      right: Number.parseFloat(getComputedStyle(panel).right),
+      width: panel.getBoundingClientRect().width,
+    };
+  };
+  const firstGeometry = geometry(first);
+  const secondGeometry = geometry(second);
   return {
     margin: Number.parseFloat(getComputedStyle(shell).marginRight),
-    rights: docks.map((dock) => Number.parseFloat(getComputedStyle(panelOf(dock)!).right)),
-    widths: docks.map((dock) => panelOf(dock)!.getBoundingClientRect().width),
+    rights: [firstGeometry.right, secondGeometry.right],
+    widths: [firstGeometry.width, secondGeometry.width],
   };
 }
 

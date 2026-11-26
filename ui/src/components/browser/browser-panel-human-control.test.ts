@@ -71,7 +71,7 @@ describe("Browser panel human control", () => {
       .browserPanelController;
     controller.activeTargetId = "form-tab";
     controller.view = createView("form-tab");
-    controller.operations.resetRoute({ profile: "work" });
+    controller.operations.resetRoute({ target: "host", profile: "work" });
     panel.requestUpdate();
     await panel.updateComplete;
     return { panel, controller, request };
@@ -122,7 +122,7 @@ describe("Browser panel human control", () => {
   });
 
   it("routes typed and pasted values through the sensitive channel while healing the tab", async () => {
-    const { controller, request } = await mount(
+    const { controller, panel, request } = await mount(
       humanControlHandler({
         "/human-control/claim": async () => ({
           ok: true,
@@ -133,9 +133,7 @@ describe("Browser panel human control", () => {
       }),
     );
     await controller.human.takeOver();
-    const textarea = (
-      document.querySelector("openclaw-browser-panel") as HTMLElement & { renderRoot: ShadowRoot }
-    ).renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    const textarea = panel.renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
 
     textarea.dispatchEvent(textInput("insertText", "123456"));
     await flushBrowserResponses();
@@ -156,7 +154,7 @@ describe("Browser panel human control", () => {
   });
 
   it("shows a sensitive-input failure when the page has no focused field", async () => {
-    const { controller } = await mount(
+    const { controller, panel } = await mount(
       humanControlHandler({
         "/human-control/claim": async () => ({
           ok: true,
@@ -167,9 +165,7 @@ describe("Browser panel human control", () => {
       }),
     );
     await controller.human.takeOver();
-    const textarea = (
-      document.querySelector("openclaw-browser-panel") as HTMLElement & { renderRoot: ShadowRoot }
-    ).renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    const textarea = panel.renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
     textarea.dispatchEvent(textInput("insertText", "123456"));
     await flushBrowserResponses();
 
@@ -178,7 +174,7 @@ describe("Browser panel human control", () => {
   });
 
   it("shows a fixed failure when sensitive insertion throws", async () => {
-    const { controller } = await mount(
+    const { controller, panel } = await mount(
       humanControlHandler({
         "/human-control/claim": async () => ({
           ok: true,
@@ -191,9 +187,7 @@ describe("Browser panel human control", () => {
       }),
     );
     await controller.human.takeOver();
-    const textarea = (
-      document.querySelector("openclaw-browser-panel") as HTMLElement & { renderRoot: ShadowRoot }
-    ).renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    const textarea = panel.renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
     textarea.dispatchEvent(textInput("insertText", "123456"));
     await flushBrowserResponses();
 
@@ -202,7 +196,7 @@ describe("Browser panel human control", () => {
   });
 
   it("clears a rejected capability and refreshes ownership after a blocked action", async () => {
-    const { controller, request } = await mount(
+    const { controller, panel, request } = await mount(
       humanControlHandler({
         "/human-control/claim": async () => ({
           ok: true,
@@ -219,10 +213,7 @@ describe("Browser panel human control", () => {
       }),
     );
     await controller.human.takeOver();
-    const input = document.querySelector("openclaw-browser-panel") as HTMLElement & {
-      renderRoot: ShadowRoot;
-    };
-    const textarea = input.renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
+    const textarea = panel.renderRoot.querySelector<HTMLTextAreaElement>(".bp-input")!;
     textarea.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }),
     );
@@ -276,6 +267,6 @@ function createRenderController(): {
   const controller = new BrowserPanelController(new TestBrowserPanelHost(client));
   controller.activeTargetId = "form-tab";
   controller.view = createView("form-tab");
-  controller.operations.resetRoute({ profile: "work" });
+  controller.operations.resetRoute({ target: "host", profile: "work" });
   return { controller };
 }
