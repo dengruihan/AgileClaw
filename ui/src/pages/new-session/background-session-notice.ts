@@ -1,5 +1,7 @@
+import { truncateUtf16Safe } from "@openclaw/normalization-core/utf16-slice";
 import { sleepWithAbort } from "@openclaw/retry";
 import type { AgentWaitResult } from "../../../../src/agents/run-wait.types.js";
+import { formatRawAssistantErrorForUi } from "../../../../src/shared/assistant-error-format.js";
 import type { GatewayBrowserClient } from "../../api/gateway.ts";
 import { selectApplicationSession } from "../../app/agent-selection.ts";
 import type { ApplicationContext } from "../../app/context.ts";
@@ -9,6 +11,7 @@ import {
   shouldAutoPromptNotificationsOnSend,
 } from "../../app/notifications-auto-prompt.ts";
 import { t } from "../../i18n/index.ts";
+import { redactToolDetail } from "../../lib/browser-redact.ts";
 import { parseSlashCommand } from "../../lib/chat/commands.ts";
 import { resolveSessionDisplayName } from "../../lib/session-display.ts";
 import { sessionNavigationTarget } from "../../lib/sessions/route-navigation.ts";
@@ -20,6 +23,47 @@ import { showToast } from "../../lib/toast.ts";
 import { captureSessionNoticeOwner } from "./session-notice-owner.ts";
 
 const RETRY_DELAY_MS = 1_000;
+// Native copy limits shared with DashboardBackgroundSessionCompletion in the Mac app.
+const NOTIFICATION_TITLE_LIMIT = 120;
+const NOTIFICATION_BODY_LIMIT = 240;
+
+/**
+ * Native notifications render one bounded line and the bridge rejects control
+ * characters, so collapse whitespace and cap length before it leaves the UI.
+ */
+function clampNotificationText(value: string, limit: number): string {
+  const collapsed = value
+    .replace(/[\p{Cc}\p{Cf}]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (collapsed.length <= limit) {
+    return collapsed;
+  }
+  return `${truncateUtf16Safe(collapsed, limit - 1).trimEnd()}…`;
+}
+
+/** A raw session key or an empty title says nothing on a lock screen; use the generic name. */
+function backgroundSessionTitle(sessionName: string, sessionKey: string): string {
+  const title = clampNotificationText(sessionName, NOTIFICATION_TITLE_LIMIT);
+  return !title || title === sessionKey ? t("sessionsView.sessionFallback") : title;
+}
+
+function backgroundSessionBody(result: Partial<AgentWaitResult>): string {
+  if (result.status === "ok") {
+    return t("newSession.backgroundTaskCompleted");
+  }
+  if (result.status === "timeout") {
+    return t("sessionsView.statusTimeout");
+  }
+  if (result.stopReason === "rpc") {
+    return t("sessionsView.statusKilled");
+  }
+  const reason = clampNotificationText(
+    redactToolDetail(formatRawAssistantErrorForUi(result.error)),
+    NOTIFICATION_BODY_LIMIT,
+  );
+  return t("sessionsView.runFailedReason", { reason });
+}
 
 async function notifyWhenBackgroundSessionEnds(params: {
   agentId: string;
@@ -97,14 +141,17 @@ async function notifyWhenBackgroundSessionEnds(params: {
     fallbackAgentId: params.agentId,
     exactKey: true,
   });
+  const sessionName = resolveSessionDisplayName(params.key, row);
   params.context.nativeNotifications?.backgroundSessionCompleted({
     runId: params.runId,
     path: nativeTarget.options.pathname,
     ...(nativeTarget.options.search ? { search: nativeTarget.options.search } : {}),
+    title: backgroundSessionTitle(sessionName, params.key),
+    body: clampNotificationText(backgroundSessionBody(result), NOTIFICATION_BODY_LIMIT),
   });
   showToast({
     fifo: true,
-    message: `${resolveSessionDisplayName(params.key, row)}: ${status}`,
+    message: `${sessionName}: ${status}`,
     actionLabel: t("sessionsView.openSession"),
     onAction: () => {
       if (!params.isCurrentOwner()) {

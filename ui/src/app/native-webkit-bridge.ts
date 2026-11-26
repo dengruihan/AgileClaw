@@ -16,6 +16,8 @@ export type WebKitHostMessages = {
         runId: string;
         path: string;
         search?: string;
+        title?: string;
+        body?: string;
       };
 };
 

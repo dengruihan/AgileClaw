@@ -1,8 +1,12 @@
+import { containsAsciiControlCharacter } from "@openclaw/normalization-core/string-normalization";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDeferred } from "../../../../test/helpers/promise.ts";
+import type { GatewaySessionRow } from "../../api/types.ts";
 import { createNativeNotificationsCapability } from "../../app/native-notifications.ts";
 import type { ApplicationPlacementStartupStatus } from "../../app/session-placement-startup.ts";
+import { sessionsResult } from "../../lib/sessions/session-capability.test-support.ts";
 import * as toast from "../../lib/toast.ts";
+import { prepareBackgroundSessionCompletion } from "./background-session-notice.ts";
 import { createDraftFixture } from "./draft-submission-flow.test-support.ts";
 
 afterEach(() => {
@@ -27,6 +31,22 @@ function nativeBackgroundFixture(options: Parameters<typeof createDraftFixture>[
   });
   fixture.flow.setMessage("finish in the background");
   return { ...fixture, postMessage, dispose: () => nativeNotifications?.dispose() };
+}
+
+function publishSessionRow(
+  context: ReturnType<typeof createDraftFixture>["context"],
+  row: Partial<GatewaySessionRow> = {},
+) {
+  context.sessions.state.result = sessionsResult(
+    [{ key: "agent:main:dashboard:background", kind: "direct", updatedAt: 1, ...row }],
+    1,
+  );
+}
+
+function lastNotification(postMessage: ReturnType<typeof vi.fn>) {
+  return postMessage.mock.calls.at(-1)?.[0] as
+    | { type: string; title?: string; body?: string }
+    | undefined;
 }
 
 function failedPlacement(
@@ -164,6 +184,8 @@ describe("DraftSubmissionFlow background completion", () => {
         type: "background-session-completed",
         runId: "run-background",
         path: "/chat/main/dashboard/background",
+        title: "New session",
+        body: "Task completed.",
       });
       expect(context.navigateAndWait).not.toHaveBeenCalled();
     } finally {
@@ -262,6 +284,8 @@ describe("DraftSubmissionFlow background completion", () => {
               type: "background-session-completed",
               runId: "run-background",
               path: "/chat/main/dashboard/background",
+              title: "New session",
+              body: "Task completed.",
             },
           ],
         ]);
@@ -290,9 +314,137 @@ describe("DraftSubmissionFlow background completion", () => {
         type: "background-session-completed",
         runId: "run-background",
         path: "/chat/main/dashboard/background",
+        title: "New session",
+        body: "Run failed: Placement rejected",
       });
       expect(showToast).toHaveBeenCalledOnce();
       expect(request.mock.calls.filter(([method]) => method === "agent.wait")).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("names the native completion with the authorized session title and no prompt text", async () => {
+    const showToast = vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const { context, flow, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
+    });
+    publishSessionRow(context, { displayName: "Quarterly report" });
+    try {
+      await flow.submit(undefined, true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      expect(postMessage).toHaveBeenLastCalledWith({
+        type: "background-session-completed",
+        runId: "run-background",
+        path: "/chat/main/dashboard/background",
+        title: "Quarterly report",
+        body: "Task completed.",
+      });
+      expect(JSON.stringify(lastNotification(postMessage))).not.toContain(
+        "finish in the background",
+      );
+      expect(showToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Quarterly report: Done" }),
+      );
+    } finally {
+      dispose();
+    }
+  });
+
+  it("bounds and flattens an over-long session title", async () => {
+    vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const { context, flow, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
+    });
+    publishSessionRow(context, { displayName: `${"Title ".repeat(30)}break\u0007here\nnext` });
+    try {
+      await flow.submit(undefined, true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      const title = lastNotification(postMessage)?.title ?? "";
+      expect(title.length).toBeLessThanOrEqual(120);
+      expect(title.endsWith("…")).toBe(true);
+      expect(containsAsciiControlCharacter(title)).toBe(false);
+      expect(title.startsWith("Title Title")).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("bounds and redacts the failure reason instead of forwarding the raw error", async () => {
+    const rawError = [
+      'HTTP 500: {"error":{"message":"upstream exploded retry later"}}',
+      "Authorization: Bearer sk-live-abcdefghijklmnopqrstuvwxyz",
+      "detail".repeat(80),
+    ].join("\n");
+    const { flow, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) =>
+        method === "agent.wait" ? { status: "error", error: rawError } : {},
+    });
+    try {
+      await flow.submit(undefined, true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      const body = lastNotification(postMessage)?.body ?? "";
+      expect(body.startsWith("Run failed: ")).toBe(true);
+      expect(body).toContain("Authorization: [redacted]");
+      expect(body.endsWith("…")).toBe(true);
+      expect(body).not.toContain("sk-live");
+      expect(body).not.toContain(rawError);
+      expect(containsAsciiControlCharacter(body)).toBe(false);
+      expect(body).not.toContain("\n");
+      expect(body.length).toBeLessThanOrEqual(240);
+    } finally {
+      dispose();
+    }
+  });
+
+  it.each([
+    { outcome: { status: "timeout", endedAt: 1 }, body: "Timed out" },
+    { outcome: { status: "error", stopReason: "rpc" }, body: "Killed" },
+  ])("keeps the real terminal outcome in the native body: $body", async ({ outcome, body }) => {
+    const showToast = vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const { flow, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) => (method === "agent.wait" ? outcome : {}),
+    });
+    try {
+      await flow.submit(undefined, true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      expect(postMessage).toHaveBeenLastCalledWith({
+        type: "background-session-completed",
+        runId: "run-background",
+        path: "/chat/main/dashboard/background",
+        title: "New session",
+        body,
+      });
+      expect(showToast).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("replaces a raw session key title with the localized session fallback", async () => {
+    const showToast = vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const { context, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
+    });
+    const client = context.gateway.snapshot.client;
+    if (!client) {
+      throw new Error("fixture requires a connected client");
+    }
+    const notify = prepareBackgroundSessionCompletion({
+      enabled: true,
+      agentId: "main",
+      client,
+      context,
+    });
+    try {
+      expect(notify("legacy-session", "run-legacy")).toBe(true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      expect(lastNotification(postMessage)).toMatchObject({
+        type: "background-session-completed",
+        title: "Session",
+        body: "Task completed.",
+      });
+      expect(showToast).toHaveBeenCalledOnce();
     } finally {
       dispose();
     }

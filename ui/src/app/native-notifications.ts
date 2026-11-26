@@ -17,6 +17,10 @@ type NativeBackgroundSessionCompletion = {
   runId: string;
   path: string;
   search?: string;
+  /** UI-composed session title; the bridge falls back to generic copy when absent or invalid. */
+  title?: string;
+  /** UI-composed localized status text, already redacted and bounded. */
+  body?: string;
 };
 
 type NativeNotificationsWindow = Window & {
