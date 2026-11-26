@@ -146,9 +146,8 @@ describe("Gateway discovery inside Models", () => {
       '[data-candidate-kind="provider-auto:local"] button',
     )!;
     expect(utilityButton.textContent).toContain("Use as utility");
-    expect(
-      container.querySelector('[data-candidate-kind="codex-cli"] button')?.textContent,
-    ).toContain("Test & use");
+    const primaryButton = container.querySelector('[data-candidate-kind="codex-cli"] button');
+    expect(primaryButton === null ? null : text(primaryButton)).toBe("Test & use");
     utilityButton.click();
     expect(onActivateCandidate).toHaveBeenCalledExactlyOnceWith(utility);
     const scanning = mount(props({ detecting: true, page }));
