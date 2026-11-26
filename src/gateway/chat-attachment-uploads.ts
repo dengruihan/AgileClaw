@@ -11,6 +11,7 @@ import {
   chatAttachmentUploadOwnerKey,
   commitStagedChatAttachment,
   type ChatAttachmentUploadScope,
+  discardChatAttachmentUpload,
   runStagedChatAttachmentMutation,
   writeStagedChatAttachmentPart,
 } from "./chat-attachment-upload-store.js";
@@ -93,7 +94,7 @@ export async function handleChatAttachmentUploadHttpRequest(
     ...(readQuery(url, "sessionKey") ? { sessionKey: readQuery(url, "sessionKey") } : {}),
     ...(readQuery(url, "agentId") ? { agentId: readQuery(url, "agentId") } : {}),
   };
-  const assertCommitAllowed = () => {
+  const assertCurrentAuthority = () => {
     if (requestAuth.hasCurrentClientAuthority?.() === false) {
       throw new ChatAttachmentUploadError(
         "scope-mismatch",
@@ -131,20 +132,35 @@ export async function handleChatAttachmentUploadHttpRequest(
             stream: req,
             scope,
             maxBytes,
+            isComplete: () => req.complete,
           });
         }
         case "commit":
-          assertCommitAllowed();
+          assertCurrentAuthority();
           return await commitStagedChatAttachment({
             uploadId,
             scope,
             maxBytes,
-            assertCommitAllowed,
+            assertCommitAllowed: assertCurrentAuthority,
           });
+        case "discard":
+          // Cancelling or removing an attachment releases the capacity it holds
+          // for this caller only. The same per-upload lane keeps the discard from
+          // interleaving with the part or commit it supersedes.
+          assertCurrentAuthority();
+          return await discardChatAttachmentUpload({ uploadId, scope });
         default:
           throw new ChatAttachmentUploadError("invalid-request", "unknown upload action");
       }
     });
+    if (res.destroyed || res.writableEnded) {
+      // The requester left before it could learn this upload's ID, so nothing
+      // can ever reference the bytes it just staged; release them now.
+      if (action === "begin") {
+        await discardChatAttachmentUpload({ uploadId: result.uploadId, scope });
+      }
+      return true;
+    }
     sendJson(res, 200, result);
   } catch (error) {
     if (res.destroyed || res.writableEnded) {

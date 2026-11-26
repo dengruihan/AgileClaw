@@ -6,7 +6,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   uploadChatAttachmentInParts,
@@ -65,7 +65,7 @@ async function stopServer(): Promise<void> {
   });
 }
 
-type Captured = { url: string; body?: Blob };
+type Captured = { url: string; body?: Blob; status?: number };
 
 /** The Control UI's transport adapter: same-origin POST, JSON response. */
 function captureSender(captured: Captured[], options: { dropScope?: boolean } = {}) {
@@ -78,12 +78,14 @@ function captureSender(captured: Captured[], options: { dropScope?: boolean } = 
       parsed.searchParams.delete("agentId");
     }
     const url = parsed.toString();
-    captured.push({ url, ...(request.body ? { body: request.body } : {}) });
+    const entry: Captured = { url, ...(request.body ? { body: request.body } : {}) };
+    captured.push(entry);
     const response = await fetch(url, {
       method: "POST",
       ...(request.body ? { body: request.body } : {}),
       signal: request.signal,
     });
+    entry.status = response.status;
     return { status: response.status, body: await response.json().catch(() => null) };
   };
 }
@@ -162,7 +164,15 @@ describe("direct attachment upload composition", () => {
       }),
     ).rejects.toMatchObject({ code: "scope-mismatch" });
     // Begin carried the scope; the dropped-scope part never reached the store.
-    expect(captured).toHaveLength(2);
+    // The trailing best-effort release is rejected by the same scope guard.
+    await vi.waitFor(() =>
+      expect(captured.map((request) => new URL(request.url).searchParams.get("action"))).toEqual([
+        "begin",
+        "part",
+        "discard",
+      ]),
+    );
+    await vi.waitFor(() => expect(captured[2]!.status).toBe(403));
   });
 
   it("replays a commit whose response was lost without publishing twice", async () => {

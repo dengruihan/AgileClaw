@@ -118,17 +118,21 @@ Validating before send:
    promise the frame fits: inline attachments travel as base64, so a 20 MB file is
    about 26.7 MB on the wire and exceeds the default 25 MiB frame limit on its own.
    A file above what one frame can carry is not lost: upload it out of band
-   (`POST /api/chat/attachments/upload` with `action=begin|part|commit`, part
-   bodies capped at 16 MiB) and send it as
+   (`POST /api/chat/attachments/upload` with `action=begin|part|commit|discard`,
+   part bodies capped at 16 MiB) and send it as
    `{ type, mimeType, fileName, uploadId }` without `content`. The upload ID is
    single-use, expires after six hours if unsent, and stays bound to the
    authenticated owner plus the `sessionKey`/`agentId` it was admitted for; the
-   same scope must be repeated on every part and on commit. Repeating a commit
-   for the same ID replays its result, while consuming it for a send stays
-   single-use. At most 12 unsent uploads and 4 GiB of unsent bytes are retained
-   per Gateway, counting in-progress staging reservations as well as published
-   media; beyond that begin returns an explicit capacity error. Gateway shutdown
-   fences this route and discards staging plus unsent media.
+   same scope must be repeated on every part, commit, and discard. Repeating a
+   commit for the same ID replays its result, while consuming it for a send stays
+   single-use. A discard, or a part stream whose transport ends before its body
+   does, releases that upload's capacity at once — a staged reservation or an
+   unsent committed upload — instead of holding it until the staging or unsent
+   expiry; an upload a send already adopted is never touched. At most 12 unsent
+   uploads and 4 GiB of unsent bytes are retained per Gateway, counting
+   in-progress staging reservations as well as published media; beyond that begin
+   returns an explicit capacity error. Gateway shutdown fences this route and
+   discards staging plus unsent media.
 3. A sandboxed session streams direct uploads up to `maxBytes` into the
    sandbox workspace. Inline base64 attachments keep the shared 50 MiB
    task-input allowance, and a remote/SSH sandbox — which stages whole buffers

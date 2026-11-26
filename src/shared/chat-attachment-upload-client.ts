@@ -3,8 +3,8 @@
 // sent as parts to the Gateway staging route and referenced by upload ID.
 //
 // The UI supplies the transport (auth headers, same-origin credentials) and the
-// composed scope is repeated on every request: begin binds it, part and commit
-// must present the same session/agent or the Gateway rejects them.
+// composed scope is repeated on every request: begin binds it, and part, commit,
+// and discard must present the same session/agent or the Gateway rejects them.
 export const CHAT_ATTACHMENT_UPLOAD_PATH = "/api/chat/attachments/upload";
 
 /** Fallback part size; the Gateway's begin response is authoritative. */
@@ -47,6 +47,9 @@ export type StagedChatAttachmentUpload = {
   mimeType: string;
   fileName?: string;
 };
+
+/** Best-effort release timeout; a cancel must never wait on a stuck Gateway. */
+const CHAT_ATTACHMENT_UPLOAD_DISCARD_TIMEOUT_MS = 5_000;
 
 function scopedQuery(
   query: Record<string, string | number | undefined>,
@@ -108,9 +111,34 @@ function readString(body: unknown, key: string): string | undefined {
 }
 
 /**
+ * Asks the Gateway to release the capacity an upload this client is abandoning
+ * still holds. The Gateway also drops a part stream the transport broke, so
+ * callers treat this as best effort: it releases without a retry, and its
+ * failure is not a new upload error.
+ */
+export async function discardChatAttachmentUpload(params: {
+  basePath?: string | null;
+  uploadId: string;
+  scope?: ChatAttachmentUploadScope;
+  send: ChatAttachmentUploadSender;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  const response = await params.send({
+    url: buildChatAttachmentUploadUrl({
+      basePath: params.basePath,
+      query: { action: "discard", uploadId: params.uploadId },
+      scope: params.scope,
+    }),
+    signal: params.signal ?? AbortSignal.timeout(CHAT_ATTACHMENT_UPLOAD_DISCARD_TIMEOUT_MS),
+  });
+  return response.status >= 200 && response.status < 300;
+}
+
+/**
  * Streams one file to the Gateway staging route and returns its committed
- * reference. A rejected or interrupted part resumes from the offset the
- * Gateway reports, so a transport retry never re-sends confirmed bytes.
+ * reference. A part whose response was lost resumes from the offset the Gateway
+ * reports, so a transport retry never re-sends confirmed bytes. A transfer that
+ * ends before its commit releases the capacity it can no longer fill.
  */
 export async function uploadChatAttachmentInParts(params: {
   basePath?: string | null;
@@ -158,48 +186,62 @@ export async function uploadChatAttachmentInParts(params: {
       "attachment upload was not accepted",
     );
   }
-  const partBytes = readNumber(begin.body, "partBytes");
-  const partSize =
-    partBytes && partBytes > 0
-      ? Math.min(partBytes, sizeBytes || partBytes)
-      : CHAT_ATTACHMENT_UPLOAD_FALLBACK_PART_BYTES;
-  let offset = 0;
-  let resumedAt = -1;
-  while (offset < sizeBytes) {
-    signal.throwIfAborted();
-    const end = Math.min(sizeBytes, offset + partSize);
-    try {
-      const part = await post(
-        { action: "part", uploadId, offset },
-        file.slice(offset, end, params.mimeType || "application/octet-stream"),
-      );
-      const received = readNumber(part.body, "receivedBytes") ?? end;
-      offset = Math.max(offset, Math.min(sizeBytes, received));
-      params.onProgress?.(sizeBytes > 0 ? offset / sizeBytes : 1);
-    } catch (error) {
-      const receivedBytes =
-        error instanceof ChatAttachmentUploadClientError ? error.receivedBytes : undefined;
-      if (
-        typeof receivedBytes === "number" &&
-        receivedBytes > offset &&
-        receivedBytes <= sizeBytes &&
-        receivedBytes !== resumedAt
-      ) {
-        // Resume once from the offset the Gateway confirmed on disk.
-        resumedAt = receivedBytes;
-        offset = receivedBytes;
+  try {
+    const partBytes = readNumber(begin.body, "partBytes");
+    const partSize =
+      partBytes && partBytes > 0
+        ? Math.min(partBytes, sizeBytes || partBytes)
+        : CHAT_ATTACHMENT_UPLOAD_FALLBACK_PART_BYTES;
+    let offset = 0;
+    let resumedAt = -1;
+    while (offset < sizeBytes) {
+      signal.throwIfAborted();
+      const end = Math.min(sizeBytes, offset + partSize);
+      try {
+        const part = await post(
+          { action: "part", uploadId, offset },
+          file.slice(offset, end, params.mimeType || "application/octet-stream"),
+        );
+        const received = readNumber(part.body, "receivedBytes") ?? end;
+        offset = Math.max(offset, Math.min(sizeBytes, received));
         params.onProgress?.(sizeBytes > 0 ? offset / sizeBytes : 1);
-        continue;
+      } catch (error) {
+        const receivedBytes =
+          error instanceof ChatAttachmentUploadClientError ? error.receivedBytes : undefined;
+        if (
+          typeof receivedBytes === "number" &&
+          receivedBytes > offset &&
+          receivedBytes <= sizeBytes &&
+          receivedBytes !== resumedAt
+        ) {
+          // Resume once from the offset the Gateway confirmed on disk.
+          resumedAt = receivedBytes;
+          offset = receivedBytes;
+          params.onProgress?.(sizeBytes > 0 ? offset / sizeBytes : 1);
+          continue;
+        }
+        throw error;
       }
-      throw error;
     }
+    const committed = await post({ action: "commit", uploadId });
+    return {
+      uploadId,
+      sizeBytes: readNumber(committed.body, "sizeBytes") ?? sizeBytes,
+      mimeType:
+        readString(committed.body, "mimeType") ?? params.mimeType ?? "application/octet-stream",
+      ...(params.fileName ? { fileName: params.fileName } : {}),
+    };
+  } catch (error) {
+    // Nobody will finish these bytes: the caller cancelled, or the transfer
+    // failed before commit. Release the capacity instead of waiting for the
+    // Gateway's expiry, and keep this release silent — the caller already owns
+    // the outcome, and the Gateway drops an abandoned stream by itself.
+    void discardChatAttachmentUpload({
+      basePath: params.basePath,
+      uploadId,
+      ...(params.scope ? { scope: params.scope } : {}),
+      send: params.send,
+    }).catch(() => undefined);
+    throw error;
   }
-  const committed = await post({ action: "commit", uploadId });
-  return {
-    uploadId,
-    sizeBytes: readNumber(committed.body, "sizeBytes") ?? sizeBytes,
-    mimeType:
-      readString(committed.body, "mimeType") ?? params.mimeType ?? "application/octet-stream",
-    ...(params.fileName ? { fileName: params.fileName } : {}),
-  };
 }

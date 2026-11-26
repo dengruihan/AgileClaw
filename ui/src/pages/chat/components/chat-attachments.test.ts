@@ -868,4 +868,60 @@ describe("attachment removal names", () => {
     render(null, container);
     released.mockRestore();
   });
+
+  it("releases a removed uploaded attachment on the Gateway instead of holding its slot", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url) => {
+        requests.push(String(url));
+        return new Response(JSON.stringify({ discarded: true }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }),
+    );
+    const uploadId = "9c1f0d1e-0000-4000-8000-0000000000cd";
+    let attachments: ChatAttachment[] = [
+      {
+        id: "staged-clip",
+        origin: "file",
+        mimeType: "video/mp4",
+        fileName: "seminar.mp4",
+        sizeBytes: 900 * 1024 * 1024,
+        uploadId,
+      },
+    ];
+    const container = document.createElement("div");
+    const redraw = () =>
+      render(
+        renderAttachmentPreview({
+          attachments,
+          attachmentUpload: { basePath: "/mount", sessionKey: "agent:main:main", agentId: "main" },
+          getAttachments: () => attachments,
+          onAttachmentsChange: (next) => {
+            attachments = next;
+            redraw();
+          },
+        }),
+        container,
+      );
+    onTestFinished(() => {
+      render(null, container);
+      vi.unstubAllGlobals();
+    });
+    redraw();
+    container.querySelector<HTMLButtonElement>(".chat-attachment-remove")?.click();
+    expect(attachments).toEqual([]);
+
+    // The removed reference is abandoned, so its reservation is freed now
+    // instead of waiting for the staging or unsent expiry.
+    await vi.waitFor(() => expect(requests).toHaveLength(1));
+    const url = new URL(requests[0]!, "http://localhost");
+    expect(url.pathname).toBe("/mount/api/chat/attachments/upload");
+    expect(url.searchParams.get("action")).toBe("discard");
+    expect(url.searchParams.get("uploadId")).toBe(uploadId);
+    expect(url.searchParams.get("sessionKey")).toBe("agent:main:main");
+    expect(url.searchParams.get("agentId")).toBe("main");
+  });
 });
