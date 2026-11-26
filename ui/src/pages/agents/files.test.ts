@@ -189,7 +189,7 @@ describe("agent file requests", () => {
         if (scope === "client") {
           state.client = createTestGatewayClient(replacementRequest);
         } else if (scope === "capability") {
-          state.agents = { recordFile: vi.fn() };
+          state.agents = { recordFile: vi.fn(), refreshList: vi.fn(async () => null) };
         } else {
           state.requestGeneration += 1;
         }
@@ -331,7 +331,7 @@ describe("agent file requests", () => {
       state.client = { request: vi.fn() } as unknown as GatewayBrowserClient;
       state.requestGeneration += 1;
     } else {
-      state.agents = { recordFile: vi.fn() };
+      state.agents = { recordFile: vi.fn(), refreshList: vi.fn(async () => null) };
     }
     state.agentFileSaving = false;
     saved.resolve({ ok: true, ...fileResult("old") });

@@ -241,7 +241,9 @@ describe("ModelSetupPage detection ownership", () => {
       // A server can finish after local cancellation; it cannot publish into the next visit.
       stale.resolve({
         ...detection,
-        authOptions: [{ id: "stale-auth", label: "Stale provider", kind: "oauth" }],
+        authOptions: [
+          { id: "stale-auth", label: "Stale provider", kind: "oauth", featured: false },
+        ],
       });
       await vi.waitFor(() => expect(request.mock.settledResults[0]?.type).toBe("fulfilled"));
       await page.updateComplete;

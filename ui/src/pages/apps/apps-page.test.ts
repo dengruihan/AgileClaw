@@ -92,7 +92,7 @@ describe("Plugin apps page", () => {
     provider.remove();
   });
 
-  it.each([["operator.read"], []])(
+  it.each<[readonly string[]]>([[["operator.read"]], [[]]])(
     "renders the same plugin catalog for non-admin access %j",
     async (scopes) => {
       const { page, provider } = mountPage("", scopes);

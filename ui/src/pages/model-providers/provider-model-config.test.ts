@@ -2,6 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { applyMergePatch } from "../../../../src/config/merge-patch.js";
 import {
+  configuredProvider,
   modelReferences,
   modelRemovePatch,
   modelWritePatch,
@@ -236,7 +237,10 @@ describe("custom provider creation", () => {
     const patch = providerCreatePatch({ config: existing, entry });
     expect(patch.providerId).toBe("custom-models-example-test-2");
     expect(
-      applyMergePatch(existing, patch.raw, { mergeObjectArraysById: true, replaceArrayPaths: [] }),
+      applyMergePatch(existing, patch.raw, {
+        mergeObjectArraysById: true,
+        replaceArrayPaths: new Set(),
+      }),
     ).toEqual({
       models: {
         providers: {
@@ -277,7 +281,7 @@ describe("custom provider creation", () => {
     const created = applyMergePatch(
       authored,
       providerCreatePatch({ config: authored, entry }).raw,
-      { mergeObjectArraysById: true, replaceArrayPaths: [] },
+      { mergeObjectArraysById: true, replaceArrayPaths: new Set() },
     );
     const renamed = applyMergePatch(
       created,
@@ -287,7 +291,7 @@ describe("custom provider creation", () => {
         new Set(["displayName"]),
         "custom-models-example-test",
       ).raw,
-      { mergeObjectArraysById: true, replaceArrayPaths: [] },
+      { mergeObjectArraysById: true, replaceArrayPaths: new Set() },
     );
 
     // Creation only adds its own key; the rename only touches that leaf.
@@ -295,7 +299,10 @@ describe("custom provider creation", () => {
     expect(Object.keys(providers)).toEqual(["moonshot", "custom-models-example-test"]);
     expect(providers.moonshot).toEqual(before.models.providers.moonshot);
     expect((renamed as typeof authored).agents).toEqual(before.agents);
-    expect(providers["custom-models-example-test"].displayName).toBe("公司内部模型");
+    expect(
+      configuredProvider(renamed as Record<string, unknown>, "custom-models-example-test")
+        ?.displayName,
+    ).toBe("公司内部模型");
   });
 
   it("claims against the freshest snapshot, not the one the form opened with", () => {

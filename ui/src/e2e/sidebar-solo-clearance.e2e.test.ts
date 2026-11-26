@@ -167,7 +167,8 @@ suite.define(() => {
           }
           const lengths = layer.match(/-?\d+(?:\.\d+)?px/g)?.map(parseFloat) ?? [];
           if (lengths.length >= 3) {
-            overhang = Math.max(overhang, lengths[1] + lengths[2] + (lengths[3] ?? 0));
+            const [, offsetY = 0, blur = 0, spread = 0] = lengths;
+            overhang = Math.max(overhang, offsetY + blur + spread);
           }
         }
         return overhang;
