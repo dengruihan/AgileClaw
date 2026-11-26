@@ -16,13 +16,64 @@ struct DashboardNotificationsBridgeTests {
             from: ["type": "background-session-completed"]) == .backgroundSessionCompleted)
     }
 
-    @Test func `completion request preserves its exact session route without notification text`() throws {
-        let completion = try #require(DashboardBackgroundSessionCompletion(body: [
-            "runId": "run-1", "path": "/chat/research", "search": "?session=global",
-        ]))
+    @Test func `completion request carries the UI session copy with its exact session route`() throws {
+        let completion = try self.completion([
+            "search": "?session=global",
+            "title": "Quarterly report",
+            "body": "Task completed.",
+        ])
         #expect(completion.runId == "run-1")
         #expect(completion.path == "/chat/research")
         #expect(completion.search == "?session=global")
+        #expect(completion.title == "Quarterly report")
+        #expect(completion.body == "Task completed.")
+    }
+
+    @Test func `completion request without copy still keeps its route`() throws {
+        let completion = try self.completion([:])
+        #expect(completion.runId == "run-1")
+        #expect(completion.path == "/chat/research")
+        #expect(completion.title == nil)
+        #expect(completion.body == nil)
+    }
+
+    @Test func `unusable copy never drops the completion notification`() throws {
+        let unusableCopy: [[String: Any]] = [
+            ["title": ""],
+            ["title": "   "],
+            ["title": String(repeating: "t", count: 121)],
+            ["title": "Session\u{0007}ring"],
+            ["title": "Session\nTitle"],
+            ["title": 42],
+            ["body": ""],
+            ["body": String(repeating: "b", count: 241)],
+            ["body": "Task completed.\u{2028}next"],
+            ["body": ["nested": "value"]],
+        ]
+        for copy in unusableCopy {
+            let completion = try self.completion(copy)
+            #expect(completion.runId == "run-1")
+            #expect(completion.path == "/chat/research")
+            #expect(completion.title == nil)
+            #expect(completion.body == nil)
+        }
+    }
+
+    @Test func `copy at the bridge limits is accepted`() throws {
+        let title = String(repeating: "t", count: 120)
+        let text = String(repeating: "b", count: 240)
+        let completion = try self.completion(["title": title, "body": text])
+        #expect(completion.title == title)
+        #expect(completion.body == text)
+    }
+
+    @Test func `generic copy covers missing bridge text and keeps provided text`() {
+        #expect(BackgroundSessionNotificationCopy(title: nil, body: nil) == BackgroundSessionNotificationCopy(
+            title: "OpenClaw",
+            body: "A background session finished. Open it to see the result."))
+        let provided = BackgroundSessionNotificationCopy(title: "Quarterly report", body: "Task completed.")
+        #expect(provided.title == "Quarterly report")
+        #expect(provided.body == "Task completed.")
     }
 
     @Test func `completion request rejects malformed or external destinations`() {
@@ -166,6 +217,12 @@ struct DashboardNotificationsBridgeTests {
         #expect(pending["message"] == nil)
         #expect(error["state"] as? String == "error")
         #expect(error["message"] as? String == "Open System Settings and try again.")
+    }
+
+    private func completion(_ copy: [String: Any]) throws -> DashboardBackgroundSessionCompletion {
+        var payload: [String: Any] = ["runId": "run-1", "path": "/chat/research"]
+        payload.merge(copy) { _, new in new }
+        return try #require(DashboardBackgroundSessionCompletion(body: payload))
     }
 
     private func testSnapshotJSON(_ snapshot: TestNotificationOutcome) throws -> [String: Any] {

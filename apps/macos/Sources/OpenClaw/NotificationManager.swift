@@ -139,6 +139,21 @@ struct BackgroundSessionNotificationActions {
     }
 }
 
+/// Validated bridge copy for a finished background session. The generic copy stays
+/// when the UI sends no usable title or body, so the notice is never dropped.
+struct BackgroundSessionNotificationCopy: Equatable {
+    static let genericTitle = "OpenClaw"
+    static let genericBody = "A background session finished. Open it to see the result."
+
+    let title: String
+    let body: String
+
+    init(title: String?, body: String?) {
+        self.title = title ?? Self.genericTitle
+        self.body = body ?? Self.genericBody
+    }
+}
+
 @MainActor
 final class BackgroundSessionNotifications: NSObject, UNUserNotificationCenterDelegate {
     static let shared = BackgroundSessionNotifications()
@@ -157,13 +172,20 @@ final class BackgroundSessionNotifications: NSObject, UNUserNotificationCenterDe
         self.remove(self.actions.stop())
     }
 
-    func send(identifier: String, isCurrent: @escaping () -> Bool, open: @escaping () -> Void) async {
+    func send(
+        title: String?,
+        body: String?,
+        identifier: String,
+        isCurrent: @escaping () -> Bool,
+        open: @escaping () -> Void) async
+    {
         guard self.isRunning else { return }
         guard let admission = self.actions.begin(sourceIdentifier: identifier, open: open) else { return }
         self.remove(admission.retired)
+        let copy = BackgroundSessionNotificationCopy(title: title, body: body)
         let sent = await NotificationManager().send(
-            title: "OpenClaw",
-            body: "A background session finished. Open it to see the result.",
+            title: copy.title,
+            body: copy.body,
             sound: nil,
             identifier: admission.identifier,
             requestPermission: false,

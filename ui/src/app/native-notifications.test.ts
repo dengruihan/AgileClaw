@@ -138,6 +138,31 @@ describe("native notifications", () => {
     },
   );
 
+  it("forwards the UI session copy with the completion request", () => {
+    const postMessage = installBridge();
+    capability = createNativeNotificationsCapability();
+    postMessage.mockClear();
+
+    capability?.backgroundSessionCompleted({
+      runId: "run-1",
+      path: "/chat/research",
+      title: "Quarterly report",
+      body: "Task completed.",
+    });
+
+    expect(postMessage.mock.calls).toEqual([
+      [
+        {
+          type: "background-session-completed",
+          runId: "run-1",
+          path: "/chat/research",
+          title: "Quarterly report",
+          body: "Task completed.",
+        },
+      ],
+    ]);
+  });
+
   it("keeps permission and failed send as independent facts across focus refresh", () => {
     const postMessage = installBridge();
     capability = createNativeNotificationsCapability();

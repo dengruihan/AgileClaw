@@ -11,12 +11,19 @@ enum DashboardNotificationsRequest: String {
 }
 
 struct DashboardBackgroundSessionCompletion {
+    // Copy bounds shared with background-session-notice.ts; unusable text keeps the generic copy.
+    static let titleLimit = 120
+    static let bodyLimit = 240
+
     let runId: String
     let path: String
     let search: String?
+    /// UI-composed session title and localized status body; nil means the UI sent none.
+    let title: String?
+    let body: String?
 
-    init?(body: Any) {
-        guard let payload = body as? [String: Any],
+    init?(body payload: Any) {
+        guard let payload = payload as? [String: Any],
               let runId = payload["runId"] as? String, !runId.isEmpty, runId.count <= 128,
               let path = payload["path"] as? String, path.count <= 4096,
               path.hasPrefix("/chat/"), DashboardRouteMap.isValidSameAppPath(path)
@@ -30,6 +37,18 @@ struct DashboardBackgroundSessionCompletion {
         self.runId = runId
         self.path = path
         self.search = search
+        self.title = Self.notificationText(payload["title"], limit: Self.titleLimit)
+        self.body = Self.notificationText(payload["body"], limit: Self.bodyLimit)
+    }
+
+    /// Rejecting only the copy keeps the completion notification and its route.
+    private static func notificationText(_ value: Any?, limit: Int) -> String? {
+        guard let text = value as? String else { return nil }
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty, trimmed.utf16.count <= limit else { return nil }
+        let rejected = CharacterSet.controlCharacters.union(.newlines)
+        guard !trimmed.unicodeScalars.contains(where: { rejected.contains($0) }) else { return nil }
+        return trimmed
     }
 }
 
@@ -102,6 +121,8 @@ extension DashboardWindowController {
             let sourceID = self.notificationSourceID
             Task { [weak self] in
                 await BackgroundSessionNotifications.shared.send(
+                    title: completion.title,
+                    body: completion.body,
                     identifier: "\(sourceID)-\(completion.runId)",
                     isCurrent: { [weak self] in
                         guard let self else { return false }
