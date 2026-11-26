@@ -35,7 +35,9 @@ function proxyRecorder() {
   return { proxy, calls };
 }
 
-function dispatchParams(request: Record<string, unknown>) {
+function dispatchParams(
+  request: Record<string, unknown>,
+): Parameters<typeof executeBrowserTabAction>[0] {
   return {
     action: "act",
     actRequest: request as never,

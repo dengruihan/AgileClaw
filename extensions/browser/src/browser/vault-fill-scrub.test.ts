@@ -134,7 +134,7 @@ describe("vault fill scrub", () => {
     >;
     const result = scrubVaultFillValueAll(hostile) as Record<string, unknown>;
     expect(JSON.stringify(result)).not.toContain(CANARY);
-    expect(Object.prototype.polluted).toBeUndefined();
+    expect(Object.hasOwn(Object.prototype, "polluted")).toBe(false);
     expect((result as { polluted?: unknown }).polluted).toBeUndefined();
     expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
     expect(Object.hasOwn(result, "__proto__")).toBe(true);
@@ -193,7 +193,10 @@ describe("vault fill scrub", () => {
     expect(Object.is(scrubbed, evil)).toBe(false);
     expect(Object.is(scrubbed, trapError)).toBe(false);
     expect(scrubbed).toBeInstanceOf(Error);
-    expect(String(scrubbed as Error)).not.toContain(CANARY);
+    if (!(scrubbed instanceof Error)) {
+      throw new Error("expected the scrubbed value to be withheld as an Error");
+    }
+    expect(String(scrubbed)).not.toContain(CANARY);
     expect(JSON.stringify(scrubbed)).not.toContain(CANARY);
   });
 

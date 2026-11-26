@@ -263,9 +263,18 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         const routeContext = createBrowserRouteContext({ getState: () => state });
         registerBrowserVaultRoutes(routes.app, routeContext);
         registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
-        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
-        const identity = expectDefined(routes.postHandlers.get("/vault/identity"));
-        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+        const observe = expectDefined(
+          routes.postHandlers.get("/vault/observe"),
+          "registered vault observe route",
+        );
+        const identity = expectDefined(
+          routes.postHandlers.get("/vault/identity"),
+          "registered vault identity route",
+        );
+        const fill = expectDefined(
+          routes.postHandlers.get("/vault/fill"),
+          "registered vault fill route",
+        );
 
         const firstObserve = createBrowserRouteResponse();
         await observe(
@@ -448,9 +457,18 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         const routeContext = createBrowserRouteContext({ getState: () => state });
         registerBrowserVaultRoutes(routes.app, routeContext);
         registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
-        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
-        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
-        const submit = expectDefined(routes.postHandlers.get("/vault/submit"));
+        const observe = expectDefined(
+          routes.postHandlers.get("/vault/observe"),
+          "registered vault observe route",
+        );
+        const fill = expectDefined(
+          routes.postHandlers.get("/vault/fill"),
+          "registered vault fill route",
+        );
+        const submit = expectDefined(
+          routes.postHandlers.get("/vault/submit"),
+          "registered vault submit route",
+        );
 
         const observeResponse = createBrowserRouteResponse();
         await observe(
@@ -552,8 +570,14 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         const routeContext = createBrowserRouteContext({ getState: () => state });
         registerBrowserVaultRoutes(routes.app, routeContext);
         registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
-        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
-        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+        const observe = expectDefined(
+          routes.postHandlers.get("/vault/observe"),
+          "registered vault observe route",
+        );
+        const fill = expectDefined(
+          routes.postHandlers.get("/vault/fill"),
+          "registered vault fill route",
+        );
 
         const observeResponse = createBrowserRouteResponse();
         await observe(
@@ -648,8 +672,14 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         const routeContext = createBrowserRouteContext({ getState: () => state });
         registerBrowserVaultRoutes(routes.app, routeContext);
         registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
-        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
-        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+        const observe = expectDefined(
+          routes.postHandlers.get("/vault/observe"),
+          "registered vault observe route",
+        );
+        const fill = expectDefined(
+          routes.postHandlers.get("/vault/fill"),
+          "registered vault fill route",
+        );
 
         const observeResponse = createBrowserRouteResponse();
         await observe(
@@ -746,8 +776,14 @@ describe.runIf(process.env.OPENCLAW_BROWSER_VAULT_E2E === "1")(
         const routeContext = createBrowserRouteContext({ getState: () => state });
         registerBrowserVaultRoutes(routes.app, routeContext);
         registerBrowserAgentSnapshotRoutes(routes.app, routeContext);
-        const observe = expectDefined(routes.postHandlers.get("/vault/observe"));
-        const fill = expectDefined(routes.postHandlers.get("/vault/fill"));
+        const observe = expectDefined(
+          routes.postHandlers.get("/vault/observe"),
+          "registered vault observe route",
+        );
+        const fill = expectDefined(
+          routes.postHandlers.get("/vault/fill"),
+          "registered vault fill route",
+        );
 
         const observeResponse = createBrowserRouteResponse();
         await observe(
