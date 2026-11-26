@@ -49,6 +49,21 @@ function lastNotification(postMessage: ReturnType<typeof vi.fn>) {
     | undefined;
 }
 
+function directNativeCompletion(options: Parameters<typeof createDraftFixture>[0] = {}) {
+  const fixture = nativeBackgroundFixture(options);
+  const client = fixture.context.gateway.snapshot.client;
+  if (!client) {
+    throw new Error("fixture requires a connected client");
+  }
+  const notify = prepareBackgroundSessionCompletion({
+    enabled: true,
+    agentId: "main",
+    client,
+    context: fixture.context,
+  });
+  return { ...fixture, notify };
+}
+
 function failedPlacement(
   sendState: "failed" | "unconfirmed",
   sendRunId = "run-background",
@@ -184,7 +199,7 @@ describe("DraftSubmissionFlow background completion", () => {
         type: "background-session-completed",
         runId: "run-background",
         path: "/chat/main/dashboard/background",
-        title: "New session",
+        title: "Session",
         body: "Task completed.",
       });
       expect(context.navigateAndWait).not.toHaveBeenCalled();
@@ -284,7 +299,7 @@ describe("DraftSubmissionFlow background completion", () => {
               type: "background-session-completed",
               runId: "run-background",
               path: "/chat/main/dashboard/background",
-              title: "New session",
+              title: "Session",
               body: "Task completed.",
             },
           ],
@@ -314,7 +329,7 @@ describe("DraftSubmissionFlow background completion", () => {
         type: "background-session-completed",
         runId: "run-background",
         path: "/chat/main/dashboard/background",
-        title: "New session",
+        title: "Session",
         body: "Run failed: Placement rejected",
       });
       expect(showToast).toHaveBeenCalledOnce();
@@ -345,6 +360,28 @@ describe("DraftSubmissionFlow background completion", () => {
       );
       expect(showToast).toHaveBeenCalledWith(
         expect.objectContaining({ message: "Quarterly report: Done" }),
+      );
+    } finally {
+      dispose();
+    }
+  });
+
+  it("never titles a native completion from a prompt-derived session title", async () => {
+    const showToast = vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const prompt = "finish in the background";
+    const { context, flow, postMessage, dispose } = nativeBackgroundFixture({
+      request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
+    });
+    // Gateway title generation races run completion; its derived fallback can repeat the prompt.
+    publishSessionRow(context, { derivedTitle: prompt });
+    try {
+      await flow.submit(undefined, true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      expect(lastNotification(postMessage)?.title).toBe("Session");
+      expect(JSON.stringify(lastNotification(postMessage))).not.toContain(prompt);
+      // The shared sidebar display keeps its derived-title fallback for the in-app toast.
+      expect(showToast).toHaveBeenCalledWith(
+        expect.objectContaining({ message: `${prompt}: Done` }),
       );
     } finally {
       dispose();
@@ -412,7 +449,7 @@ describe("DraftSubmissionFlow background completion", () => {
         type: "background-session-completed",
         runId: "run-background",
         path: "/chat/main/dashboard/background",
-        title: "New session",
+        title: "Session",
         body,
       });
       expect(showToast).toHaveBeenCalledOnce();
@@ -423,18 +460,8 @@ describe("DraftSubmissionFlow background completion", () => {
 
   it("replaces a raw session key title with the localized session fallback", async () => {
     const showToast = vi.spyOn(toast, "showToast").mockReturnValue(true);
-    const { context, postMessage, dispose } = nativeBackgroundFixture({
+    const { notify, postMessage, dispose } = directNativeCompletion({
       request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
-    });
-    const client = context.gateway.snapshot.client;
-    if (!client) {
-      throw new Error("fixture requires a connected client");
-    }
-    const notify = prepareBackgroundSessionCompletion({
-      enabled: true,
-      agentId: "main",
-      client,
-      context,
     });
     try {
       expect(notify("legacy-session", "run-legacy")).toBe(true);
@@ -445,6 +472,28 @@ describe("DraftSubmissionFlow background completion", () => {
         body: "Task completed.",
       });
       expect(showToast).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  });
+
+  it.each([
+    { scenario: "a long raw key", key: `legacy-${"k".repeat(150)}` },
+    {
+      scenario: "a whitespace and control character raw key",
+      key: "legacy\u0007 session\tid\n  name",
+    },
+  ])("replaces $scenario with the localized session fallback", async ({ key }) => {
+    vi.spyOn(toast, "showToast").mockReturnValue(true);
+    const { notify, postMessage, dispose } = directNativeCompletion({
+      request: async (method) => (method === "agent.wait" ? { status: "ok", endedAt: 1 } : {}),
+    });
+    try {
+      expect(notify(key, "run-legacy-edge")).toBe(true);
+      await vi.waitFor(() => expect(postMessage).toHaveBeenCalledTimes(2));
+      const title = lastNotification(postMessage)?.title ?? "";
+      expect(title).toBe("Session");
+      expect(title).not.toContain("legacy");
     } finally {
       dispose();
     }
