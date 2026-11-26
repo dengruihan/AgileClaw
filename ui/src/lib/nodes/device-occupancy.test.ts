@@ -12,7 +12,10 @@ function createState(
   overrides: Partial<DeviceOccupancyState> = {},
 ): DeviceOccupancyState {
   return {
-    client: { request },
+    client: {
+      request: <T = unknown>(method: string, params?: unknown) =>
+        request(method, params) as Promise<T>,
+    },
     connected: true,
     requestGeneration: 0,
     occupancyLoading: false,

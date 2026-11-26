@@ -9,7 +9,11 @@ import "@awesome.me/webawesome/dist/styles/themes/default.css";
 import "@awesome.me/webawesome/dist/components/switch/switch.js";
 import { switchDrag } from "./switch-drag.ts";
 
-type SwitchElement = HTMLElement & { checked: boolean };
+type SwitchElement = HTMLElement & {
+  checked: boolean;
+  disabled: boolean;
+  updateComplete: Promise<boolean>;
+};
 
 function pointer(
   element: Element,

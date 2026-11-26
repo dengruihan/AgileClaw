@@ -90,6 +90,8 @@ export interface TestChatPane extends HTMLElement, ReactiveControllerHost {
   catalogMessages: unknown[];
   active: boolean;
   presented: boolean;
+  visuallyPresented: boolean;
+  stagedConversation: boolean;
   presentationId: string;
   chatMessagesBySession?: ChatMessageCache;
   sessionSnapshotStore?: SessionSnapshotStore;
@@ -101,6 +103,7 @@ export interface TestChatPane extends HTMLElement, ReactiveControllerHost {
   state: ChatPageHost;
   connectedClient: GatewayBrowserClient | null;
   applyGatewaySnapshot: (snapshot: ApplicationContext["gateway"]["snapshot"]) => void;
+  handleGatewaySnapshot: (snapshot: ApplicationContext["gateway"]["snapshot"]) => void;
   connectedCallback: () => void;
   connectionGeneration: number;
   catalogLoadGeneration: number;

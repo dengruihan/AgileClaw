@@ -3,6 +3,7 @@
 import { expectDefined } from "@openclaw/normalization-core";
 import { render } from "lit";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
+import type { ArtifactOfficePreview } from "../../../api/artifact-download.ts";
 import {
   registerChatAttachmentTestCleanup,
   renderAssistantAttachments,
@@ -18,7 +19,7 @@ describe("office attachment previews", () => {
     const attachmentId = "11111111-1111-4111-8111-111111111111";
     const artifactId = `artifact_managed_media_${attachmentId}`;
     const source = `/api/chat/media/outgoing/agent%3Amain%3Amain/${attachmentId}/full`;
-    const officePreview = {
+    const officePreview: ArtifactOfficePreview = {
       kind: "office",
       format: "xlsx",
       state: "ready",
@@ -138,7 +139,8 @@ describe("office attachment previews", () => {
         },
       };
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = input instanceof URL ? input.href : input;
+        const url =
+          input instanceof URL ? input.href : input instanceof Request ? input.url : input;
         if (url === dataUrl) {
           return new Response(new Blob([Buffer.from("PK-office-bytes")]));
         }
@@ -206,7 +208,8 @@ describe("office attachment previews", () => {
         },
       };
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = input instanceof URL ? input.href : input;
+        const url =
+          input instanceof URL ? input.href : input instanceof Request ? input.url : input;
         if (url === dataUrl) {
           return new Response(new Blob([Buffer.from("PK-mime-only")]));
         }
@@ -263,7 +266,8 @@ describe("office attachment previews", () => {
       vi.stubGlobal(
         "fetch",
         vi.fn(async (input: RequestInfo | URL) => {
-          const url = input instanceof URL ? input.href : input;
+          const url =
+            input instanceof URL ? input.href : input instanceof Request ? input.url : input;
           if (url === dataUrl) {
             return new Response(new Blob([Buffer.from("PK")]));
           }

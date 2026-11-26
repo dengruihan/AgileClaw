@@ -2,7 +2,7 @@ import { html, nothing, render } from "lit";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { markdownBlocks } from "../../../components/markdown-blocks.ts";
 import { releaseMarkdownTables } from "../../../components/markdown-tables.ts";
-import type { MessageGroup } from "../../../lib/chat/chat-types.ts";
+import type { ChatItem, MessageGroup } from "../../../lib/chat/chat-types.ts";
 import { groupMessages } from "../chat-thread-grouping.ts";
 import { renderMessageGroup } from "./chat-message-group.ts";
 import {
@@ -24,6 +24,14 @@ afterEach(() => {
   render(nothing, container);
   container.remove();
 });
+
+function groupedMessage(items: ChatItem[]): MessageGroup {
+  const [first] = groupMessages(items);
+  if (first?.kind !== "group") {
+    throw new Error("expected a grouped assistant message fixture");
+  }
+  return first;
+}
 
 function createRevealHarness(options: { reducedMotion?: () => boolean } = {}) {
   let now = 1_000;
@@ -160,7 +168,7 @@ describe("smooth assistant reveal", () => {
     const finalText = `${streamed} It settles with **strong** emphasis.`;
     // Build the settled row through the real grouper so the renderer's group
     // key (`group:assistant:<itemKey>`) is the tail key it actually asks about.
-    const [group] = groupMessages([
+    const group = groupedMessage([
       {
         kind: "message",
         key: "assistant:1",
@@ -170,8 +178,8 @@ describe("smooth assistant reveal", () => {
           timestamp: 2_000,
         },
       },
-    ]) as MessageGroup[];
-    expect(group?.key).toBe("group:assistant:assistant:1");
+    ]);
+    expect(group.key).toBe("group:assistant:assistant:1");
     harness.buffer.focusTail({
       kind: "agent-run-frame",
       key: "reveal-frame",
@@ -225,7 +233,7 @@ describe("smooth assistant reveal", () => {
   it("reveals an identity-less one-shot final through the real grouped renderer", async () => {
     const harness = createRevealHarness();
     const finalText = "A one-shot grouped answer painted by the real message group renderer.";
-    const [group] = groupMessages([
+    const group = groupedMessage([
       {
         kind: "message",
         key: "assistant:1",
@@ -235,15 +243,15 @@ describe("smooth assistant reveal", () => {
           timestamp: 2_000,
         },
       },
-    ]) as MessageGroup[];
-    expect(group?.key).toBe("group:assistant:assistant:1");
-    expect(group?.runId).toBeUndefined();
+    ]);
+    expect(group.key).toBe("group:assistant:assistant:1");
+    expect(group.runId).toBeUndefined();
     harness.buffer.focusTail(group);
-    expect(harness.buffer.isTail(group!.key)).toBe(true);
+    expect(harness.buffer.isTail(group.key)).toBe(true);
     const draw = () =>
       render(
         html`<section ${markdownBlocks()}>
-          ${renderMessageGroup(group!, {
+          ${renderMessageGroup(group, {
             showReasoning: false,
             showToolCalls: false,
             reveal: harness.buffer,

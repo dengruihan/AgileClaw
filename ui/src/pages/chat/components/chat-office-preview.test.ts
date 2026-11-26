@@ -13,13 +13,20 @@ type DetailPanel = HTMLElement & {
 const ONE_PIXEL_PNG =
   "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
 
+type OfficeSidebarContent = Extract<SidebarContent, { kind: "office" }>;
+
 async function mountOffice(
-  content: Partial<Extract<SidebarContent, { kind: "office" }>> & {
+  content: Omit<Partial<OfficeSidebarContent>, "kind" | "format" | "preview"> & {
     preview: SessionFileOfficePreview;
   },
 ) {
   const panel = document.createElement("openclaw-chat-detail-panel") as DetailPanel;
-  panel.content = { kind: "office", title: "budget.xlsx", ...content };
+  panel.content = {
+    kind: "office",
+    title: "budget.xlsx",
+    format: content.preview.format,
+    ...content,
+  };
   document.body.append(panel);
   await panel.updateComplete;
   await expect

@@ -55,7 +55,7 @@ describe("chat pane session menu boundary", () => {
     let workspace = createPaneHeaderWorkspaceFixture(state);
     const draw = () => {
       workspace = createPaneHeaderWorkspaceFixture(state);
-      render(pane.renderPaneHeader(workspace, session, false, undefined, false, null), container);
+      render(pane.renderPaneHeader(workspace, session, false, undefined, null), container);
     };
     draw();
     const menu = container.querySelector("openclaw-chat-header-session-menu")!;
