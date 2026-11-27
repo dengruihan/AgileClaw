@@ -453,4 +453,100 @@ describe("PPTX fixed slide geometry", () => {
     expect(preview?.slides?.[0]?.shapes).toHaveLength(200);
     expect(preview?.truncated).toBe(true);
   });
+
+  it("resolves gallery p:style fill, line, and font references", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Gallery"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1270000" y="1270000"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:style><a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef><a:effectRef idx="2"><a:schemeClr val="accent1"/></a:effectRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></p:style><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Gallery shape</a:t></a:r></a:p></p:txBody></p:sp>` +
+        `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Outline"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1270000" y="3810000"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:style><a:lnRef idx="2"><a:schemeClr val="accent2"/></a:lnRef><a:fillRef idx="0"><a:schemeClr val="accent1"/></a:fillRef><a:fontRef idx="none"/></p:style><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Outline only</a:t></a:r></a:p></p:txBody></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const gallery = preview?.slides?.[0]?.shapes?.[0];
+    // PowerPoint's shape-gallery styling lives only in p:style references.
+    expect(gallery).toMatchObject({
+      kind: "shape",
+      preset: "rect",
+      fill: "#4472c4",
+      lineColor: "#4472c4",
+      lineWidthPt: 0.5,
+    });
+    expect(gallery?.paragraphs?.[0]?.runs?.[0]).toEqual({
+      text: "Gallery shape",
+      fontSizePt: 18,
+      color: "#ffffff",
+      fontName: "Aptos",
+    });
+    // `idx="0"` means no fill, and the theme line style carries the width.
+    const outline = preview?.slides?.[0]?.shapes?.[1];
+    expect(outline).toMatchObject({
+      kind: "shape",
+      lineColor: "#ed7d31",
+      lineWidthPt: 1,
+    });
+    expect(outline?.fill).toBeUndefined();
+    expect(outline?.paragraphs?.[0]?.runs?.[0]).toMatchObject({
+      text: "Outline only",
+      fontSizePt: 18,
+    });
+    expect(outline?.paragraphs?.[0]?.runs?.[0]?.color).toBeUndefined();
+  });
+
+  it("keeps gradient-filled custom geometry and takes its first stop", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Gradient"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1270000" y="1270000"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:custGeom><a:avLst/><a:pathLst/></a:custGeom><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="FF0000"/></a:gs><a:gs pos="100000"><a:srgbClr val="0000FF"/></a:gs></a:gsLst></a:gradFill></p:spPr></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    // A gradient must never make a placed shape disappear without a notice.
+    expect(preview?.slides?.[0]?.shapes).toHaveLength(1);
+    expect(preview?.slides?.[0]?.shapes?.[0]).toMatchObject({ kind: "shape", fill: "#ff0000" });
+    expect(preview?.slides?.[0]?.shapes?.[0]?.preset).toBeUndefined();
+  });
+
+  it("composes nested group scales in slide space", async () => {
+    const body = spTree(
+      `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="2" name="Outer"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="1270000" y="1270000"/><a:ext cx="2540000" cy="2540000"/><a:chOff x="0" y="0"/><a:chExt cx="1270000" cy="1270000"/></a:xfrm></p:grpSpPr><p:grpSp><p:nvGrpSpPr><p:cNvPr id="3" name="Inner"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="127000" y="127000"/><a:ext cx="635000" cy="635000"/><a:chOff x="0" y="0"/><a:chExt cx="635000" cy="635000"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr><p:cNvPr id="4" name="Leaf"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="317500" y="317500"/><a:ext cx="127000" cy="127000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:sp></p:grpSp></p:grpSp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    // Outer 2x at (100,100), inner 1x at (10,10), leaf at (25,25,10,10):
+    // 100 + 10*2 + 25*2 = 170, size 10*2 = 20.
+    expect(preview?.slides?.[0]?.shapes?.[0]).toMatchObject({
+      xPt: 170,
+      yPt: 170,
+      widthPt: 20,
+      heightPt: 20,
+    });
+  });
+
+  it("clamps extreme authored values to the closed protocol bounds", async () => {
+    const longFace = "X".repeat(80);
+    const text = `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Extreme"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="2540000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr marL="50800000" indent="-50800000"><a:buAutoNum type="arabicPeriod"/></a:pPr><a:r><a:rPr sz="50"><a:latin typeface="${longFace}"/></a:rPr><a:t>Extreme</a:t></a:r></a:p><a:p><a:pPr><a:lnSpc><a:spcPct val="400000"/></a:lnSpc></a:pPr><a:r><a:rPr sz="40000"/><a:t>Huge</a:t></a:r></a:p></p:txBody></p:sp>`;
+    const columns = Array.from({ length: 70 }, () => '<a:gridCol w="127000"/>').join("");
+    const table = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="3" name="Wide"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="8890000" cy="1270000"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl><a:tblGrid>${columns}</a:tblGrid><a:tr h="381000"><a:tc><a:txBody><a:bodyPr/><a:p><a:r><a:t>Wide</a:t></a:r></a:p></a:txBody><a:tcPr/></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame>`;
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: spTree(text + table) }),
+      "pptx",
+    );
+    expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
+    const extreme = preview?.slides?.[0]?.shapes?.[0];
+    expect(extreme?.paragraphs?.[0]).toMatchObject({
+      indentLeftPt: 2_000,
+      indentFirstLinePt: -2_000,
+    });
+    expect(extreme?.paragraphs?.[0]?.runs?.[0]).toMatchObject({ fontSizePt: 1 });
+    expect(extreme?.paragraphs?.[0]?.runs?.[0]?.fontName).toHaveLength(64);
+    expect(extreme?.paragraphs?.[1]).toMatchObject({ lineSpacingPt: 1_000 });
+    const wide = (preview?.slides?.[0]?.shapes ?? []).find((entry) => entry.kind === "table");
+    expect(wide?.table?.columnWidthsPt).toHaveLength(64);
+  });
 });

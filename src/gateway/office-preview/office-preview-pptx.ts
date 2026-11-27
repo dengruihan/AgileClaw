@@ -337,10 +337,11 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
           truncated = true;
         },
         onEquations: (count: number) => counter.add("equations", count),
-        readText: (txBody, levels) =>
+        readText: (txBody, levels, baseStyle) =>
           readSlideTextBody({
             txBody,
             levels,
+            baseStyle,
             theme: context.theme,
             budget,
             onEquations: (count) => counter.add("equations", count),

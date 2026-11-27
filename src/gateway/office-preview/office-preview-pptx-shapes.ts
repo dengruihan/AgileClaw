@@ -14,6 +14,7 @@ import {
   resolveDrawingColor,
   solidFillColor,
   styleRoleForPlaceholder,
+  themeFontFace,
   type PptxFrame,
   type PptxMasterStyles,
   type PptxPlaceholders,
@@ -21,11 +22,12 @@ import {
   type PptxTheme,
 } from "./office-preview-pptx-master.js";
 import type { SlideImageReader } from "./office-preview-pptx-media.js";
-import type { PptxTextBody } from "./office-preview-pptx-text.js";
+import type { PptxRunStyle, PptxTextBody } from "./office-preview-pptx-text.js";
 import type { OmittedFeatureCounter } from "./office-preview-theme.js";
 import {
   attribute,
   childNamed,
+  childrenNamed,
   elementChildren,
   localName,
   type XmlElement,
@@ -41,6 +43,7 @@ const MAX_GROUP_DEPTH = 4;
 const MAX_SHAPES_PER_SLIDE = 200;
 const MAX_TABLE_ROWS = 200;
 const MAX_TABLE_CELLS = 64;
+const MAX_TABLE_COLUMNS = 64;
 
 export type PptxShapeContext = {
   theme: PptxTheme;
@@ -52,7 +55,7 @@ export type PptxShapeContext = {
   counter: OmittedFeatureCounter;
   onTruncated: () => void;
   onEquations: (count: number) => void;
-  readText: (txBody: XmlElement, levels: PptxTextLevel[]) => PptxTextBody;
+  readText: (txBody: XmlElement, levels: PptxTextLevel[], baseStyle?: PptxRunStyle) => PptxTextBody;
 };
 
 function frameFromXfrm(xfrm: XmlElement | undefined): PptxFrame | undefined {
@@ -124,35 +127,129 @@ function flipsOf(element: XmlElement): Pick<SlideShape, "flipHorizontal" | "flip
   };
 }
 
-function lineStyleOf(
-  properties: XmlElement | undefined,
-  theme: PptxTheme,
-): {
+type ShapePaint = {
+  fill?: string;
+  /** Fill kinds the reader cannot draw; counted instead of silently dropping. */
+  unsupportedFill?: "drawings" | "images";
   lineColor?: string;
   lineWidthPt?: number;
   lineStyle?: SlideShape["lineStyle"];
-} {
+  /** `p:style/a:fontRef` defaults, the lowest-priority run layer. */
+  textStyle?: PptxRunStyle;
+};
+
+function styleReference(
+  style: XmlElement | undefined,
+  name: "fillRef" | "lnRef" | "fontRef",
+): XmlElement | undefined {
+  return childNamed(style, name);
+}
+
+function referenceIndex(reference: XmlElement | undefined): number | undefined {
+  const index = Number.parseInt(attribute(reference, "idx") ?? "", 10);
+  return Number.isSafeInteger(index) && index >= 0 ? index : undefined;
+}
+
+/** Gradient fills collapse to their first resolvable stop. */
+function gradientFirstStop(gradient: XmlElement | undefined, theme: PptxTheme): string | undefined {
+  for (const stop of childrenNamed(childNamed(gradient, "gsLst"), "gs")) {
+    const color = resolveDrawingColor(stop, theme);
+    if (color) {
+      return color;
+    }
+  }
+  return undefined;
+}
+
+/** Theme line-style references map to the Office widths of 0.5/1/1.5pt. */
+function lineRefWidth(index: number): number {
+  return index <= 1 ? 0.5 : index === 2 ? 1 : 1.5;
+}
+
+/**
+ * Shape paint resolves the explicit `p:spPr` fill/line first and falls back to
+ * `p:style` references, which is how every shape inserted from PowerPoint's
+ * shape gallery is styled. Unsupported paint kinds are reported, never dropped.
+ */
+function readShapePaint(
+  properties: XmlElement | undefined,
+  style: XmlElement | undefined,
+  theme: PptxTheme,
+): ShapePaint {
+  const paint: ShapePaint = {};
+  const solid = resolveDrawingColor(childNamed(properties, "solidFill"), theme);
+  const gradient = childNamed(properties, "gradFill");
+  if (solid) {
+    paint.fill = solid;
+  } else if (gradient) {
+    paint.fill = gradientFirstStop(gradient, theme);
+    if (!paint.fill) {
+      paint.unsupportedFill = "drawings";
+    }
+  } else if (childNamed(properties, "noFill")) {
+    // An explicit `a:noFill` outranks any style reference.
+  } else if (childNamed(properties, "pattFill") || childNamed(properties, "grpFill")) {
+    paint.unsupportedFill = "drawings";
+  } else if (childNamed(properties, "blipFill")) {
+    paint.unsupportedFill = "images";
+  } else {
+    const reference = styleReference(style, "fillRef");
+    const index = referenceIndex(reference);
+    if (index !== undefined && index > 0) {
+      paint.fill = resolveDrawingColor(reference, theme);
+      if (!paint.fill) {
+        paint.unsupportedFill = "drawings";
+      }
+    }
+  }
+
   const line = childNamed(properties, "ln");
-  if (!line || childNamed(line, "noFill")) {
-    return {};
+  if (line) {
+    if (!childNamed(line, "noFill")) {
+      const color = resolveDrawingColor(childNamed(line, "solidFill"), theme);
+      if (color) {
+        const width = pptxPoints(attribute(line, "w"));
+        const dash = attribute(childNamed(line, "prstDash"), "val");
+        paint.lineColor = color;
+        paint.lineWidthPt = Math.max(
+          0,
+          Math.min(100, Math.round((width !== undefined && width >= 0 ? width : 1) * 10) / 10),
+        );
+        if (dash === "dot" || dash === "sysDot") {
+          paint.lineStyle = "dotted";
+        } else if (dash && dash !== "solid") {
+          paint.lineStyle = "dashed";
+        }
+      }
+    }
+  } else {
+    const reference = styleReference(style, "lnRef");
+    const index = referenceIndex(reference);
+    if (index !== undefined && index > 0) {
+      const color = resolveDrawingColor(reference, theme);
+      if (color) {
+        paint.lineColor = color;
+        paint.lineWidthPt = lineRefWidth(index);
+      }
+    }
   }
-  const color = resolveDrawingColor(childNamed(line, "solidFill"), theme);
-  if (!color) {
-    return {};
+
+  const fontReference = styleReference(style, "fontRef");
+  if (fontReference) {
+    const index = attribute(fontReference, "idx");
+    const color = resolveDrawingColor(fontReference, theme);
+    const fontName = themeFontFace(
+      index === "major" ? "+mj-lt" : index === "minor" ? "+mn-lt" : undefined,
+      theme,
+    );
+    if (color || fontName) {
+      paint.textStyle = {
+        ...(color ? { color } : {}),
+        ...(fontName ? { fontName } : {}),
+      };
+    }
   }
-  const width = pptxPoints(attribute(line, "w"));
-  const dash = attribute(childNamed(line, "prstDash"), "val");
-  return {
-    lineColor: color,
-    ...(width !== undefined && width >= 0
-      ? { lineWidthPt: Math.max(0, Math.min(100, Math.round(width * 10) / 10)) }
-      : {}),
-    ...(dash === "dot" || dash === "sysDot"
-      ? { lineStyle: "dotted" as const }
-      : dash && dash !== "solid"
-        ? { lineStyle: "dashed" as const }
-        : {}),
-  };
+  return paint;
 }
 
 function presetOf(properties: XmlElement | undefined): string | undefined {
@@ -169,12 +266,13 @@ function textOfShape(
   element: XmlElement,
   context: PptxShapeContext,
   placeholder: XmlElement | undefined,
+  baseStyle: PptxRunStyle | undefined,
 ): PptxTextBody | undefined {
   const txBody = childNamed(element, "txBody");
   if (!txBody) {
     return undefined;
   }
-  return context.readText(txBody, levelsFor(placeholder, context.masterStyles));
+  return context.readText(txBody, levelsFor(placeholder, context.masterStyles), baseStyle);
 }
 
 function tableOf(
@@ -184,6 +282,7 @@ function tableOf(
   const grid = childNamed(table, "tblGrid");
   const widths = (grid ? elementChildren(grid) : [])
     .filter((column) => localName(column.nodeName) === "gridCol")
+    .slice(0, MAX_TABLE_COLUMNS)
     .map((column) => Math.max(0, Math.min(2_000, pptxPoints(attribute(column, "w")) ?? 0)));
   const rows: NonNullable<SlideShape["table"]>["rows"] = [];
   for (const row of elementChildren(table)) {
@@ -300,13 +399,19 @@ function addShape(
   }
   const frame = transformFrame(local, transform);
   const properties = childNamed(element, "spPr");
-  const fill = solidFillColor(properties, context.theme);
-  const line = lineStyleOf(properties, context.theme);
+  const paint = readShapePaint(properties, childNamed(element, "style"), context.theme);
+  if (paint.unsupportedFill) {
+    context.counter.add(paint.unsupportedFill);
+  }
   const preset = presetOf(properties);
-  const text = textOfShape(element, context, placeholder);
+  const text = textOfShape(element, context, placeholder, paint.textStyle);
   const paragraphs = text?.paragraphs ?? [];
   const visibleText = paragraphs.some((paragraph) => paragraph.text.trim().length > 0);
-  if (!fill && !line.lineColor && !visibleText && !preset) {
+  if (!paint.fill && !paint.lineColor && !visibleText && !preset) {
+    // Nothing would paint; a custom geometry we cannot draw still gets a notice.
+    if (childNamed(properties, "custGeom")) {
+      context.counter.add("drawings");
+    }
     return;
   }
   if (out.length >= MAX_SHAPES_PER_SLIDE) {
@@ -319,8 +424,14 @@ function addShape(
     ...rotationOf(element),
     ...flipsOf(element),
     ...(preset ? { preset } : {}),
-    ...(fill ? { fill } : {}),
-    ...line,
+    ...(paint.fill ? { fill: paint.fill } : {}),
+    ...(paint.lineColor
+      ? {
+          lineColor: paint.lineColor,
+          ...(paint.lineWidthPt !== undefined ? { lineWidthPt: paint.lineWidthPt } : {}),
+          ...(paint.lineStyle ? { lineStyle: paint.lineStyle } : {}),
+        }
+      : {}),
     ...(text
       ? {
           paragraphs,
@@ -427,6 +538,10 @@ function addGraphicFrame(
     });
     return;
   }
+  if (childNamed(graphicData, "oleObj")) {
+    context.counter.add("embeddedObjects");
+    return;
+  }
   if (uri.endsWith("/chart")) {
     context.counter.add("charts");
     return;
@@ -457,10 +572,14 @@ function addGroup(
   const childExt = childNamed(xfrm, "chExt");
   const childOffsetX = pptxPoints(attribute(childOff, "x")) ?? 0;
   const childOffsetY = pptxPoints(attribute(childOff, "y")) ?? 0;
-  const childWidth = pptxPoints(attribute(childExt, "cx")) ?? local.widthPt;
-  const childHeight = pptxPoints(attribute(childExt, "cy")) ?? local.heightPt;
-  const scaleX = childWidth > 0 && local.widthPt > 0 ? local.widthPt / childWidth : 1;
-  const scaleY = childHeight > 0 && local.heightPt > 0 ? local.heightPt / childHeight : 1;
+  const childWidth = pptxPoints(attribute(childExt, "cx")) ?? frame.widthPt;
+  const childHeight = pptxPoints(attribute(childExt, "cy")) ?? frame.heightPt;
+  // The child space maps onto the group's slide-space box, so a group nested in
+  // a scaled parent inherits that parent's scale.
+  const scaleX =
+    childWidth > 0 && frame.widthPt > 0 ? frame.widthPt / childWidth : transform.scaleX;
+  const scaleY =
+    childHeight > 0 && frame.heightPt > 0 ? frame.heightPt / childHeight : transform.scaleY;
   walkContainer(
     element,
     {

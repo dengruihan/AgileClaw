@@ -101,9 +101,10 @@ function boundedPoints(value: string | undefined, max: number): number | undefin
   return points === undefined ? undefined : Math.max(0, Math.min(max, points));
 }
 
+/** Indents share the paragraph schema's +/-2,000pt bound (negative is hanging). */
 function signedPoints(value: string | undefined): number | undefined {
   const points = pptxPoints(value);
-  return points === undefined ? undefined : Math.max(-4_000, Math.min(4_000, points));
+  return points === undefined ? undefined : Math.max(-2_000, Math.min(2_000, points));
 }
 
 function hexChannels(color: string): number[] {
@@ -193,13 +194,15 @@ export function themeFontFace(typeface: string | undefined, theme: PptxTheme): s
   if (!typeface) {
     return undefined;
   }
-  if (typeface === "+mj-lt") {
-    return theme.majorFont;
-  }
-  if (typeface === "+mn-lt") {
-    return theme.minorFont;
-  }
-  return typeface.startsWith("+") ? undefined : typeface;
+  const face =
+    typeface === "+mj-lt"
+      ? theme.majorFont
+      : typeface === "+mn-lt"
+        ? theme.minorFont
+        : typeface.startsWith("+")
+          ? undefined
+          : typeface;
+  return face ? face.slice(0, 64) : undefined;
 }
 
 /** Reads the theme part plus the master's `p:clrMap` into one resolver context. */
@@ -354,7 +357,7 @@ export function readTextLevel(level: XmlElement | undefined, theme: PptxTheme): 
   const alignment = alignmentFromAttribute(attribute(level, "algn"));
   const bulletChar = attribute(childNamed(level, "buChar"), "char");
   const autoNumber = attribute(childNamed(level, "buAutoNum"), "type");
-  const indentLeftPt = boundedPoints(attribute(level, "marL"), 4_000);
+  const indentLeftPt = boundedPoints(attribute(level, "marL"), 2_000);
   const indentFirstLinePt = signedPoints(attribute(level, "indent"));
   const spaceBeforePt = spacingPoints(childNamed(level, "spcBef"));
   const spaceAfterPt = spacingPoints(childNamed(level, "spcAft"));
@@ -362,7 +365,7 @@ export function readTextLevel(level: XmlElement | undefined, theme: PptxTheme): 
   const strike = attribute(properties, "strike");
   return {
     ...(Number.isFinite(size) && size > 0
-      ? { fontSizePt: Math.min(400, Math.round((size / 100) * 10) / 10) }
+      ? { fontSizePt: Math.min(400, Math.max(1, Math.round((size / 100) * 10) / 10)) }
       : {}),
     ...(attribute(properties, "b") === "1" ? { bold: true } : {}),
     ...(attribute(properties, "i") === "1" ? { italic: true } : {}),

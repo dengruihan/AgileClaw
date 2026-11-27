@@ -46,7 +46,8 @@ export type PptxTextBody = {
   textScalePct?: number;
 };
 
-type RunStyle = {
+/** One run-property layer; shape `p:style` font references use it as a base. */
+export type PptxRunStyle = {
   fontSizePt?: number;
   bold?: boolean;
   italic?: boolean;
@@ -56,6 +57,8 @@ type RunStyle = {
   fontName?: string;
 };
 
+type RunStyle = PptxRunStyle;
+
 function runStyleFromProperties(properties: XmlElement | undefined, theme: PptxTheme): RunStyle {
   if (!properties) {
     return {};
@@ -63,20 +66,18 @@ function runStyleFromProperties(properties: XmlElement | undefined, theme: PptxT
   const size = Number.parseFloat(attribute(properties, "sz") ?? "");
   const underline = attribute(properties, "u");
   const strike = attribute(properties, "strike");
+  const color = resolveDrawingColor(childNamed(properties, "solidFill"), theme);
+  const fontName = themeFontFace(attribute(childNamed(properties, "latin"), "typeface"), theme);
   return {
     ...(Number.isFinite(size) && size > 0
-      ? { fontSizePt: Math.min(400, Math.round((size / 100) * 10) / 10) }
+      ? { fontSizePt: Math.min(400, Math.max(1, Math.round((size / 100) * 10) / 10)) }
       : {}),
     ...(attribute(properties, "b") === "1" ? { bold: true } : {}),
     ...(attribute(properties, "i") === "1" ? { italic: true } : {}),
     ...(underline && underline !== "none" ? { underline: true } : {}),
     ...(strike && strike !== "noStrike" ? { strike: true } : {}),
-    ...(resolveDrawingColor(childNamed(properties, "solidFill"), theme)
-      ? { color: resolveDrawingColor(childNamed(properties, "solidFill"), theme)! }
-      : {}),
-    ...(themeFontFace(attribute(childNamed(properties, "latin"), "typeface"), theme)
-      ? { fontName: themeFontFace(attribute(childNamed(properties, "latin"), "typeface"), theme)! }
-      : {}),
+    ...(color ? { color } : {}),
+    ...(fontName ? { fontName } : {}),
   };
 }
 
@@ -227,14 +228,14 @@ function paragraphIndents(
   const indent = pptxPoints(attribute(properties, "indent"));
   return {
     ...(margin !== undefined
-      ? { indentLeftPt: Math.max(0, Math.min(4_000, margin)) }
+      ? { indentLeftPt: Math.max(0, Math.min(2_000, margin)) }
       : level.indentLeftPt !== undefined
-        ? { indentLeftPt: level.indentLeftPt }
+        ? { indentLeftPt: Math.max(0, Math.min(2_000, level.indentLeftPt)) }
         : {}),
     ...(indent !== undefined
-      ? { indentFirstLinePt: Math.max(-4_000, Math.min(4_000, indent)) }
+      ? { indentFirstLinePt: Math.max(-2_000, Math.min(2_000, indent)) }
       : level.indentFirstLinePt !== undefined
-        ? { indentFirstLinePt: level.indentFirstLinePt }
+        ? { indentFirstLinePt: Math.max(-2_000, Math.min(2_000, level.indentFirstLinePt)) }
         : {}),
   };
 }
@@ -332,10 +333,12 @@ export function readSlideTextBody(params: {
   levels: PptxTextLevel[];
   theme: PptxTheme;
   budget: CharacterBudget;
+  /** Lowest-priority layer from the shape's `p:style/a:fontRef`. */
+  baseStyle?: PptxRunStyle;
   onEquations: (count: number) => void;
   onTruncated: () => void;
 }): PptxTextBody {
-  const { txBody, levels, theme, budget, onEquations, onTruncated } = params;
+  const { txBody, levels, theme, budget, baseStyle, onEquations, onTruncated } = params;
   const body = bodyProperties(txBody);
   const paragraphs: SessionFileOfficeParagraph[] = [];
   const levelCounters = Array.from({ length: 9 }, () => 0);
@@ -352,6 +355,7 @@ export function readSlideTextBody(params: {
     const levelIndex = paragraphLevel(properties);
     const level = levels[levelIndex] ?? {};
     const paragraphStyle = mergeStyle(
+      baseStyle ?? {},
       runStyleFromLevel(level),
       runStyleFromProperties(childNamed(properties, "defRPr"), theme),
     );
@@ -382,11 +386,13 @@ export function readSlideTextBody(params: {
       runs.find((run) => run.style.fontSizePt !== undefined)?.style.fontSizePt ??
       level.fontSizePt ??
       18;
-    const lineSpacingPt =
+    const lineSpacingPt = Math.min(
+      1_000,
       spacing.lineSpacingPt ??
-      (spacing.lineSpacingPct === undefined
-        ? undefined
-        : Math.round(paragraphFontSize * spacing.lineSpacingPct * 10) / 10);
+        (spacing.lineSpacingPct === undefined
+          ? 0
+          : Math.round(paragraphFontSize * spacing.lineSpacingPct * 10) / 10),
+    );
     const styledRuns = runs.map(styledRun).filter((run) => run.text.length > 0);
     if (styledRuns.length > MAX_RUNS) {
       onTruncated();
@@ -407,7 +413,7 @@ export function readSlideTextBody(params: {
       ...(alignment ? { alignment } : {}),
       ...(spacing.spaceBeforePt !== undefined ? { spaceBeforePt: spacing.spaceBeforePt } : {}),
       ...(spacing.spaceAfterPt !== undefined ? { spaceAfterPt: spacing.spaceAfterPt } : {}),
-      ...(lineSpacingPt !== undefined ? { lineSpacingPt } : {}),
+      ...(lineSpacingPt > 0 ? { lineSpacingPt } : {}),
       ...(indents.indentLeftPt !== undefined ? { indentLeftPt: indents.indentLeftPt } : {}),
       ...(indents.indentFirstLinePt !== undefined
         ? { indentFirstLinePt: indents.indentFirstLinePt }
