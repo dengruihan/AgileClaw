@@ -996,9 +996,61 @@ openclaw-session-discussion {
 }
 
 /* Word pages stay paper-white in every theme; only the surrounding reader
-   follows the app chrome. */
+   follows the app chrome. The page box is laid out at the document's own size
+   and only then scaled, so the reader width never rewraps its text. */
 .sidebar-office-docx {
-  container-type: inline-size;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+.sidebar-office-docx__tools {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+  justify-content: flex-end;
+  padding: 0 2px;
+}
+
+.sidebar-office-docx__zoom {
+  min-width: 24px;
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text);
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+
+  &:disabled {
+    opacity: 0.5;
+  }
+
+  &[aria-pressed="true"] {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+}
+
+.sidebar-office-docx__zoom--mode {
+  padding-inline: 8px;
+}
+
+.sidebar-office-docx__zoom-level {
+  min-width: 4ch;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.sidebar-office-docx__scroll {
+  position: relative;
   display: flex;
   flex: 1;
   flex-direction: column;
@@ -1007,12 +1059,12 @@ openclaw-session-discussion {
   min-height: 0;
   overflow: auto;
   padding: 2px 2px 8px;
+  scrollbar-gutter: stable;
 }
 
 .sidebar-office-docx__page-wrap {
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 6px;
   min-width: 0;
 }
@@ -1020,18 +1072,36 @@ openclaw-session-discussion {
 .sidebar-office-docx__page-label {
   color: var(--muted);
   font-size: 11px;
+  text-align: center;
 }
 
-.sidebar-office-docx__page {
+/* The scaler reserves the on-screen box of the transformed page; margins stay
+   auto so a zoomed page is reachable by scrolling instead of clipping. */
+.sidebar-office-docx__page-scaler {
+  flex: 0 0 auto;
+  width: calc(var(--office-doc-page-width, 794px) * var(--office-canvas-scale, 1));
+  height: calc(var(--office-doc-page-height, 1123px) * var(--office-canvas-scale, 1));
+  margin-inline: auto;
+}
+
+/* Off-flow measuring stage: the declared pages at real canvas size, one
+   layout pass that owns the fixed page distribution. */
+.sidebar-office-docx__measure {
+  position: absolute;
+  top: 0;
+  left: -20000px;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.sidebar-office-docx__page,
+.sidebar-office-docx__measure-page {
   display: flex;
   flex-direction: column;
   gap: 8px;
   box-sizing: border-box;
-  width: min(100%, var(--office-doc-page-width, 794px));
-  min-height: min(
-    calc(100cqw * var(--office-doc-page-ratio, 1.414)),
-    calc(var(--office-doc-page-width, 794px) * var(--office-doc-page-ratio, 1.414))
-  );
+  width: var(--office-doc-page-width, 794px);
+  height: var(--office-doc-page-height, 1123px);
   border-radius: 2px;
   background: var(--office-paper);
   color: var(--office-paper-text);
@@ -1042,6 +1112,11 @@ openclaw-session-discussion {
   font-size: 11pt;
   line-height: 1.35;
   overflow-wrap: anywhere;
+}
+
+.sidebar-office-docx__page-scaler > .sidebar-office-docx__page {
+  transform: scale(var(--office-canvas-scale, 1));
+  transform-origin: top left;
 }
 
 .sidebar-office-docx__page-header,

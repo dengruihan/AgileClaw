@@ -318,19 +318,28 @@ it("renders approximate Word pages with styles, tables, media, and notices", asy
   expect(pages).toHaveLength(2);
   // A4 width in points converts to the browser's 794px page card.
   expect(pages[0]?.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
-  expect(pages[0]?.style.paddingTop).toBe("12.095%");
-  expect(pages[0]?.style.paddingLeft).toBe("12.095%");
+  // 72pt margins on a 595.3pt page stay 96px at any zoom level.
+  expect(pages[0]?.style.paddingTop).toBe("96px");
+  expect(pages[0]?.style.paddingLeft).toBe("96px");
 
-  // The document-level header and footer are shown on every page card.
-  expect(viewer.querySelectorAll(".sidebar-office-docx__page-header")).toHaveLength(2);
-  expect(viewer.querySelectorAll(".sidebar-office-docx__page-footer")).toHaveLength(2);
+  // The document-level header and footer are shown on every rendered page card.
+  // jsdom has no layout, so the off-flow measuring stage stays mounted and its
+  // copies are excluded here.
   expect(
-    [...viewer.querySelectorAll(".sidebar-office-docx__page-header")].map((entry) =>
-      entry.textContent?.trim(),
-    ),
+    viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-header"),
+  ).toHaveLength(2);
+  expect(
+    viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-footer"),
+  ).toHaveLength(2);
+  expect(
+    [
+      ...viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-header"),
+    ].map((entry) => entry.textContent?.trim()),
   ).toEqual(["Confidential", "Confidential"]);
 
-  const title = viewer.querySelector<HTMLElement>('[data-role="title"]')!;
+  const title = viewer.querySelector<HTMLElement>(
+    '.sidebar-office-docx__page [data-role="title"]',
+  )!;
   expect(title.style.textAlign).toBe("center");
   expect(title.style.marginTop).toBe("16px");
   const titleRun = title.querySelector<HTMLElement>(".sidebar-office-docx__run")!;
@@ -371,6 +380,63 @@ it("renders approximate Word pages with styles, tables, media, and notices", asy
   expect(viewer.querySelector(".sidebar-office-preview__notice")?.textContent).toContain(
     "truncated",
   );
+});
+
+it("lays Word pages on one fixed canvas with fit, actual, and zoom controls", async () => {
+  const panel = await mountOffice({
+    title: "report.docx",
+    preview: {
+      format: "docx",
+      pages: [
+        {
+          widthPt: 595.3,
+          heightPt: 841.9,
+          marginTopPt: 72,
+          marginRightPt: 72,
+          marginBottomPt: 72,
+          marginLeftPt: 72,
+          blocks: [
+            { kind: "paragraph", role: "body", text: "Fixed canvas", runs: [{ text: "Fixed" }] },
+          ],
+        },
+      ],
+    },
+  });
+
+  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
+  const scroller = viewer.querySelector<HTMLElement>(".sidebar-office-docx__scroll")!;
+  const page = viewer.querySelector<HTMLElement>(".sidebar-office-docx__page")!;
+  // The canvas keeps the document's own page box; the reader only scales it.
+  expect(page.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
+  expect(page.style.getPropertyValue("--office-doc-page-height")).toBe("1123px");
+  // Without a layout box the stage must stay mounted: unmounting it here would
+  // leave the document on the unpaginated fallback forever.
+  expect(viewer.querySelector(".sidebar-office-docx__measure")).not.toBeNull();
+
+  const press = (action: string) =>
+    viewer.querySelector<HTMLElement>(`[data-office-zoom="${action}"]`)!.click();
+  const level = () => viewer.querySelector("[data-office-zoom-level]")!.textContent?.trim();
+
+  press("in");
+  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1.25");
+  await expect.poll(level).toBe("125%");
+  press("in");
+  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1.563");
+  press("out");
+  press("out");
+  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1");
+
+  press("actual");
+  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1");
+  await expect.poll(level).toBe("100%");
+  expect(viewer.querySelector('[data-office-zoom="actual"]')?.getAttribute("aria-pressed")).toBe(
+    "true",
+  );
+
+  press("fit");
+  await expect
+    .poll(() => viewer.querySelector('[data-office-zoom="fit"]')?.getAttribute("aria-pressed"))
+    .toBe("true");
 });
 
 it("renders slide outlines", async () => {
