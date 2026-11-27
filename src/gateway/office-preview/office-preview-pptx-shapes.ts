@@ -14,10 +14,9 @@ import {
   resolveDrawingColor,
   solidFillColor,
   gradientFirstStop,
-  styleRoleForPlaceholder,
+  listStyleLevels,
   themeFontFace,
   type PptxFrame,
-  type PptxMasterStyles,
   type PptxPlaceholders,
   type PptxTextLevel,
   type PptxTheme,
@@ -40,22 +39,32 @@ type GroupTransform = { offsetX: number; offsetY: number; scaleX: number; scaleY
 
 const IDENTITY: GroupTransform = { offsetX: 0, offsetY: 0, scaleX: 1, scaleY: 1 };
 const MAX_GROUP_DEPTH = 4;
-const MAX_SHAPES_PER_SLIDE = 200;
+export const MAX_SHAPES_PER_SLIDE = 200;
 const MAX_TABLE_ROWS = 200;
 const MAX_TABLE_CELLS = 64;
 const MAX_TABLE_COLUMNS = 64;
 
 export type PptxShapeContext = {
   theme: PptxTheme;
-  masterStyles: PptxMasterStyles;
+  /** Resolved list levels for one placeholder (role + master/layout list styles). */
+  levelsFor: (placeholder: XmlElement | undefined) => PptxTextLevel[];
   layoutPlaceholders: PptxPlaceholders;
   masterPlaceholders: PptxPlaceholders;
   relationships: ReadonlyMap<string, string>;
   media: SlideImageReader;
   counter: OmittedFeatureCounter;
+  /** Layout/master template trees: placeholders are templates, never content. */
+  skipPlaceholders?: boolean;
+  /** Reports each placed shape with its authored element (for name overrides). */
+  onShape?: (element: XmlElement, shape: SlideShape) => void;
   onTruncated: () => void;
   onEquations: (count: number) => void;
-  readText: (txBody: XmlElement, levels: PptxTextLevel[], baseStyle?: PptxRunStyle) => PptxTextBody;
+  readText: (
+    txBody: XmlElement,
+    levels: PptxTextLevel[],
+    baseStyle?: PptxRunStyle,
+    ownLevels?: PptxTextLevel[],
+  ) => PptxTextBody;
 };
 
 function frameFromXfrm(xfrm: XmlElement | undefined): PptxFrame | undefined {
@@ -251,9 +260,17 @@ function presetOf(properties: XmlElement | undefined): string | undefined {
   return preset ? preset.slice(0, 32) : undefined;
 }
 
-function levelsFor(placeholder: XmlElement | undefined, styles: PptxMasterStyles): PptxTextLevel[] {
-  const role = styleRoleForPlaceholder(placeholder);
-  return styles.styles[role] ?? styles.styles.other;
+/** The shape's own `a:lstStyle`, the last level layer before paragraph runs. */
+function shapeListStyleLevels(
+  txBody: XmlElement,
+  context: PptxShapeContext,
+): PptxTextLevel[] | undefined {
+  const listStyle = childNamed(txBody, "lstStyle");
+  if (!listStyle) {
+    return undefined;
+  }
+  const levels = listStyleLevels(listStyle, context.theme);
+  return levels.some((level) => Object.keys(level).length > 0) ? levels : undefined;
 }
 
 function textOfShape(
@@ -266,7 +283,12 @@ function textOfShape(
   if (!txBody) {
     return undefined;
   }
-  return context.readText(txBody, levelsFor(placeholder, context.masterStyles), baseStyle);
+  return context.readText(
+    txBody,
+    context.levelsFor(placeholder),
+    baseStyle,
+    shapeListStyleLevels(txBody, context),
+  );
 }
 
 function tableOf(
@@ -315,7 +337,7 @@ function tableOf(
         ...(shading ? { shading } : {}),
         ...borderOfCell(properties, context.theme),
         paragraphs: textBody
-          ? context.readText(textBody, context.masterStyles.styles.other).paragraphs
+          ? context.readText(textBody, context.levelsFor(undefined)).paragraphs
           : [],
       });
     }
@@ -384,6 +406,9 @@ function addShape(
   isConnector = false,
 ): void {
   const placeholder = placeholderOf(element);
+  if (context.skipPlaceholders && placeholder) {
+    return;
+  }
   const local =
     ownFrame(element) ??
     placeholderFrame(context.layoutPlaceholders, placeholder) ??
@@ -429,7 +454,7 @@ function addShape(
     context.onTruncated();
     return;
   }
-  out.push({
+  const placed: SlideShape = {
     kind: "shape",
     ...frame,
     ...rotationOf(element),
@@ -455,7 +480,9 @@ function addShape(
           ...(text.textScalePct !== undefined ? { textScalePct: text.textScalePct } : {}),
         }
       : {}),
-  });
+  };
+  out.push(placed);
+  context.onShape?.(element, placed);
 }
 
 function addPicture(
@@ -493,14 +520,16 @@ function addPicture(
     context.onTruncated();
     return;
   }
-  out.push({
+  const placed: SlideShape = {
     kind: "image",
     ...frame,
     ...rotationOf(element),
     ...flipsOf(element),
     media: image.media,
     ...(image.alt ? { alt: image.alt } : {}),
-  });
+  };
+  out.push(placed);
+  context.onShape?.(element, placed);
 }
 
 function elementsOfPicture(element: XmlElement, name: string): XmlElement[] {
@@ -540,13 +569,15 @@ function addGraphicFrame(
       context.onTruncated();
       return;
     }
-    out.push({
+    const placed: SlideShape = {
       kind: "table",
       ...transformFrame(local, transform),
       ...rotationOf(element),
       ...flipsOf(element),
       table: parsed,
-    });
+    };
+    out.push(placed);
+    context.onShape?.(element, placed);
     return;
   }
   if (childNamed(graphicData, "oleObj")) {
@@ -650,10 +681,16 @@ function walkContainer(
 export function readSlideShapes(
   spTree: XmlElement | undefined,
   context: PptxShapeContext,
+  options?: {
+    skipPlaceholders?: boolean;
+    /** The decorated part's own relationships (template pictures live there). */
+    relationships?: ReadonlyMap<string, string>;
+    onShape?: (element: XmlElement, shape: SlideShape) => void;
+  },
 ): SlideShape[] {
   const shapes: SlideShape[] = [];
   if (spTree) {
-    walkContainer(spTree, IDENTITY, shapes, context, 0);
+    walkContainer(spTree, IDENTITY, shapes, { ...context, ...options }, 0);
   }
   return shapes;
 }

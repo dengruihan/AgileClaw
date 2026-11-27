@@ -1310,11 +1310,12 @@ openclaw-session-discussion {
   box-sizing: border-box;
 }
 
-/* Connectors are one rotated rule between their declared bounds. */
+/* Connectors are one rule anchored at its first endpoint and rotated about it,
+   so the bounding box matches the authored segment at every angle. */
 .sidebar-office-pptx__connector {
-  height: 0;
   border-top-style: solid;
   background: transparent;
+  transform-origin: 0 50%;
 }
 
 .sidebar-office-pptx__text {

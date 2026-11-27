@@ -25,28 +25,40 @@ import {
 import {
   firstRelationshipOfType,
   gradientFirstStop,
+  listStyleLevels,
+  mergeTextLevels,
   parsePartXml,
+  placeholderEntry,
   pptxPoints,
   readMasterStyles,
-  readPlaceholderFrames,
+  readPlaceholders,
   readPptxTheme,
   readTypedRelationships,
   relationshipsPathFor,
   resolveDrawingColor,
+  roleForPlaceholderType,
   type PptxMasterStyles,
   type PptxPlaceholders,
+  type PptxTextLevel,
   type PptxTheme,
 } from "./office-preview-pptx-master.js";
 import { createSlideImageReader } from "./office-preview-pptx-media.js";
-import { readSlideShapes, type SlideShape } from "./office-preview-pptx-shapes.js";
-import { readSlideTextBody } from "./office-preview-pptx-text.js";
+import {
+  MAX_SHAPES_PER_SLIDE,
+  readSlideShapes,
+  type PptxShapeContext,
+  type SlideShape,
+} from "./office-preview-pptx-shapes.js";
+import { readSlideTextBody, type PptxRunStyle } from "./office-preview-pptx-text.js";
 import { OmittedFeatureCounter } from "./office-preview-theme.js";
 import {
   attribute,
   CharacterBudget,
   childNamed,
   cleanText,
+  elementChildren,
   elements,
+  localName,
   truncate,
   tryParseXml,
   type XmlDocumentBody,
@@ -209,6 +221,10 @@ function readBackground(doc: XmlDocumentBody | undefined, theme: PptxTheme): Par
     if (solid) {
       return { color: solid };
     }
+    if (childNamed(properties, "noFill")) {
+      // Transparent: the layout/master background shows through, no notice.
+      return {};
+    }
     const gradient = childNamed(properties, "gradFill");
     if (gradient) {
       const color = gradientFirstStop(gradient, theme);
@@ -256,6 +272,8 @@ class SlideInheritance {
     masterBackground: PartBackground;
     /** Parts whose declared background cannot be drawn; counted once each. */
     unsupportedBackgroundKeys: string[];
+    layoutPart?: string;
+    masterPart?: string;
   } {
     const slideRelationships = readTypedRelationships(
       this.archive,
@@ -293,7 +311,7 @@ class SlideInheritance {
     if (!master) {
       master = {
         styles: readMasterStyles(masterDoc, theme),
-        placeholders: readPlaceholderFrames(masterDoc),
+        placeholders: readPlaceholders(masterDoc),
         background: readBackground(masterDoc, theme),
       };
       this.masters.set(masterKey, master);
@@ -302,7 +320,7 @@ class SlideInheritance {
     if (layoutPath && !layout) {
       const layoutDoc = parsePartXml(this.archive, layoutPath);
       layout = {
-        placeholders: readPlaceholderFrames(layoutDoc),
+        placeholders: readPlaceholders(layoutDoc),
         background: readBackground(layoutDoc, theme),
       };
       this.layouts.set(layoutPath, layout);
@@ -319,6 +337,8 @@ class SlideInheritance {
         ...(layout?.background.unsupported && layoutPath ? [layoutPath] : []),
         ...(master.background.unsupported ? [`master:${masterKey}`] : []),
       ],
+      ...(layoutPath ? { layoutPart: layoutPath } : {}),
+      ...(masterPath ? { masterPart: masterPath } : {}),
     };
   }
 }
@@ -326,6 +346,42 @@ class SlideInheritance {
 function baseDirOf(partPath: string): string {
   const slash = partPath.lastIndexOf("/");
   return slash < 0 ? "" : partPath.slice(0, slash + 1);
+}
+
+type Decorations = { shapes: SlideShape[]; names: (string | undefined)[] };
+
+/** The authored shape name, used to let a layout shape override the master's. */
+function shapeName(element: XmlElement): string | undefined {
+  for (const child of elementChildren(element)) {
+    if (localName(child.nodeName).startsWith("nv")) {
+      return attribute(childNamed(child, "cNvPr"), "name");
+    }
+  }
+  return undefined;
+}
+
+/** Master shapes first; a layout shape with the same name replaces it in place. */
+function mergeDecorations(master: Decorations, layout: Decorations): SlideShape[] {
+  const merged = [...master.shapes];
+  const indexByName = new Map<string, number>();
+  master.names.forEach((name, index) => {
+    if (name) {
+      indexByName.set(name, index);
+    }
+  });
+  layout.shapes.forEach((shape, index) => {
+    const name = layout.names[index];
+    const existing = name ? indexByName.get(name) : undefined;
+    if (existing !== undefined) {
+      merged[existing] = shape;
+      return;
+    }
+    if (name) {
+      indexByName.set(name, merged.length);
+    }
+    merged.push(shape);
+  });
+  return merged;
 }
 
 /** Reads one presentation package; null means the package is not a presentation. */
@@ -346,6 +402,7 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
   const budget = new CharacterBudget(OFFICE_PREVIEW_MAX_PRESENTATION_CHARS);
   const slides: SessionFileOfficeSlide[] = [];
   const countedBackgroundParts = new Set<string>();
+  const decorationCache = new Map<string, Decorations>();
   let truncated = false;
 
   for (const part of slideParts(archive)) {
@@ -381,9 +438,25 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
           counter.add("drawings");
         }
       }
-      const shapes: SlideShape[] = readSlideShapes(elements(parsed.doc, "p:spTree")[0], {
+      const shapeContext: PptxShapeContext = {
         theme: context.theme,
-        masterStyles: context.masterStyles,
+        levelsFor: (placeholder) => {
+          // Placeholder type resolves slide -> layout (by idx) -> master -> obj,
+          // then master txStyles + master/layout list styles layer in.
+          const layoutEntry = placeholderEntry(context.layoutPlaceholders, placeholder);
+          const masterEntry = placeholderEntry(context.masterPlaceholders, placeholder);
+          // A plain shape keeps `otherStyle`; a placeholder falls back to `obj`
+          // (body) after its own, layout, and master types.
+          const authoredType = placeholder
+            ? (attribute(placeholder, "type") ?? layoutEntry?.type ?? masterEntry?.type ?? "obj")
+            : undefined;
+          const role = authoredType ? roleForPlaceholderType(authoredType) : "other";
+          return mergeTextLevels(
+            context.masterStyles.styles[role] ?? context.masterStyles.styles.other,
+            masterEntry?.listStyle ? listStyleLevels(masterEntry.listStyle, context.theme) : [],
+            layoutEntry?.listStyle ? listStyleLevels(layoutEntry.listStyle, context.theme) : [],
+          );
+        },
         layoutPlaceholders: context.layoutPlaceholders,
         masterPlaceholders: context.masterPlaceholders,
         relationships: context.relationships,
@@ -393,11 +466,17 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
           truncated = true;
         },
         onEquations: (count: number) => counter.add("equations", count),
-        readText: (txBody, levels, baseStyle) =>
+        readText: (
+          txBody: XmlElement,
+          levels: PptxTextLevel[],
+          baseStyle?: PptxRunStyle,
+          ownLevels?: PptxTextLevel[],
+        ) =>
           readSlideTextBody({
             txBody,
             levels,
             baseStyle,
+            ownLevels,
             theme: context.theme,
             budget,
             onEquations: (count) => counter.add("equations", count),
@@ -405,7 +484,52 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
               truncated = true;
             },
           }),
-      });
+      };
+      const readDecorations = (partPath: string | undefined): Decorations => {
+        if (!partPath) {
+          return { shapes: [], names: [] };
+        }
+        const cached = decorationCache.get(partPath);
+        if (cached) {
+          return cached;
+        }
+        const names: (string | undefined)[] = [];
+        const partDoc = parsePartXml(archive, partPath);
+        const partRelationships = new Map(
+          [
+            ...readTypedRelationships(archive, relationshipsPathFor(partPath), baseDirOf(partPath)),
+          ].map(([id, entry]) => [id, entry.path]),
+        );
+        const decorationShapes = readSlideShapes(
+          partDoc ? elements(partDoc, "p:spTree")[0] : undefined,
+          shapeContext,
+          {
+            skipPlaceholders: true,
+            relationships: partRelationships,
+            onShape: (element) => {
+              names.push(shapeName(element));
+            },
+          },
+        );
+        const decorations: Decorations = { shapes: decorationShapes, names };
+        decorationCache.set(partPath, decorations);
+        return decorations;
+      };
+      // PowerPoint paints master then layout shapes beneath every slide unless
+      // the slide opts out; layout shapes win when both parts share a name.
+      const slideElement = elements(parsed.doc, "p:sld")[0];
+      const masterDecorations =
+        attribute(slideElement, "showMasterSp") === "0"
+          ? { shapes: [], names: [] }
+          : readDecorations(context.masterPart);
+      const composed = [
+        ...mergeDecorations(masterDecorations, readDecorations(context.layoutPart)),
+        ...readSlideShapes(elements(parsed.doc, "p:spTree")[0], shapeContext),
+      ];
+      if (composed.length > MAX_SHAPES_PER_SLIDE) {
+        truncated = true;
+      }
+      const shapes = composed.slice(0, MAX_SHAPES_PER_SLIDE);
       if (shapes.length > 0) {
         parsed.slide.shapes = shapes;
       }

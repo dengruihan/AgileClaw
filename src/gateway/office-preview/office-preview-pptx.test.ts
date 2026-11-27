@@ -24,8 +24,8 @@ function expectValidPreview(preview: unknown) {
   expect(Value.Check(SessionFileOfficePreviewSchema, preview)).toBe(true);
 }
 
-function slideRoot(body: string): string {
-  return `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}" xmlns:dgm="${DGM}" xmlns:c="${CHART}"><p:cSld>${body}</p:cSld></p:sld>`;
+function slideRoot(body: string, attributes = ""): string {
+  return `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}" xmlns:dgm="${DGM}" xmlns:c="${CHART}"${attributes}><p:cSld>${body}</p:cSld></p:sld>`;
 }
 
 function spTree(body: string): string {
@@ -35,18 +35,22 @@ function spTree(body: string): string {
 function shape(params: {
   id: number;
   name?: string;
-  placeholder?: string;
+  placeholder?: string | null;
   idx?: number;
   xfrm?: string;
   fill?: string;
   preset?: string;
   bodyAttributes?: string;
   bodyInner?: string;
+  listStyle?: string;
   paragraphs?: string;
 }): string {
-  const placeholder = params.placeholder
-    ? `<p:ph type="${params.placeholder}"${params.idx === undefined ? "" : ` idx="${params.idx}"`}/>`
-    : "";
+  const placeholder =
+    params.placeholder === undefined
+      ? ""
+      : `<p:ph${params.placeholder === null ? "" : ` type="${params.placeholder}"`}${
+          params.idx === undefined ? "" : ` idx="${params.idx}"`
+        }/>`;
   const geometry = params.xfrm ?? "";
   const preset =
     params.preset === undefined
@@ -55,7 +59,7 @@ function shape(params: {
   const body = params.paragraphs
     ? `<p:txBody><a:bodyPr${params.bodyAttributes ? ` ${params.bodyAttributes}` : ""}>${
         params.bodyInner ?? ""
-      }</a:bodyPr><a:lstStyle/>${params.paragraphs}</p:txBody>`
+      }</a:bodyPr><a:lstStyle>${params.listStyle ?? ""}</a:lstStyle>${params.paragraphs}</p:txBody>`
     : "";
   return `<p:sp><p:nvSpPr><p:cNvPr id="${params.id}" name="${params.name ?? "Shape"}"/><p:cNvSpPr/><p:nvPr>${placeholder}</p:nvPr></p:nvSpPr><p:spPr>${geometry}${preset}${params.fill ?? ""}</p:spPr>${body}</p:sp>`;
 }
@@ -76,18 +80,18 @@ function placeholderTree(): string {
 ${shape({ id: 3, name: "Body", placeholder: "body", idx: 1, xfrm: LAYOUT_BODY_XFRM, paragraphs: "<a:p/>" })}`;
 }
 
-function masterXml(options?: { background?: string; titleColor?: string }): string {
+function masterXml(options?: { background?: string; titleColor?: string; tree?: string }): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${options?.background ?? ""}${spTree(placeholderTree())}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" hlink="hlink" folHlink="folHlink"/><p:txStyles>
+<p:sldMaster xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${options?.background ?? ""}${spTree(options?.tree ?? placeholderTree())}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" hlink="hlink" folHlink="folHlink"/><p:txStyles>
 <p:titleStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="4400" b="1"><a:solidFill><a:schemeClr val="${options?.titleColor ?? "tx2"}"/></a:solidFill></a:defRPr></a:lvl1pPr></p:titleStyle>
 <p:bodyStyle><a:lvl1pPr marL="342900" indent="-342900"><a:buChar char="&#8226;"/><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>
 <p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="75000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:lvl1pPr></p:otherStyle>
 </p:txStyles></p:sldMaster>`;
 }
 
-function layoutXml(background = ""): string {
+function layoutXml(background = "", tree = placeholderTree()): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${background}${spTree(placeholderTree())}</p:cSld></p:sldLayout>`;
+<p:sldLayout xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${background}${spTree(tree)}</p:cSld></p:sldLayout>`;
 }
 
 const NOTES_SHAPE = shape({
@@ -198,7 +202,10 @@ async function buildDeckFixture(options?: {
   slideOneBody?: string;
   masterXml?: string;
   layoutXml?: string;
+  layoutRelationships?: readonly OfficeFixtureRelationship[];
+  slideOneAttributes?: string;
   extraSlides?: readonly OfficeFixtureFile[];
+  presentationParts?: readonly OfficeFixtureFile[];
 }): Promise<Buffer> {
   const slideSize =
     options?.slideSize === null
@@ -230,12 +237,16 @@ async function buildDeckFixture(options?: {
       path: "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
       content: relationshipsXml([
         { id: "rId1", type: `${R}/slideMaster`, target: "../slideMasters/slideMaster1.xml" },
+        ...(options?.layoutRelationships ?? []),
       ]),
     },
     { path: "ppt/theme/theme1.xml", content: OFFICE_THEME_XML },
     {
       path: "ppt/slides/slide1.xml",
-      content: slideRoot(options?.slideOneBody ?? SLIDE_ONE_BODY),
+      content: slideRoot(
+        options?.slideOneBody ?? SLIDE_ONE_BODY,
+        options?.slideOneAttributes ?? "",
+      ),
     },
     {
       path: "ppt/slides/_rels/slide1.xml.rels",
@@ -654,6 +665,23 @@ describe("PPTX fixed slide geometry", () => {
     // The undrawable slide background falls back to the inherited master color.
     expect(preview?.slides?.[0]?.background).toBe("#44546a");
     expect(preview?.omitted?.find((entry) => entry.feature === "drawings")?.count).toBe(1);
+
+    // A transparent slide background simply shows the inherited one.
+    const transparent = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({
+          background:
+            '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="dk2"/></a:solidFill></p:bgPr></p:bg>',
+        }),
+        slideOneBody: `<p:bg><p:bgPr><a:noFill/></p:bgPr></p:bg>${TITLE_ONLY}`,
+      }),
+      "pptx",
+    );
+    expectValidPreview(transparent);
+    expect(transparent?.slides?.[0]?.background).toBe("#44546a");
+    expect(transparent?.omitted?.some((entry) => entry.feature === "drawings") ?? false).toBe(
+      false,
+    );
   });
 
   it("renders every connector preset as a line, never a box", async () => {
@@ -733,5 +761,146 @@ describe("PPTX fixed slide geometry", () => {
       flipHorizontal: true,
     });
     expect(preview?.slides?.[0]?.shapes?.[0]?.paragraphs?.[0]?.text).toBe("Flipped text");
+  });
+
+  it("resolves typeless placeholders through layout and list styles", async () => {
+    // PowerPoint writes content placeholders with the type only on the layout;
+    // the layout's list style carries the 32pt body size and the bullet.
+    const layoutTree = `${shape({
+      id: 2,
+      name: "Title",
+      placeholder: "title",
+      xfrm: LAYOUT_TITLE_XFRM,
+      paragraphs: "<a:p/>",
+    })}
+${shape({
+  id: 3,
+  name: "Content",
+  placeholder: null,
+  idx: 1,
+  xfrm: LAYOUT_BODY_XFRM,
+  listStyle: '<a:lvl1pPr><a:buChar char="&#8226;"/><a:defRPr sz="3200"/></a:lvl1pPr>',
+  paragraphs: "<a:p/>",
+})}`;
+    const slideBody = spTree(
+      shape({
+        id: 2,
+        name: "Body",
+        placeholder: null,
+        idx: 1,
+        paragraphs: `<a:p>${run("Body paragraph")}</a:p>`,
+      }) +
+        shape({
+          id: 3,
+          name: "OwnStyle",
+          xfrm: `<a:xfrm><a:off x="1270000" y="5080000"/><a:ext cx="5080000" cy="1270000"/></a:xfrm>`,
+          preset: "rect",
+          listStyle: '<a:lvl1pPr><a:defRPr sz="2800" b="1"/></a:lvl1pPr>',
+          paragraphs: `<a:p>${run("Own style")}</a:p>`,
+        }),
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ layoutXml: layoutXml("", layoutTree), slideOneBody: slideBody }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const body = preview?.slides?.[0]?.shapes?.[0];
+    expect(body).toMatchObject({ xPt: 66, yPt: 143.8, widthPt: 828, heightPt: 342.6 });
+    expect(body?.paragraphs?.[0]).toMatchObject({ text: "Body paragraph", listMarker: "•" });
+    expect(body?.paragraphs?.[0]?.runs?.[0]).toMatchObject({ fontSizePt: 32 });
+    // The shape's own list style outranks the master's other style.
+    expect(preview?.slides?.[0]?.shapes?.[1]?.paragraphs?.[0]?.runs?.[0]).toMatchObject({
+      text: "Own style",
+      fontSizePt: 28,
+      bold: true,
+    });
+  });
+
+  it("composes master and layout decorations in PowerPoint z-order", async () => {
+    const bar = (y: number, height: number, color: string): string =>
+      shape({
+        id: 20,
+        name: "Bar",
+        xfrm: `<a:xfrm><a:off x="0" y="${y}"/><a:ext cx="12192000" cy="${height}"/></a:xfrm>`,
+        preset: "rect",
+        fill: `<a:solidFill><a:schemeClr val="${color}"/></a:solidFill>`,
+      });
+    const logo = `<p:pic><p:nvPicPr><p:cNvPr id="21" name="Logo"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr><a:xfrm><a:off x="10160000" y="254000"/><a:ext cx="1016000" cy="1016000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr></p:pic>`;
+    const chart = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="22" name="Chart"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="1270000" cy="1270000"/></p:xfrm><a:graphic><a:graphicData uri="${CHART}"><c:chart r:id="rIdChart"/></a:graphicData></a:graphic></p:graphicFrame>`;
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({
+          tree: `${placeholderTree()}
+${bar(0, 254000, "dk2")}`,
+        }),
+        layoutXml: layoutXml(
+          "",
+          `${placeholderTree()}
+${bar(6350000, 508000, "accent1")}
+${logo}
+${chart}`,
+        ),
+        layoutRelationships: [{ id: "rIdLogo", type: `${R}/image`, target: "../media/image1.png" }],
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const shapes = preview?.slides?.[0]?.shapes ?? [];
+    // Layout bar overrides the master bar with the same name, keeping its slot.
+    expect(shapes[0]).toMatchObject({ kind: "shape", yPt: 500, heightPt: 40, fill: "#4472c4" });
+    expect(shapes.some((placed) => placed.yPt === 0 && placed.heightPt === 20)).toBe(false);
+    // The layout logo is an inlined picture beneath the slide's own content.
+    expect(shapes[1]).toMatchObject({ kind: "image", media: 0, xPt: 800, yPt: 20 });
+    expect(shapes[2]).toMatchObject({ xPt: 66, yPt: 28.8 });
+    expect(shapes).toHaveLength(3);
+    // An unsupported template graphic is reported, never silently dropped.
+    expect(preview?.omitted?.find((entry) => entry.feature === "charts")?.count).toBe(1);
+
+    // `showMasterSp="0"` suppresses master decorations but keeps layout ones.
+    const withoutMaster = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({
+          tree: `${placeholderTree()}
+${bar(0, 254000, "dk2")}`,
+        }),
+        slideOneAttributes: ' showMasterSp="0"',
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(withoutMaster);
+    expect(withoutMaster?.slides?.[0]?.shapes).toHaveLength(1);
+  });
+
+  it("scales derived line spacing with the autofit factor", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Autofit"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr><a:normAutofit fontScale="75000"/></a:bodyPr><a:lstStyle/><a:p><a:pPr><a:lnSpc><a:spcPts val="1000"/></a:lnSpc></a:pPr><a:r><a:rPr sz="2000"/><a:t>Autofit</a:t></a:r></a:p></p:txBody></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const autofit = preview?.slides?.[0]?.shapes?.[0];
+    expect(autofit?.textScalePct).toBe(75);
+    // Authored 10pt spacing follows the 75% auto-shrink; run sizes stay authored.
+    expect(autofit?.paragraphs?.[0]?.lineSpacingPt).toBe(7.5);
+    expect(autofit?.paragraphs?.[0]?.runs?.[0]).toMatchObject({ fontSizePt: 20 });
+  });
+
+  it("retains connector rotation and flip facts for the renderer", async () => {
+    const connector = (id: number, attributes: string): string =>
+      `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="C${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr><a:xfrm${attributes}><a:off x="1270000" y="1270000"/><a:ext cx="2540000" cy="0"/></a:xfrm><a:prstGeom prst="straightConnector1"><a:avLst/></a:prstGeom><a:ln w="12700"><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:ln></p:spPr></p:cxnSp>`;
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        slideOneBody: spTree(`${connector(2, ' rot="5400000"')}${connector(3, ' flipH="1"')}`),
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const shapes = preview?.slides?.[0]?.shapes ?? [];
+    expect(shapes[0]).toMatchObject({ preset: "line", rotationDeg: 90 });
+    expect(shapes[1]).toMatchObject({ preset: "line", flipHorizontal: true });
   });
 });

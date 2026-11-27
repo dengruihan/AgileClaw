@@ -207,50 +207,63 @@ function isConnector(shape: SlideShape): boolean {
 }
 
 /**
- * A connector is one stroked segment between its declared bounds: horizontal
- * and vertical runs stay axis-aligned, diagonal runs rotate the same rule. Flip
- * chooses which corner the segment starts from.
+ * Connector endpoints follow the authoring convention: with `rotationDeg` the
+ * segment is centered on the box with length `rotationDeg`'s unrotated run
+ * length; without it the segment runs corner to corner and the flips choose
+ * the start corner. A flat box (h=0) is horizontal, a zero-width box vertical.
  */
-function renderConnector(shape: SlideShape): TemplateResult {
+function connectorSegment(shape: SlideShape): {
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
+} {
   const x = officePointsToPx(shape.xPt) ?? 0;
   const y = officePointsToPx(shape.yPt) ?? 0;
   const width = Math.max(0, officePointsToPx(shape.widthPt) ?? 0);
   const height = Math.max(0, officePointsToPx(shape.heightPt) ?? 0);
-  const horizontal = height <= 1.5;
-  const vertical = width <= 1.5;
-  const horizontalRun = horizontal || (!vertical && width >= height);
-  const verticalRun = vertical && !horizontal;
-  const start = {
-    x: horizontalRun ? x : verticalRun ? x + width / 2 : shape.flipHorizontal ? x + width : x,
-    y: horizontalRun
-      ? y + height / 2
-      : verticalRun
-        ? shape.flipVertical
-          ? y + height
-          : y
-        : shape.flipVertical
-          ? y + height
-          : y,
+  if (shape.rotationDeg !== undefined) {
+    const length = width > 0 ? width : height;
+    const centerX = x + width / 2;
+    const centerY = y + height / 2;
+    const radians = (shape.rotationDeg * Math.PI) / 180;
+    const directionX = Math.cos(radians) * (shape.flipHorizontal ? -1 : 1);
+    const directionY = Math.sin(radians) * (shape.flipVertical ? -1 : 1);
+    return {
+      startX: centerX - (length / 2) * directionX,
+      startY: centerY - (length / 2) * directionY,
+      endX: centerX + (length / 2) * directionX,
+      endY: centerY + (length / 2) * directionY,
+    };
+  }
+  return {
+    startX: shape.flipHorizontal ? x + width : x,
+    startY: shape.flipVertical ? y + height : y,
+    endX: shape.flipHorizontal ? x : x + width,
+    endY: shape.flipVertical ? y : y + height,
   };
-  const end = {
-    x: horizontalRun ? x + width : start.x,
-    y: horizontalRun
-      ? start.y
-      : verticalRun
-        ? shape.flipVertical
-          ? y
-          : y + height
-        : shape.flipVertical
-          ? y
-          : y + height,
-  };
-  const length = Math.hypot(end.x - start.x, end.y - start.y);
-  const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
+}
+
+/**
+ * A connector is one stroked segment: the rule starts at the segment's first
+ * endpoint and rotates about that endpoint (`transform-origin: 0 50%`), so its
+ * bounding box matches the authored geometry at every angle.
+ */
+function renderConnector(shape: SlideShape): TemplateResult | typeof nothing {
+  const { startX, startY, endX, endY } = connectorSegment(shape);
+  const deltaX = endX - startX;
+  const deltaY = endY - startY;
+  const length = Math.hypot(deltaX, deltaY);
+  if (length < 0.5) {
+    return nothing;
+  }
+  const angle = (Math.atan2(deltaY, deltaX) * 180) / Math.PI;
   const thickness = Math.max(1, Math.round(officePointsToPx(shape.lineWidthPt ?? 1) ?? 1));
   const style: StyleInfo = {
-    left: `${start.x}px`,
-    top: `${start.y}px`,
-    width: `${Math.max(1, length)}px`,
+    left: `${startX}px`,
+    top: `${startY - thickness / 2}px`,
+    width: `${length}px`,
+    height: `${thickness}px`,
     borderTop: `${thickness}px ${shape.lineStyle ?? "solid"} ${shape.lineColor ?? "currentcolor"}`,
     transform: angle === 0 ? undefined : `rotate(${angle}deg)`,
   };
@@ -261,7 +274,10 @@ function renderConnector(shape: SlideShape): TemplateResult {
   ></div>`;
 }
 
-function renderShape(shape: SlideShape, preview: SessionFileOfficePreview): TemplateResult {
+function renderShape(
+  shape: SlideShape,
+  preview: SessionFileOfficePreview,
+): TemplateResult | typeof nothing {
   if (shape.kind === "image") {
     return html`<div class="sidebar-office-pptx__shape" style=${styleMap(baseFrameStyle(shape))}>
       ${renderImage(shape, preview)}

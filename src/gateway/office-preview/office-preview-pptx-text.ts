@@ -14,6 +14,7 @@ import type {
 } from "../../../packages/gateway-protocol/src/index.js";
 import {
   alignmentFromAttribute,
+  mergeTextLevel,
   type PptxTextLevel,
   type PptxTheme,
   pptxPoints,
@@ -337,10 +338,12 @@ export function readSlideTextBody(params: {
   budget: CharacterBudget;
   /** `p:style/a:fontRef` layer: above the master level, below paragraph/run. */
   baseStyle?: PptxRunStyle;
+  /** The shape's own `a:lstStyle`, the last level layer before runs. */
+  ownLevels?: PptxTextLevel[];
   onEquations: (count: number) => void;
   onTruncated: () => void;
 }): PptxTextBody {
-  const { txBody, levels, theme, budget, baseStyle, onEquations, onTruncated } = params;
+  const { txBody, levels, theme, budget, baseStyle, ownLevels, onEquations, onTruncated } = params;
   const body = bodyProperties(txBody);
   const paragraphs: SessionFileOfficeParagraph[] = [];
   const levelCounters = Array.from({ length: 9 }, () => 0);
@@ -355,12 +358,16 @@ export function readSlideTextBody(params: {
     }
     const properties = childNamed(paragraph, "pPr");
     const levelIndex = paragraphLevel(properties);
-    const level = levels[levelIndex] ?? {};
+    const inheritedLevel = levels[levelIndex] ?? {};
+    const ownLevel = ownLevels?.[levelIndex] ?? {};
+    const level = mergeTextLevel(inheritedLevel, ownLevel);
     // PowerPoint consults the shape's fontRef before the default chain: a bare
     // gallery-shape run on an accent fill is white (lt1), not the default tx1.
+    // The shape's own list style still outranks the fontRef.
     const paragraphStyle = mergeStyle(
-      runStyleFromLevel(level),
+      runStyleFromLevel(inheritedLevel),
       baseStyle ?? {},
+      runStyleFromLevel(ownLevel),
       runStyleFromProperties(childNamed(properties, "defRPr"), theme),
     );
     const runs = readParagraphRuns(paragraph, paragraphStyle, theme, onEquations);
@@ -390,12 +397,16 @@ export function readSlideTextBody(params: {
       runs.find((run) => run.style.fontSizePt !== undefined)?.style.fontSizePt ??
       level.fontSizePt ??
       18;
+    const autofitScale =
+      body.textScalePct !== undefined && body.textScalePct < 100 ? body.textScalePct / 100 : 1;
     const lineSpacingPt = Math.min(
       1_000,
-      spacing.lineSpacingPt ??
-        (spacing.lineSpacingPct === undefined
-          ? 0
-          : Math.round(paragraphFontSize * spacing.lineSpacingPct * 10) / 10),
+      Math.round(
+        (spacing.lineSpacingPt ??
+          (spacing.lineSpacingPct === undefined ? 0 : paragraphFontSize * spacing.lineSpacingPct)) *
+          autofitScale *
+          10,
+      ) / 10,
     );
     const styledRuns = runs.map(styledRun).filter((run) => run.text.length > 0);
     if (styledRuns.length > MAX_RUNS) {

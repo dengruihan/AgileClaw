@@ -243,8 +243,17 @@ export function readPptxTheme(
   return theme;
 }
 
-/** Placeholder box lookup: `i<idx>` first, normalized `t<type>` second. */
-export type PptxPlaceholders = Map<string, PptxFrame>;
+/** One placeholder declaration with its box, type, and authored list style. */
+export type PptxPlaceholderEntry = {
+  frame: PptxFrame;
+  /** Normalized placeholder type (`title`, `body`, `subtitle`, `pic`, ...). */
+  type?: string;
+  /** The placeholder's `a:lstStyle`: its own list-level typography. */
+  listStyle?: XmlElement;
+};
+
+/** Placeholder lookup: `i<idx>` first, normalized `t<type>` second. */
+export type PptxPlaceholders = Map<string, PptxPlaceholderEntry>;
 
 const PLACEHOLDER_TYPE_ALIASES: Readonly<Record<string, string>> = {
   ctrTitle: "title",
@@ -284,11 +293,11 @@ export function shapeXfrmFrame(shape: XmlElement): PptxFrame | undefined {
   return readFrame(properties ? elements(properties, "a:xfrm")[0] : undefined);
 }
 
-/** Placeholder boxes declared by one layout or master part. */
-export function readPlaceholderFrames(doc: XmlDocumentBody | undefined): PptxPlaceholders {
-  const frames: PptxPlaceholders = new Map();
+/** Placeholders declared by one layout or master part. */
+export function readPlaceholders(doc: XmlDocumentBody | undefined): PptxPlaceholders {
+  const placeholders: PptxPlaceholders = new Map();
   if (!doc) {
-    return frames;
+    return placeholders;
   }
   for (const shape of elements(doc, "p:sp")) {
     const placeholder = elements(shape, "p:ph")[0];
@@ -299,23 +308,34 @@ export function readPlaceholderFrames(doc: XmlDocumentBody | undefined): PptxPla
     if (!frame) {
       continue;
     }
+    const entry: PptxPlaceholderEntry = {
+      frame,
+      ...(normalizePlaceholderType(attribute(placeholder, "type"))
+        ? { type: normalizePlaceholderType(attribute(placeholder, "type")) }
+        : {}),
+      ...(listStyleOfShape(shape) ? { listStyle: listStyleOfShape(shape) } : {}),
+    };
     const idx = attribute(placeholder, "idx");
     if (idx) {
-      frames.set(`i${idx}`, frame);
+      placeholders.set(`i${idx}`, entry);
     }
-    const type = normalizePlaceholderType(attribute(placeholder, "type"));
-    if (type && !frames.has(`t${type}`)) {
-      frames.set(`t${type}`, frame);
+    if (entry.type && !placeholders.has(`t${entry.type}`)) {
+      placeholders.set(`t${entry.type}`, entry);
     }
   }
-  return frames;
+  return placeholders;
 }
 
-/** Resolves one shape's placeholder box, preferring its own `idx`. */
-export function placeholderFrame(
+/** The placeholder shape's `a:lstStyle` (inside its `p:txBody`). */
+function listStyleOfShape(shape: XmlElement): XmlElement | undefined {
+  return childNamed(childNamed(shape, "txBody"), "lstStyle") ?? childNamed(shape, "lstStyle");
+}
+
+/** Resolves one shape's placeholder entry, preferring its own `idx`. */
+export function placeholderEntry(
   placeholders: PptxPlaceholders,
   placeholder: XmlElement | undefined,
-): PptxFrame | undefined {
+): PptxPlaceholderEntry | undefined {
   if (!placeholder) {
     return undefined;
   }
@@ -328,6 +348,14 @@ export function placeholderFrame(
   }
   const type = normalizePlaceholderType(attribute(placeholder, "type"));
   return type ? placeholders.get(`t${type}`) : undefined;
+}
+
+/** Resolves one shape's placeholder box, preferring its own `idx`. */
+export function placeholderFrame(
+  placeholders: PptxPlaceholders,
+  placeholder: XmlElement | undefined,
+): PptxFrame | undefined {
+  return placeholderEntry(placeholders, placeholder)?.frame;
 }
 
 export function alignmentFromAttribute(value: string | undefined): PptxAlignment | undefined {
@@ -428,13 +456,42 @@ export function readMasterStyles(
   };
 }
 
-/** Which master style a shape's placeholder uses. */
-export function styleRoleForPlaceholder(placeholder: XmlElement | undefined): keyof PptxTextStyles {
-  const type = normalizePlaceholderType(attribute(placeholder, "type"));
-  if (type === "title") {
+/** Which master style a resolved placeholder type uses. */
+export function roleForPlaceholderType(type: string | undefined): keyof PptxTextStyles {
+  const normalized = normalizePlaceholderType(type);
+  if (normalized === "title") {
     return "title";
   }
-  return type === "body" || type === "subtitle" ? "body" : "other";
+  return normalized === "body" || normalized === "subtitle" ? "body" : "other";
+}
+
+/** Merges one level layer over another; later defined fields win. */
+export function mergeTextLevel(base: PptxTextLevel, override: PptxTextLevel): PptxTextLevel {
+  const merged: PptxTextLevel = { ...base };
+  for (const key of Object.keys(override) as (keyof PptxTextLevel)[]) {
+    if (override[key] !== undefined) {
+      (merged as Record<string, unknown>)[key] = override[key];
+    }
+  }
+  return merged;
+}
+
+/** Merges level arrays (master txStyles then placeholder/shape list styles). */
+export function mergeTextLevels(...sources: readonly PptxTextLevel[][]): PptxTextLevel[] {
+  return Array.from({ length: 9 }, (_, index) =>
+    sources.reduce<PptxTextLevel>(
+      (level, source) => mergeTextLevel(level, source[index] ?? {}),
+      {},
+    ),
+  );
+}
+
+/** Reads a shape's or placeholder's `a:lstStyle` into concrete levels. */
+export function listStyleLevels(
+  listStyle: XmlElement | undefined,
+  theme: PptxTheme,
+): PptxTextLevel[] {
+  return readStyleLevels(listStyle, theme);
 }
 
 /** Parses one package part; malformed or missing parts resolve nothing. */

@@ -151,7 +151,8 @@ const slidesPayload = {
           },
         },
         { kind: "image", xPt: 780, yPt: 360, widthPt: 100, heightPt: 100, media: 0, alt: "Logo" },
-        // Connectors are lines, including the elbow preset and a flipped label.
+        // Connectors: horizontal, elbow, plain vertical, rotation form, diagonals
+        // with and without flipH, and PowerPoint's flat-box + rot form.
         {
           kind: "shape",
           xPt: 500,
@@ -170,6 +171,59 @@ const slidesPayload = {
           heightPt: 70,
           preset: "bentConnector3",
           lineColor: "#ed7d31",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 900,
+          yPt: 160,
+          widthPt: 0,
+          heightPt: 80,
+          preset: "line",
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 900,
+          yPt: 300,
+          widthPt: 100,
+          heightPt: 0,
+          preset: "line",
+          rotationDeg: 90,
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 500,
+          yPt: 460,
+          widthPt: 80,
+          heightPt: 60,
+          preset: "straightConnector1",
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 600,
+          yPt: 460,
+          widthPt: 80,
+          heightPt: 60,
+          preset: "straightConnector1",
+          flipHorizontal: true,
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 700,
+          yPt: 460,
+          widthPt: 100,
+          heightPt: 0,
+          preset: "straightConnector1",
+          rotationDeg: 45,
+          lineColor: "#4472c4",
           lineWidthPt: 1,
         },
         {
@@ -363,6 +417,44 @@ async function waitForFitScale(page: import("playwright").Page) {
     .toBe(true);
 }
 
+/**
+ * Connector boxes in unscaled slide pixels plus their rotation angle. Runs
+ * inside the page: keep it self-contained.
+ */
+function sampleConnectors() {
+  const reader = [...document.querySelectorAll<HTMLElement>(".sidebar-office-pptx__scroll")].find(
+    (element) => element.clientWidth > 0,
+  );
+  const slide = reader?.querySelector<HTMLElement>(".sidebar-office-pptx__slide");
+  if (!slide) {
+    return null;
+  }
+  const slideRect = slide.getBoundingClientRect();
+  const scale = slideRect.width / 1280;
+  const angleOf = (transform: string): number => {
+    if (!transform.startsWith("matrix(")) {
+      return 0;
+    }
+    const [a = 1, b = 0] = transform
+      .slice("matrix(".length, -1)
+      .split(",")
+      .map((value) => Number(value.trim()));
+    return (Math.atan2(b, a) * 180) / Math.PI;
+  };
+  return [...slide.querySelectorAll<HTMLElement>(".sidebar-office-pptx__connector")].map(
+    (element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        left: (rect.left - slideRect.left) / scale,
+        top: (rect.top - slideRect.top) / scale,
+        width: rect.width / scale,
+        height: rect.height / scale,
+        angle: angleOf(getComputedStyle(element).transform),
+      };
+    },
+  );
+}
+
 describeControlUiE2e("Control UI fixed slide preview", () => {
   it("renders presentation slides on their declared fixed canvas", async () => {
     const context = await browser.newContext({ viewport: { height: 900, width: 1280 } });
@@ -443,26 +535,54 @@ describeControlUiE2e("Control UI fixed slide preview", () => {
       ).toBe(true);
       expect(await image.getAttribute("alt")).toBe("Logo");
 
-      // Connectors draw rules (rotated when diagonal), never the box around them.
-      const connectors = firstSlide.locator(".sidebar-office-pptx__connector");
-      expect(await connectors.count()).toBe(2);
-      const connectorStyles = await connectors.evaluateAll((elements) =>
-        elements.map((element) => {
-          const style = getComputedStyle(element);
-          return {
-            borderTopColor: style.borderTopColor,
-            transform: style.transform,
-            width: (element as HTMLElement).offsetWidth,
-          };
-        }),
-      );
-      expect(connectorStyles[0]).toMatchObject({
-        borderTopColor: "rgb(68, 114, 196)",
-        transform: "none",
+      // Connectors draw rules between their authored endpoints, at any angle.
+      const connectorBoxes = (await page.evaluate(sampleConnectors))!;
+      expect(connectorBoxes).toHaveLength(7);
+      // Payload geometry is in points; the canvas lays out CSS pixels at 4/3.
+      const pt = (value: number) => (value * 4) / 3;
+      const diagonalAngle = (Math.atan2(60, 80) * 180) / Math.PI;
+      const expectedConnectors = [
+        // horizontal line
+        { left: pt(500), top: pt(280) - 0.5, width: pt(200), height: 1, angle: 0 },
+        // elbow preset: one straight segment between the same corners
+        {
+          left: pt(720),
+          top: pt(265),
+          width: pt(60),
+          height: pt(70),
+          angle: (Math.atan2(70, 60) * 180) / Math.PI,
+        },
+        // plain vertical
+        { left: pt(900) - 0.5, top: pt(160), width: 1, height: pt(80), angle: 90 },
+        // PowerPoint rotation form: centered on the box, vertical at 90deg
+        { left: pt(950) - 0.5, top: pt(250), width: 1, height: pt(100), angle: 90 },
+        // landscape diagonal
+        { left: pt(500), top: pt(460), width: pt(80), height: pt(60), angle: diagonalAngle },
+        // the same diagonal mirrored by flipH
+        {
+          left: pt(600),
+          top: pt(460),
+          width: pt(80),
+          height: pt(60),
+          angle: 180 - diagonalAngle,
+        },
+        // PowerPoint flat-box + rot: the 100pt run at 45deg about the box center
+        {
+          left: pt(750) - Math.SQRT1_2 * pt(50),
+          top: pt(460) - Math.SQRT1_2 * pt(50),
+          width: Math.SQRT2 * pt(50),
+          height: Math.SQRT2 * pt(50),
+          angle: 45,
+        },
+      ];
+      connectorBoxes.forEach((box, index) => {
+        const expected = expectedConnectors[index]!;
+        expect(Math.abs(box.left - expected.left)).toBeLessThanOrEqual(3);
+        expect(Math.abs(box.top - expected.top)).toBeLessThanOrEqual(3);
+        expect(Math.abs(box.width - expected.width)).toBeLessThanOrEqual(3);
+        expect(Math.abs(box.height - expected.height)).toBeLessThanOrEqual(3);
+        expect(Math.abs(box.angle - expected.angle)).toBeLessThanOrEqual(2);
       });
-      expect(connectorStyles[0]?.width).toBeGreaterThan(200);
-      expect(connectorStyles[1]?.borderTopColor).toBe("rgb(237, 125, 49)");
-      expect(connectorStyles[1]?.transform).not.toBe("none");
 
       // A flipped shape mirrors its geometry/background layer, not its text.
       const flipped = firstSlide.locator(".sidebar-office-pptx__shape", {
