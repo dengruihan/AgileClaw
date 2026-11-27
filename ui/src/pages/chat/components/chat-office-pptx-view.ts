@@ -207,10 +207,11 @@ function isConnector(shape: SlideShape): boolean {
 }
 
 /**
- * Connector endpoints follow the authoring convention: with `rotationDeg` the
- * segment is centered on the box with length `rotationDeg`'s unrotated run
- * length; without it the segment runs corner to corner and the flips choose
- * the start corner. A flat box (h=0) is horizontal, a zero-width box vertical.
+ * Connector endpoints follow the authoring convention: build the segment in the
+ * box's local space first (`straightConnector*` runs corner to corner, `line`
+ * and elbow/curved presets run center to center), then rotate both endpoints
+ * about the box center by `rotationDeg`. PowerPoint writes diagonal connectors
+ * as a non-flat box plus `rot`, so the flat "length = w" shortcut is wrong.
  */
 function connectorSegment(shape: SlideShape): {
   startX: number;
@@ -222,26 +223,41 @@ function connectorSegment(shape: SlideShape): {
   const y = officePointsToPx(shape.yPt) ?? 0;
   const width = Math.max(0, officePointsToPx(shape.widthPt) ?? 0);
   const height = Math.max(0, officePointsToPx(shape.heightPt) ?? 0);
+  const cornerToCorner = shape.preset?.startsWith("straightConnector") ?? false;
+  let start: { x: number; y: number };
+  let end: { x: number; y: number };
+  if (cornerToCorner) {
+    start = { x: shape.flipHorizontal ? x + width : x, y: shape.flipVertical ? y + height : y };
+    end = { x: shape.flipHorizontal ? x : x + width, y: shape.flipVertical ? y : y + height };
+  } else if (width <= 0.5) {
+    start = { x: x + width / 2, y: shape.flipVertical ? y + height : y };
+    end = { x: x + width / 2, y: shape.flipVertical ? y : y + height };
+  } else {
+    start = { x: shape.flipHorizontal ? x + width : x, y: y + height / 2 };
+    end = { x: shape.flipHorizontal ? x : x + width, y: y + height / 2 };
+  }
   if (shape.rotationDeg !== undefined) {
-    const length = width > 0 ? width : height;
     const centerX = x + width / 2;
     const centerY = y + height / 2;
     const radians = (shape.rotationDeg * Math.PI) / 180;
-    const directionX = Math.cos(radians) * (shape.flipHorizontal ? -1 : 1);
-    const directionY = Math.sin(radians) * (shape.flipVertical ? -1 : 1);
-    return {
-      startX: centerX - (length / 2) * directionX,
-      startY: centerY - (length / 2) * directionY,
-      endX: centerX + (length / 2) * directionX,
-      endY: centerY + (length / 2) * directionY,
+    const cos = Math.cos(radians);
+    const sin = Math.sin(radians);
+    const rotate = (point: { x: number; y: number }): { x: number; y: number } => {
+      const offsetX = point.x - centerX;
+      const offsetY = point.y - centerY;
+      return {
+        x: centerX + offsetX * cos - offsetY * sin,
+        y: centerY + offsetX * sin + offsetY * cos,
+      };
     };
+    start = rotate(start);
+    end = rotate(end);
   }
-  return {
-    startX: shape.flipHorizontal ? x + width : x,
-    startY: shape.flipVertical ? y + height : y,
-    endX: shape.flipHorizontal ? x : x + width,
-    endY: shape.flipVertical ? y : y + height,
-  };
+  // A stroked segment has no head or tail; keep the CSS angle deterministic.
+  if (end.y < start.y || (end.y === start.y && end.x < start.x)) {
+    [start, end] = [end, start];
+  }
+  return { startX: start.x, startY: start.y, endX: end.x, endY: end.y };
 }
 
 /**

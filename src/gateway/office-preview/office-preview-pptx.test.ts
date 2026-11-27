@@ -2,7 +2,10 @@
 // must survive the wire so the Control UI can lay slides out once and only scale.
 import { Value } from "typebox/value";
 import { describe, expect, it } from "vitest";
-import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
+import {
+  SessionFileOfficePreviewSchema,
+  type SessionFileOfficePreview,
+} from "../../../packages/gateway-protocol/src/schema/sessions.js";
 import { parseOfficePreviewBuffer } from "./office-preview-parse.js";
 import {
   buildPptxFixture,
@@ -706,10 +709,15 @@ describe("PPTX fixed slide geometry", () => {
     const shapes = preview?.slides?.[0]?.shapes ?? [];
     // The `a:ln noFill` connector paints nothing, so it is not placed.
     expect(shapes).toHaveLength(3);
+    // Authored presets survive so the renderer can pick the connector geometry.
+    expect(shapes.map((placed) => placed.preset)).toEqual([
+      "straightConnector1",
+      "bentConnector3",
+      "curvedConnector3",
+    ]);
     for (const connectorShape of shapes) {
       expect(connectorShape).toMatchObject({
         kind: "shape",
-        preset: "line",
         lineColor: "#4472c4",
         lineWidthPt: 1,
       });
@@ -900,7 +908,120 @@ ${bar(0, 254000, "dk2")}`,
     );
     expectValidPreview(preview);
     const shapes = preview?.slides?.[0]?.shapes ?? [];
-    expect(shapes[0]).toMatchObject({ preset: "line", rotationDeg: 90 });
-    expect(shapes[1]).toMatchObject({ preset: "line", flipHorizontal: true });
+    expect(shapes[0]).toMatchObject({ preset: "straightConnector1", rotationDeg: 90 });
+    expect(shapes[1]).toMatchObject({ preset: "straightConnector1", flipHorizontal: true });
+  });
+
+  it("keeps the authored preset for line and connector shapes", async () => {
+    const connector = (id: number, preset: string): string =>
+      `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="C${id}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="0"/></a:xfrm><a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom><a:ln w="12700"><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:ln></p:spPr></p:cxnSp>`;
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        slideOneBody: spTree(
+          connector(2, "line") +
+            connector(3, "straightConnector1") +
+            connector(4, "bentConnector2"),
+        ),
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    expect(preview?.slides?.[0]?.shapes?.map((placed) => placed.preset)).toEqual([
+      "line",
+      "straightConnector1",
+      "bentConnector2",
+    ]);
+  });
+
+  it("honours showMasterSp from slide, layout, and master", async () => {
+    const bar = shape({
+      id: 20,
+      name: "Bar",
+      xfrm: `<a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="254000"/></a:xfrm>`,
+      preset: "rect",
+      fill: '<a:solidFill><a:schemeClr val="dk2"/></a:solidFill>',
+    });
+    const tree = `${placeholderTree()}\n${bar}`;
+    const slideCount = (preview: SessionFileOfficePreview | null) =>
+      preview?.slides?.[0]?.shapes?.length ?? 0;
+
+    // Layout "Hide Background Graphics" removes the master bar.
+    const layoutHidden = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({ tree }),
+        layoutXml: layoutXml("", placeholderTree()).replace(
+          "<p:sldLayout ",
+          '<p:sldLayout showMasterSp="0" ',
+        ),
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(layoutHidden);
+    expect(slideCount(layoutHidden)).toBe(1);
+
+    // A slide can re-show the master shapes over that layout setting.
+    const slideShown = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({ tree }),
+        layoutXml: layoutXml("", placeholderTree()).replace(
+          "<p:sldLayout ",
+          '<p:sldLayout showMasterSp="0" ',
+        ),
+        slideOneAttributes: ' showMasterSp="1"',
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(slideShown);
+    expect(slideCount(slideShown)).toBe(2);
+
+    // A master-level setting hides its own decoration when the layout is silent.
+    const masterHidden = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({ tree }).replace("<p:sldMaster ", '<p:sldMaster showMasterSp="0" '),
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(masterHidden);
+    expect(slideCount(masterHidden)).toBe(1);
+  });
+
+  it("keeps slide content when template decorations exceed the shape cap", async () => {
+    const bars = Array.from(
+      { length: 210 },
+      (_, index) =>
+        `<p:sp><p:nvSpPr><p:cNvPr id="${100 + index}" name="Bar${index}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="12192000" cy="12700"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="445566"/></a:solidFill></p:spPr></p:sp>`,
+    ).join("");
+    const slideContent = [
+      shape({
+        id: 2,
+        name: "First",
+        xfrm: `<a:xfrm><a:off x="0" y="2540000"/><a:ext cx="1270000" cy="1270000"/></a:xfrm>`,
+        preset: "rect",
+        fill: '<a:solidFill><a:srgbClr val="AA0000"/></a:solidFill>',
+      }),
+      shape({
+        id: 3,
+        name: "Last",
+        xfrm: `<a:xfrm><a:off x="0" y="3810000"/><a:ext cx="1270000" cy="1270000"/></a:xfrm>`,
+        preset: "rect",
+        fill: '<a:solidFill><a:srgbClr val="00AA00"/></a:solidFill>',
+      }),
+    ].join("");
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({ tree: `${placeholderTree()}\n${bars}` }),
+        slideOneBody: spTree(slideContent),
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const shapes = preview?.slides?.[0]?.shapes ?? [];
+    expect(shapes).toHaveLength(200);
+    // Slide content survives the cap; decorations are trimmed instead.
+    expect(shapes.slice(-2).map((placed) => placed.fill)).toEqual(["#aa0000", "#00aa00"]);
+    expect(preview?.truncated).toBe(true);
   });
 });

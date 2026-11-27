@@ -226,6 +226,34 @@ const slidesPayload = {
           lineColor: "#4472c4",
           lineWidthPt: 1,
         },
+        // PowerPoint's real diagonal form: non-flat box + rot + flips
+        // (42x42pt at 90deg with both flips, from the POI slideshow corpus).
+        {
+          kind: "shape",
+          xPt: 180,
+          yPt: 174,
+          widthPt: 42,
+          heightPt: 42,
+          preset: "straightConnector1",
+          rotationDeg: 90,
+          flipHorizontal: true,
+          flipVertical: true,
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        // 102x36pt at 270deg with flipH (same corpus).
+        {
+          kind: "shape",
+          xPt: 147,
+          yPt: 249,
+          widthPt: 102,
+          heightPt: 36,
+          preset: "straightConnector1",
+          rotationDeg: 270,
+          flipHorizontal: true,
+          lineColor: "#ed7d31",
+          lineWidthPt: 1,
+        },
         {
           kind: "shape",
           xPt: 500,
@@ -537,21 +565,15 @@ describeControlUiE2e("Control UI fixed slide preview", () => {
 
       // Connectors draw rules between their authored endpoints, at any angle.
       const connectorBoxes = (await page.evaluate(sampleConnectors))!;
-      expect(connectorBoxes).toHaveLength(7);
+      expect(connectorBoxes).toHaveLength(9);
       // Payload geometry is in points; the canvas lays out CSS pixels at 4/3.
       const pt = (value: number) => (value * 4) / 3;
       const diagonalAngle = (Math.atan2(60, 80) * 180) / Math.PI;
       const expectedConnectors = [
         // horizontal line
         { left: pt(500), top: pt(280) - 0.5, width: pt(200), height: 1, angle: 0 },
-        // elbow preset: one straight segment between the same corners
-        {
-          left: pt(720),
-          top: pt(265),
-          width: pt(60),
-          height: pt(70),
-          angle: (Math.atan2(70, 60) * 180) / Math.PI,
-        },
+        // elbow preset approximates as a center-to-center horizontal segment
+        { left: pt(720), top: pt(300) - 0.5, width: pt(60), height: 1, angle: 0 },
         // plain vertical
         { left: pt(900) - 0.5, top: pt(160), width: 1, height: pt(80), angle: 90 },
         // PowerPoint rotation form: centered on the box, vertical at 90deg
@@ -573,6 +595,17 @@ describeControlUiE2e("Control UI fixed slide preview", () => {
           width: Math.SQRT2 * pt(50),
           height: Math.SQRT2 * pt(50),
           angle: 45,
+        },
+        // Non-flat straight connector at 90deg with both flips: the box diagonal
+        // (42x42pt) rotated about the center -> a 135deg segment spanning the box.
+        { left: pt(180), top: pt(174), width: pt(42), height: pt(42), angle: 135 },
+        // 102x36pt at 270deg with flipH: (180,216)->(216,318), 70.6deg.
+        {
+          left: pt(180),
+          top: pt(216),
+          width: pt(36),
+          height: pt(102),
+          angle: (Math.atan2(102, 36) * 180) / Math.PI,
         },
       ];
       connectorBoxes.forEach((box, index) => {

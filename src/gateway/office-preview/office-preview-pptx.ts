@@ -199,6 +199,12 @@ function readSlideSize(presentation: XmlDocumentBody | undefined): {
   };
 }
 
+/** `showMasterSp` on a part: whether the master's shapes paint on its slides. */
+function readShowMasterShapes(doc: XmlDocumentBody | undefined, tag: string): boolean | undefined {
+  const value = attribute(doc ? elements(doc, tag)[0] : undefined, "showMasterSp");
+  return value === "0" ? false : value === "1" ? true : undefined;
+}
+
 type PartBackground = {
   color?: string;
   /** A declared background this reader cannot draw; reported, never silent. */
@@ -245,11 +251,16 @@ class SlideInheritance {
   private readonly themes = new Map<string, PptxTheme>();
   private readonly masters = new Map<
     string,
-    { styles: PptxMasterStyles; placeholders: PptxPlaceholders; background: PartBackground }
+    {
+      styles: PptxMasterStyles;
+      placeholders: PptxPlaceholders;
+      background: PartBackground;
+      showMasterShapes?: boolean;
+    }
   >();
   private readonly layouts = new Map<
     string,
-    { placeholders: PptxPlaceholders; background: PartBackground }
+    { placeholders: PptxPlaceholders; background: PartBackground; showMasterShapes?: boolean }
   >();
   private readonly presentationMaster: string | undefined;
 
@@ -274,6 +285,9 @@ class SlideInheritance {
     unsupportedBackgroundKeys: string[];
     layoutPart?: string;
     masterPart?: string;
+    /** `showMasterSp` declared by the layout and master parts. */
+    layoutShowMasterShapes?: boolean;
+    masterShowMasterShapes?: boolean;
   } {
     const slideRelationships = readTypedRelationships(
       this.archive,
@@ -313,6 +327,9 @@ class SlideInheritance {
         styles: readMasterStyles(masterDoc, theme),
         placeholders: readPlaceholders(masterDoc),
         background: readBackground(masterDoc, theme),
+        ...(readShowMasterShapes(masterDoc, "p:sldMaster") !== undefined
+          ? { showMasterShapes: readShowMasterShapes(masterDoc, "p:sldMaster") }
+          : {}),
       };
       this.masters.set(masterKey, master);
     }
@@ -322,6 +339,9 @@ class SlideInheritance {
       layout = {
         placeholders: readPlaceholders(layoutDoc),
         background: readBackground(layoutDoc, theme),
+        ...(readShowMasterShapes(layoutDoc, "p:sldLayout") !== undefined
+          ? { showMasterShapes: readShowMasterShapes(layoutDoc, "p:sldLayout") }
+          : {}),
       };
       this.layouts.set(layoutPath, layout);
     }
@@ -339,6 +359,12 @@ class SlideInheritance {
       ],
       ...(layoutPath ? { layoutPart: layoutPath } : {}),
       ...(masterPath ? { masterPart: masterPath } : {}),
+      ...(layout?.showMasterShapes !== undefined
+        ? { layoutShowMasterShapes: layout.showMasterShapes }
+        : {}),
+      ...(master.showMasterShapes !== undefined
+        ? { masterShowMasterShapes: master.showMasterShapes }
+        : {}),
     };
   }
 }
@@ -517,19 +543,25 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
       };
       // PowerPoint paints master then layout shapes beneath every slide unless
       // the slide opts out; layout shapes win when both parts share a name.
-      const slideElement = elements(parsed.doc, "p:sld")[0];
-      const masterDecorations =
-        attribute(slideElement, "showMasterSp") === "0"
-          ? { shapes: [], names: [] }
-          : readDecorations(context.masterPart);
-      const composed = [
-        ...mergeDecorations(masterDecorations, readDecorations(context.layoutPart)),
-        ...readSlideShapes(elements(parsed.doc, "p:spTree")[0], shapeContext),
-      ];
-      if (composed.length > MAX_SHAPES_PER_SLIDE) {
+      const showMasterShapes =
+        readShowMasterShapes(parsed.doc, "p:sld") ??
+        context.layoutShowMasterShapes ??
+        context.masterShowMasterShapes ??
+        true;
+      const masterDecorations = showMasterShapes
+        ? readDecorations(context.masterPart)
+        : { shapes: [], names: [] };
+      const slideShapes = readSlideShapes(elements(parsed.doc, "p:spTree")[0], shapeContext);
+      const decorations = mergeDecorations(masterDecorations, readDecorations(context.layoutPart));
+      // The slide's own content outranks template decorations at the shape cap.
+      const decorationRoom = Math.max(0, MAX_SHAPES_PER_SLIDE - slideShapes.length);
+      if (decorations.length > decorationRoom) {
         truncated = true;
       }
-      const shapes = composed.slice(0, MAX_SHAPES_PER_SLIDE);
+      const shapes = [...decorations.slice(0, decorationRoom), ...slideShapes].slice(
+        0,
+        MAX_SHAPES_PER_SLIDE,
+      );
       if (shapes.length > 0) {
         parsed.slide.shapes = shapes;
       }

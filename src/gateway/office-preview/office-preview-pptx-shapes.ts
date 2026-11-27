@@ -433,8 +433,9 @@ function addShape(
     // Elbow/curved routing becomes one straight segment between the same ends.
     context.counter.add("drawings");
   }
-  // Every connector renders as a line, never as the box around its bounds.
-  const preset = isConnector ? "line" : authoredPreset;
+  // Connectors keep their authored preset so the renderer can tell a
+  // corner-to-corner `straightConnector*` from a center-to-center `line`.
+  const preset = isConnector ? (authoredPreset ?? "line") : authoredPreset;
   const text = textOfShape(element, context, placeholder, paint.textStyle);
   const paragraphs = text?.paragraphs ?? [];
   const visibleText = paragraphs.some((paragraph) => paragraph.text.trim().length > 0);
