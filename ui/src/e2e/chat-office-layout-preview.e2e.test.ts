@@ -1075,7 +1075,10 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
       expect(zoomed.paragraphHeight).toBe(wide.paragraphHeight);
       await page.screenshot({ path: path.join(artifactDir, "docx-canvas-zoomed.png") });
       await view.locator('[data-office-zoom="fit"]').click();
-      expect((await page.evaluate(sampleDocumentCanvas))!.scale).toBeCloseTo(wide.scale, 2);
+      const fitted = (await page.evaluate(sampleDocumentCanvas))!;
+      expect(fitted.scale).toBeCloseTo(wide.scale, 2);
+      // Fit width leaves no horizontal scroll: the page sits inside the reader.
+      expect(fitted.overflowX).toBe(0);
     } finally {
       await context.close();
     }

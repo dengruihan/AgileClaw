@@ -122,6 +122,8 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   private readonly sheetGeometry = new OfficeSheetGeometryController(this);
   private readonly canvas = new OfficeFixedCanvasController(() => this.requestUpdate());
   private docxLayoutSignature = "";
+  /** Guards the measuring cycle so a stale settle cannot unmount a newer stage. */
+  private docxMeasureToken = 0;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -146,45 +148,58 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       this.selectedSheet = 0;
     }
     if (changed.has("preview")) {
-      // A new payload owns new page geometry; measure it again before reusing.
+      // A new payload owns new page geometry; remeasure it on this element.
       this.docxLayout = null;
       this.docxLayoutSignature = "";
+      this.docxFontsSettled = false;
+      void this.settleDocumentFonts();
     }
   }
 
+  /**
+   * Owns the measuring stage for the current preview: web fonts can change the
+   * measured block heights, so the final measurement runs after they settle and
+   * only then does the stage unmount. Assigning a new preview restarts it.
+   */
   private async settleDocumentFonts(): Promise<void> {
+    const token = ++this.docxMeasureToken;
     const fonts = typeof document === "undefined" ? undefined : document.fonts;
-    if (!fonts) {
-      this.docxFontsSettled = true;
+    if (fonts) {
+      await fonts.ready;
+    }
+    // The stage is only measurable once the current preview has rendered.
+    await this.updateComplete;
+    if (token !== this.docxMeasureToken || !this.isConnected) {
       return;
     }
-    try {
-      await fonts.ready;
-    } finally {
-      this.docxFontsSettled = true;
-    }
+    this.measureDocumentLayout();
+    this.docxFontsSettled = true;
   }
 
   private documentPages() {
     return this.preview?.format === "docx" ? (this.preview.pages ?? []) : [];
   }
 
+  /**
+   * Fit width serves the widest page: one scale drives every card, so keying it
+   * on the first page would leave a landscape page wider than the reader.
+   */
   private documentCanvasWidth(): number {
-    const page = this.documentPages()[0];
-    if (!page) {
-      return 0;
-    }
-    const widthPt = page.widthPt > 0 ? page.widthPt : 595.3;
-    return Math.round((widthPt * 4) / 3);
+    return this.documentPages().reduce((widest, page) => {
+      const widthPt = page.widthPt > 0 ? page.widthPt : 595.3;
+      return Math.max(widest, Math.round((widthPt * 4) / 3));
+    }, 0);
   }
 
   /** Rebind the fixed canvas and turn the latest measurement into page cards. */
   private syncDocumentCanvas(): void {
     const scroll = this.querySelector<HTMLElement>(".sidebar-office-docx__scroll");
     this.canvas.sync(scroll, this.documentCanvasWidth());
-    if (!scroll) {
-      return;
-    }
+    this.measureDocumentLayout();
+  }
+
+  /** Read the hidden measuring stage; a no-op while none is mounted. */
+  private measureDocumentLayout(): void {
     const measure = this.querySelector<HTMLElement>(".sidebar-office-docx__measure");
     if (!measure) {
       return;
