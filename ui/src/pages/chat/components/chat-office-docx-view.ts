@@ -7,6 +7,7 @@ import type {
   SessionFileOfficeTable,
 } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import { t } from "../../../i18n/index.ts";
+import type { OfficeDocxPageLayout } from "./chat-office-docx-pagination.ts";
 import {
   officeBorderStyle,
   officeColor,
@@ -18,8 +19,12 @@ import {
 type DocxPage = NonNullable<SessionFileOfficePreview["pages"]>[number];
 type DocxImage = Extract<SessionFileOfficeDocBlock, { kind: "image" }>;
 type DocxTableCell = SessionFileOfficeTable["rows"][number]["cells"][number];
+type DocxTableRows = readonly [number, number];
 
 const SAFE_IMAGE_DATA_URL = /^data:image\/(?:png|jpeg|gif|webp);base64,[A-Za-z0-9+/]+={0,2}$/u;
+/** A4 fallback when a document carries no page geometry. */
+const DEFAULT_PAGE_WIDTH_PT = 595.3;
+const DEFAULT_PAGE_HEIGHT_PT = 841.9;
 
 function paragraphClass(paragraph: SessionFileOfficeParagraph): string {
   const classes = ["sidebar-office-docx__paragraph"];
@@ -95,11 +100,13 @@ function renderTableCell(cell: DocxTableCell): TemplateResult {
   </td>`;
 }
 
-function renderTable(table: SessionFileOfficeTable): TemplateResult {
+function renderTable(table: SessionFileOfficeTable, rows?: DocxTableRows): TemplateResult {
   const widths = table.columnWidthsPt;
   const total = widths.reduce((sum, width) => sum + Math.max(0, width), 0);
+  const visible = rows ? table.rows.slice(rows[0], rows[1]) : table.rows;
   return html`<table
     class="sidebar-office-docx__table"
+    data-row-start=${rows ? rows[0] : nothing}
     style=${styleMap(officeBorderStyle(table.border))}
   >
     ${
@@ -117,7 +124,7 @@ function renderTable(table: SessionFileOfficeTable): TemplateResult {
         : nothing
     }
     <tbody>
-      ${table.rows.map(
+      ${visible.map(
         (row) =>
           html`<tr>
             ${row.cells.map((cell) => renderTableCell(cell))}
@@ -135,6 +142,8 @@ function renderImage(image: DocxImage, preview: SessionFileOfficePreview): Templ
     </div>`;
   }
   const width = officePointsToPx(image.widthPt);
+  const ratio =
+    image.widthPt > 0 && image.heightPt > 0 ? `${image.widthPt} / ${image.heightPt}` : undefined;
   return html`<figure class="sidebar-office-docx__figure">
     <img
       class="sidebar-office-docx__image"
@@ -143,6 +152,9 @@ function renderImage(image: DocxImage, preview: SessionFileOfficePreview): Templ
       style=${styleMap({
         width: width && width > 0 ? `${Math.min(2_000, Math.round(width))}px` : undefined,
         maxWidth: "100%",
+        // Reserve the declared box before the bytes decode, so the measuring
+        // stage and the final page agree on the block height.
+        aspectRatio: ratio,
         height: "auto",
       })}
     />
@@ -152,10 +164,11 @@ function renderImage(image: DocxImage, preview: SessionFileOfficePreview): Templ
 function renderBlock(
   block: SessionFileOfficeDocBlock,
   preview: SessionFileOfficePreview,
+  rows?: DocxTableRows,
 ): TemplateResult {
   switch (block.kind) {
     case "table":
-      return renderTable(block);
+      return renderTable(block, rows);
     case "image":
       return renderImage(block, preview);
     default:
@@ -163,74 +176,144 @@ function renderBlock(
   }
 }
 
-function pageStyle(page: DocxPage) {
-  const width = page.widthPt > 0 ? page.widthPt : 595.3;
-  const percent = (points: number) => `${Math.max(0, (points / width) * 100).toFixed(3)}%`;
+/** Declared canvas size of one page in CSS pixels. */
+function pageCanvas(page: DocxPage): { width: number; height: number; widthPt: number } {
+  const widthPt = page.widthPt > 0 ? page.widthPt : DEFAULT_PAGE_WIDTH_PT;
+  const heightPt = page.heightPt > 0 ? page.heightPt : DEFAULT_PAGE_HEIGHT_PT;
   return {
-    "--office-doc-page-width": `${Math.round(officePointsToPx(width) ?? 794)}px`,
-    "--office-doc-page-ratio": `${Math.max(1, page.heightPt) / width}`,
-    paddingTop: percent(page.marginTopPt),
-    paddingRight: percent(page.marginRightPt),
-    paddingBottom: percent(page.marginBottomPt),
-    paddingLeft: percent(page.marginLeftPt),
+    widthPt,
+    width: Math.round(officePointsToPx(widthPt) ?? (DEFAULT_PAGE_WIDTH_PT * 4) / 3),
+    height: Math.round(officePointsToPx(heightPt) ?? (DEFAULT_PAGE_HEIGHT_PT * 4) / 3),
   };
 }
 
-/** Approximate Word pages: fitted paper cards with the resolved page margins. */
-export function renderDocumentPages(preview: SessionFileOfficePreview): TemplateResult {
+/**
+ * Fixed canvas size plus the resolved page margins. Margins stay in pixels: a
+ * percentage padding resolves against the containing block, which would let a
+ * zoomed page shrink its own text column and rewrap the document.
+ */
+function pageStyle(page: DocxPage, canvasHeight: number) {
+  const { widthPt, width, height } = pageCanvas(page);
+  const margin = (points: number) =>
+    `${Math.max(0, Math.round((width * Math.max(0, points)) / widthPt))}px`;
+  return {
+    "--office-doc-page-width": `${width}px`,
+    "--office-doc-page-height": `${Math.max(height, canvasHeight)}px`,
+    paddingTop: margin(page.marginTopPt),
+    paddingRight: margin(page.marginRightPt),
+    paddingBottom: margin(page.marginBottomPt),
+    paddingLeft: margin(page.marginLeftPt),
+  };
+}
+
+/** Declared pagination, used until the fixed canvas has been measured. */
+export function fallbackOfficeDocxLayout(
+  preview: SessionFileOfficePreview,
+): OfficeDocxPageLayout[] {
   const pages = preview.pages ?? [];
+  return pages.map((page, source) => ({
+    source,
+    height: pageCanvas(page).height,
+    slices: page.blocks.map((_, index) => ({ block: index, rows: null, height: 0 })),
+  }));
+}
+
+function renderPageHeader(preview: SessionFileOfficePreview): TemplateResult | typeof nothing {
   const header = preview.header ?? [];
-  const footer = preview.footer ?? [];
-  return html`<div class="sidebar-office-docx">
-    ${pages.map(
-      (page, index) => html`<div
-        class="sidebar-office-docx__page-wrap"
-        data-page-index=${index + 1}
+  return header.length > 0
+    ? html`<header
+        class="sidebar-office-docx__page-header"
+        aria-label=${t("chat.officePreview.header")}
       >
-        <div class="sidebar-office-docx__page-label">
-          ${t("chat.officePreview.pageOf", {
-            index: String(index + 1),
-            count: String(pages.length),
-          })}
-        </div>
+        ${header.map((paragraph) =>
+          renderParagraph(paragraph, "sidebar-office-docx__paragraph--header"),
+        )}
+      </header>`
+    : nothing;
+}
+
+function renderPageFooter(preview: SessionFileOfficePreview): TemplateResult | typeof nothing {
+  const footer = preview.footer ?? [];
+  return footer.length > 0
+    ? html`<footer
+        class="sidebar-office-docx__page-footer"
+        aria-label=${t("chat.officePreview.footer")}
+      >
+        ${footer.map((paragraph) =>
+          renderParagraph(paragraph, "sidebar-office-docx__paragraph--footer"),
+        )}
+      </footer>`
+    : nothing;
+}
+
+/**
+ * Fixed-canvas Word pages: every card is laid out at the document's own page
+ * size and only scaled by the reader, so panel width never rewraps its text.
+ * The measuring stage below renders the same blocks once at that size; the
+ * pagination owner turns its measurements into continuation cards.
+ */
+export function renderDocumentPages(
+  preview: SessionFileOfficePreview,
+  layout: readonly OfficeDocxPageLayout[],
+): TemplateResult {
+  const pages = preview.pages ?? [];
+  return html`${layout.map((card, index) => {
+    const page = pages[card.source];
+    if (!page) {
+      return nothing;
+    }
+    const label = t("chat.officePreview.pageOf", {
+      index: String(index + 1),
+      count: String(layout.length),
+    });
+    const first = card.slices[0];
+    const continued = first !== undefined && (first.block > 0 || (first.rows?.[0] ?? 0) > 0);
+    return html`<div
+      class="sidebar-office-docx__page-wrap"
+      data-page-index=${index + 1}
+      data-page-source=${card.source + 1}
+    >
+      <div class="sidebar-office-docx__page-label">${label}</div>
+      <div class="sidebar-office-docx__page-scaler">
         <article
           class="sidebar-office-docx__page"
           role="group"
-          aria-label=${t("chat.officePreview.pageOf", {
-            index: String(index + 1),
-            count: String(pages.length),
-          })}
-          style=${styleMap(pageStyle(page))}
+          aria-label=${label}
+          data-page-continued=${continued ? "true" : nothing}
+          style=${styleMap(pageStyle(page, card.height))}
         >
-          ${
-            header.length > 0
-              ? html`<header
-                  class="sidebar-office-docx__page-header"
-                  aria-label=${t("chat.officePreview.header")}
-                >
-                  ${header.map((paragraph) =>
-                    renderParagraph(paragraph, "sidebar-office-docx__paragraph--header"),
-                  )}
-                </header>`
-              : nothing
-          }
+          ${renderPageHeader(preview)}
           <div class="sidebar-office-docx__page-body">
-            ${page.blocks.map((block) => renderBlock(block, preview))}
+            ${card.slices.map((slice) =>
+              renderBlock(page.blocks[slice.block]!, preview, slice.rows ?? undefined),
+            )}
           </div>
-          ${
-            footer.length > 0
-              ? html`<footer
-                  class="sidebar-office-docx__page-footer"
-                  aria-label=${t("chat.officePreview.footer")}
-                >
-                  ${footer.map((paragraph) =>
-                    renderParagraph(paragraph, "sidebar-office-docx__paragraph--footer"),
-                  )}
-                </footer>`
-              : nothing
-          }
+          ${renderPageFooter(preview)}
         </article>
-      </div>`,
+      </div>
+    </div>`;
+  })}`;
+}
+
+/**
+ * Hidden measuring stage: the declared pages, unpaginated, at their real
+ * canvas size. It exists only until the pagination owner and the fonts settle.
+ */
+export function renderDocumentMeasure(preview: SessionFileOfficePreview): TemplateResult {
+  const pages = preview.pages ?? [];
+  return html`<div class="sidebar-office-docx__measure" aria-hidden="true">
+    ${pages.map(
+      (page) => html`<article
+        class="sidebar-office-docx__measure-page"
+        data-office-docx-measure
+        style=${styleMap(pageStyle(page, pageCanvas(page).height))}
+      >
+        ${renderPageHeader(preview)}
+        <div class="sidebar-office-docx__page-body">
+          ${page.blocks.map((block) => renderBlock(block, preview))}
+        </div>
+        ${renderPageFooter(preview)}
+      </article>`,
     )}
   </div>`;
 }

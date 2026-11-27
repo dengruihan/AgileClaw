@@ -9,7 +9,16 @@ import type {
 import { t } from "../../../i18n/index.ts";
 import { registerFilePreviewEnglish } from "../../../i18n/locales/en-file-preview.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
-import { renderDocumentPages } from "./chat-office-docx-view.ts";
+import {
+  measureOfficeDocxPages,
+  type OfficeDocxPageLayout,
+} from "./chat-office-docx-pagination.ts";
+import {
+  fallbackOfficeDocxLayout,
+  renderDocumentMeasure,
+  renderDocumentPages,
+} from "./chat-office-docx-view.ts";
+import { OfficeFixedCanvasController } from "./chat-office-fixed-canvas.ts";
 import { OfficeSheetGeometryController } from "./chat-office-sheet-geometry.ts";
 import { renderWorkbook } from "./chat-office-sheet-view.ts";
 
@@ -107,20 +116,28 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   @property() label = "";
 
   @state() private selectedSheet = 0;
+  @state() private docxLayout: OfficeDocxPageLayout[] | null = null;
+  /** Keeps the measuring stage mounted until web fonts finished loading. */
+  @state() private docxFontsSettled = false;
   private readonly sheetGeometry = new OfficeSheetGeometryController(this);
+  private readonly canvas = new OfficeFixedCanvasController(() => this.requestUpdate());
+  private docxLayoutSignature = "";
 
   override connectedCallback(): void {
     super.connectedCallback();
     this.sheetGeometry.sync();
+    void this.settleDocumentFonts();
   }
 
   override disconnectedCallback(): void {
     this.sheetGeometry.disconnect();
+    this.canvas.disconnect();
     super.disconnectedCallback();
   }
 
   override updated(): void {
     this.sheetGeometry.sync();
+    this.syncDocumentCanvas();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -128,6 +145,130 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
     if (changed.has("preview") && this.selectedSheet >= sheetCount) {
       this.selectedSheet = 0;
     }
+    if (changed.has("preview")) {
+      // A new payload owns new page geometry; measure it again before reusing.
+      this.docxLayout = null;
+      this.docxLayoutSignature = "";
+    }
+  }
+
+  private async settleDocumentFonts(): Promise<void> {
+    const fonts = typeof document === "undefined" ? undefined : document.fonts;
+    if (!fonts) {
+      this.docxFontsSettled = true;
+      return;
+    }
+    try {
+      await fonts.ready;
+    } finally {
+      this.docxFontsSettled = true;
+    }
+  }
+
+  private documentPages() {
+    return this.preview?.format === "docx" ? (this.preview.pages ?? []) : [];
+  }
+
+  private documentCanvasWidth(): number {
+    const page = this.documentPages()[0];
+    if (!page) {
+      return 0;
+    }
+    const widthPt = page.widthPt > 0 ? page.widthPt : 595.3;
+    return Math.round((widthPt * 4) / 3);
+  }
+
+  /** Rebind the fixed canvas and turn the latest measurement into page cards. */
+  private syncDocumentCanvas(): void {
+    const scroll = this.querySelector<HTMLElement>(".sidebar-office-docx__scroll");
+    this.canvas.sync(scroll, this.documentCanvasWidth());
+    if (!scroll) {
+      return;
+    }
+    const measure = this.querySelector<HTMLElement>(".sidebar-office-docx__measure");
+    if (!measure) {
+      return;
+    }
+    const layout = measureOfficeDocxPages(measure);
+    if (!layout) {
+      return;
+    }
+    const signature = JSON.stringify(layout);
+    if (signature === this.docxLayoutSignature) {
+      return;
+    }
+    this.docxLayoutSignature = signature;
+    this.docxLayout = layout;
+  }
+
+  private zoom(action: "in" | "out" | "fit" | "actual"): void {
+    switch (action) {
+      case "in":
+        this.canvas.zoomIn();
+        break;
+      case "out":
+        this.canvas.zoomOut();
+        break;
+      case "fit":
+        this.canvas.fitToWidth();
+        break;
+      default:
+        this.canvas.actualSize();
+        break;
+    }
+  }
+
+  private renderZoomTools(): TemplateResult {
+    const canvas = this.canvas;
+    return html`<div
+      class="sidebar-office-docx__tools"
+      role="toolbar"
+      aria-label=${t("chat.officePreview.zoom")}
+    >
+      <button
+        type="button"
+        class="sidebar-office-docx__zoom"
+        data-office-zoom="out"
+        aria-label=${t("chat.officePreview.zoomOut")}
+        title=${t("chat.officePreview.zoomOut")}
+        ?disabled=${!canvas.canZoomOut}
+        @click=${() => this.zoom("out")}
+      >
+        −
+      </button>
+      <span class="sidebar-office-docx__zoom-level" data-office-zoom-level
+        >${t("chat.officePreview.zoomLevel", { percent: String(canvas.percent) })}</span
+      >
+      <button
+        type="button"
+        class="sidebar-office-docx__zoom"
+        data-office-zoom="in"
+        aria-label=${t("chat.officePreview.zoomIn")}
+        title=${t("chat.officePreview.zoomIn")}
+        ?disabled=${!canvas.canZoomIn}
+        @click=${() => this.zoom("in")}
+      >
+        +
+      </button>
+      <button
+        type="button"
+        class="sidebar-office-docx__zoom sidebar-office-docx__zoom--mode"
+        data-office-zoom="fit"
+        aria-pressed=${canvas.fitWidth ? "true" : "false"}
+        @click=${() => this.zoom("fit")}
+      >
+        ${t("chat.officePreview.zoomFitWidth")}
+      </button>
+      <button
+        type="button"
+        class="sidebar-office-docx__zoom sidebar-office-docx__zoom--mode"
+        data-office-zoom="actual"
+        aria-pressed=${!canvas.fitWidth && canvas.percent === 100 ? "true" : "false"}
+        @click=${() => this.zoom("actual")}
+      >
+        ${t("chat.officePreview.zoomActual")}
+      </button>
+    </div>`;
   }
 
   private renderWorkbookView(preview: SessionFileOfficePreview): TemplateResult {
@@ -138,6 +279,18 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       <div class="sidebar-office-preview" data-office-format="xlsx" aria-label=${this.label}>
         ${renderNotice(preview)} ${renderOmitted(preview)}
         ${renderWorkbook(preview, this.selectedSheet, selectSheet)}
+      </div>
+    `;
+  }
+
+  private renderDocumentCanvas(preview: SessionFileOfficePreview): TemplateResult {
+    return html`
+      <div class="sidebar-office-docx">
+        ${this.renderZoomTools()}
+        <div class="sidebar-office-docx__scroll">
+          ${renderDocumentPages(preview, this.docxLayout ?? fallbackOfficeDocxLayout(preview))}
+          ${this.docxFontsSettled ? nothing : renderDocumentMeasure(preview)}
+        </div>
       </div>
     `;
   }
@@ -153,7 +306,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
             ? html`<div class="sidebar-office-preview__approximation" role="note">
                   ${t("chat.officePreview.approximatePages")}
                 </div>
-                ${renderDocumentPages(preview)}`
+                ${this.renderDocumentCanvas(preview)}`
             : blocks.length === 0
               ? renderEmpty()
               : html`<article class="sidebar-office-preview__document">

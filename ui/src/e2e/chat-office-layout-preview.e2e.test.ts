@@ -53,6 +53,37 @@ const pageGeometry = {
   marginLeftPt: 72,
 };
 
+const LONG_PARAGRAPH =
+  "Revenue increased across every region as the new preview pipeline shipped, and support volume fell while adoption climbed through the quarter, which the operations team credits to faster onboarding, clearer reporting, and a steadier release cadence across every office suite.";
+
+function flowCell(text: string) {
+  return {
+    paragraphs: [
+      { kind: "paragraph" as const, role: "body" as const, text, runs: [{ text, fontSizePt: 11 }] },
+    ],
+  };
+}
+
+/** Page content that needs several fixed cards once the canvas is paginated. */
+const longFlowBlocks = [
+  {
+    kind: "paragraph" as const,
+    role: "body" as const,
+    text: LONG_PARAGRAPH,
+    runs: [{ text: LONG_PARAGRAPH, fontSizePt: 11 }],
+  },
+  {
+    kind: "table" as const,
+    columnWidthsPt: [200, 200],
+    rows: Array.from({ length: 40 }, (_, index) => ({
+      cells: [flowCell(`Region ${index + 1}`), flowCell(`Revenue ${(index + 1) * 100}`)],
+    })),
+  },
+];
+
+/** Declared A4 page shape; every card keeps this ratio at any zoom. */
+const A4_RATIO = pageGeometry.heightPt / pageGeometry.widthPt;
+
 const documentPayload = {
   format: "docx",
   header: [
@@ -161,6 +192,7 @@ const documentPayload = {
           ],
         },
         { kind: "image", media: 0, widthPt: 75, heightPt: 75, alt: "Synthetic logo" },
+        ...longFlowBlocks,
       ],
     },
     {
@@ -405,6 +437,77 @@ async function openRailFile(page: import("playwright").Page, name: string) {
   await row.click();
 }
 
+/**
+ * Resize the side panel the way a user does: drag its divider to the panel
+ * width under test. Reading the reader width afterwards keeps the assertion
+ * honest even when the pane clamps the requested size.
+ */
+async function resizeSidePanel(page: import("playwright").Page, width: number) {
+  const geometry = await page.evaluate(() => {
+    const region = [...document.querySelectorAll<HTMLElement>(".sidebar-region")].find(
+      (element) => element.clientWidth > 0,
+    );
+    const divider = [...document.querySelectorAll<HTMLElement>(".sidebar-column__divider")].find(
+      (element) => element.getBoundingClientRect().width > 0,
+    );
+    if (!region || !divider) {
+      return null;
+    }
+    const dividerRect = divider.getBoundingClientRect();
+    return {
+      right: region.getBoundingClientRect().right,
+      x: dividerRect.left + dividerRect.width / 2,
+      y: dividerRect.top + dividerRect.height / 2,
+    };
+  });
+  const { right, x, y } = geometry!;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(right - width, y, { steps: 8 });
+  await page.mouse.up();
+  await page.waitForFunction(
+    (target) =>
+      [...document.querySelectorAll<HTMLElement>(".sidebar-content")].some(
+        (content) => Math.abs(content.clientWidth - target) <= 24,
+      ),
+    width,
+    { timeout: controlUiE2eWaitTimeoutMs },
+  );
+}
+
+/**
+ * The chat pane keeps a hidden retained presentation of its panels, so probes
+ * must resolve the visible reader instead of the first match in DOM order.
+ * Runs inside the page: keep it self-contained.
+ */
+function sampleDocumentCanvas() {
+  const reader = [...document.querySelectorAll<HTMLElement>(".sidebar-office-docx__scroll")].find(
+    (element) => element.clientWidth > 0,
+  );
+  const pages = [...(reader?.querySelectorAll<HTMLElement>(".sidebar-office-docx__page") ?? [])];
+  const paragraph = [
+    ...(reader?.querySelectorAll<HTMLElement>(".sidebar-office-docx__paragraph") ?? []),
+  ].find((element) => element.textContent?.includes("Revenue increased across every"));
+  if (!reader || pages.length === 0 || !paragraph) {
+    return null;
+  }
+  const bodies = [...reader.querySelectorAll<HTMLElement>(".sidebar-office-docx__page-body")];
+  const pageRect = pages[0]!.getBoundingClientRect();
+  return {
+    canvasWidth: Number.parseFloat(pages[0]!.style.getPropertyValue("--office-doc-page-width")),
+    paragraphHeight: paragraph.offsetHeight,
+    maxBodyOverflow: Math.max(0, ...bodies.map((body) => body.scrollHeight - body.clientHeight)),
+    overflowX: reader.scrollWidth - reader.clientWidth,
+    pageHeight: pageRect.height,
+    pageWidth: pageRect.width,
+    rowCount: reader.querySelectorAll("tbody tr").length,
+    scale: Number.parseFloat(
+      getComputedStyle(reader).getPropertyValue("--office-canvas-scale").trim() || "NaN",
+    ),
+    text: reader.textContent ?? "",
+  };
+}
+
 async function installOfficeGateway(page: import("playwright").Page) {
   return installMockGateway(page, {
     featureMethods: ["chat.metadata", "chat.startup", "sessions.diff"],
@@ -424,7 +527,11 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
 
       const documentView = page.locator('.sidebar-office-preview[data-office-format="docx"]');
       await documentView.waitFor({ state: "visible" });
-      await expect.poll(() => documentView.locator(".sidebar-office-docx__page").count()).toBe(2);
+      // The declared first page overflows its fixed canvas, so it continues on
+      // extra cards; the second declared page follows them.
+      await expect
+        .poll(() => documentView.locator(".sidebar-office-docx__page").count())
+        .toBeGreaterThanOrEqual(3);
 
       const firstPage = documentView.locator(".sidebar-office-docx__page").first();
       expect(await firstPage.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
@@ -433,18 +540,19 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
       expect(
         await firstPage.evaluate((element) => element.scrollHeight - element.clientHeight),
       ).toBeLessThanOrEqual(1);
-      expect(
-        await documentView
-          .locator(".sidebar-office-docx__page-header")
+      // The document header and footer repeat on every fixed card.
+      const cardCount = await documentView.locator(".sidebar-office-docx__page").count();
+      const chrome = (selector: string) =>
+        documentView
+          .locator(selector)
           .allTextContents()
-          .then((values) => values.map((value) => value.trim())),
-      ).toEqual(["Confidential", "Confidential"]);
-      expect(
-        await documentView
-          .locator(".sidebar-office-docx__page-footer")
-          .allTextContents()
-          .then((values) => values.map((value) => value.trim())),
-      ).toEqual(["Page footer", "Page footer"]);
+          .then((entries) => entries.map((value) => value.trim()));
+      expect(await chrome(".sidebar-office-docx__page-header")).toEqual(
+        Array.from({ length: cardCount }, () => "Confidential"),
+      );
+      expect(await chrome(".sidebar-office-docx__page-footer")).toEqual(
+        Array.from({ length: cardCount }, () => "Page footer"),
+      );
 
       const title = firstPage.locator('[data-role="title"]');
       expect(
@@ -906,6 +1014,68 @@ describeControlUiE2e("Control UI layout Office side-panel preview", () => {
       } finally {
         await workbookContext.close();
       }
+    } finally {
+      await context.close();
+    }
+  });
+
+  it("keeps one fixed Word canvas so text never reflows across panel widths", async () => {
+    const context = await browser.newContext({ viewport: { height: 900, width: 2048 } });
+    try {
+      const page = await context.newPage();
+      page.setDefaultTimeout(controlUiE2eWaitTimeoutMs);
+      await installOfficeGateway(page);
+      await page.goto(controlUiSessionUrl(server.baseUrl, sessionKey));
+      await openRailFile(page, "layout-report.docx");
+
+      const view = page.locator('.sidebar-office-preview[data-office-format="docx"]');
+      await view.waitFor({ state: "visible" });
+      await expect
+        .poll(() => view.locator(".sidebar-office-docx__page").count())
+        .toBeGreaterThan(2);
+
+      const states: NonNullable<Awaited<ReturnType<typeof sampleDocumentCanvas>>>[] = [];
+      for (const width of [320, 440, 900]) {
+        await resizeSidePanel(page, width);
+        states.push((await page.evaluate(sampleDocumentCanvas))!);
+        await page.screenshot({ path: path.join(artifactDir, `docx-canvas-${width}.png`) });
+      }
+      const narrow = states[0]!;
+      expect(narrow.canvasWidth).toBe(794);
+      const medium = states[1]!;
+      const wide = states[2]!;
+      for (const state of states) {
+        // Every row, the next declared page, and the page chrome stay rendered;
+        // no fixed page body clips its measured content.
+        expect(state.text).toContain("Region 40");
+        expect(state.text).toContain("Second page");
+        expect(state.rowCount).toBe(42);
+        expect(state.maxBodyOverflow).toBeLessThanOrEqual(2);
+        // A4 page ratio: the card keeps the declared page shape, only scaled.
+        expect(state.pageHeight / state.pageWidth).toBeCloseTo(A4_RATIO, 2);
+      }
+      // Only the scale changes: same paragraph line breaks and layout height.
+      expect(narrow.paragraphHeight).toBe(wide.paragraphHeight);
+      expect(medium.paragraphHeight).toBe(wide.paragraphHeight);
+      expect(narrow.pageWidth).toBeLessThan(wide.pageWidth);
+      expect(narrow.scale).toBeLessThan(wide.scale);
+      expect(wide.pageWidth).toBeCloseTo(wide.canvasWidth * wide.scale, 0);
+      // A long table continues on the next fixed card instead of being clipped.
+      expect(await view.locator('[data-page-continued="true"]').count()).toBeGreaterThan(0);
+
+      // Zoom: actual size, then zoom in with scrolling, then back to fit width.
+      await view.locator('[data-office-zoom="actual"]').click();
+      const actual = (await page.evaluate(sampleDocumentCanvas))!;
+      expect(actual.pageWidth).toBeCloseTo(actual.canvasWidth, 0);
+      expect(actual.paragraphHeight).toBe(wide.paragraphHeight);
+      await view.locator('[data-office-zoom="in"]').click();
+      const zoomed = (await page.evaluate(sampleDocumentCanvas))!;
+      expect(zoomed.pageWidth).toBeGreaterThan(zoomed.canvasWidth);
+      expect(zoomed.overflowX).toBeGreaterThan(0);
+      expect(zoomed.paragraphHeight).toBe(wide.paragraphHeight);
+      await page.screenshot({ path: path.join(artifactDir, "docx-canvas-zoomed.png") });
+      await view.locator('[data-office-zoom="fit"]').click();
+      expect((await page.evaluate(sampleDocumentCanvas))!.scale).toBeCloseTo(wide.scale, 2);
     } finally {
       await context.close();
     }

@@ -60,6 +60,12 @@ const catalog = {
       approximatePages:
         "Pages approximate the document layout. Line breaks and pagination can differ from Word.",
       pageOf: "Page {index} of {count}",
+      zoom: "Document zoom",
+      zoomIn: "Zoom in",
+      zoomOut: "Zoom out",
+      zoomFitWidth: "Fit width",
+      zoomActual: "Actual size",
+      zoomLevel: "{percent}%",
       header: "Document header",
       footer: "Document footer",
       imageUnavailable: "This image could not be shown safely.",
