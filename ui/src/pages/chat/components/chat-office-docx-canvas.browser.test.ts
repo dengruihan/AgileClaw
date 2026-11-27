@@ -68,6 +68,21 @@ function renderedCards(viewer: HTMLElement): number {
   return viewer.querySelectorAll(".sidebar-office-docx__page").length;
 }
 
+/** Wait for the measured layout: several cards, no measuring stage, marker text. */
+async function waitForPagination(viewer: HTMLElement, marker: string) {
+  await expect
+    .poll(
+      () =>
+        renderedCards(viewer) > 1 &&
+        !viewer.querySelector(".sidebar-office-docx__measure") &&
+        (viewer.textContent ?? "").includes(marker)
+          ? renderedCards(viewer)
+          : 0,
+      { timeout: 5_000 },
+    )
+    .toBeGreaterThan(1);
+}
+
 it.skipIf(!browserMode)("re-paginates a document assigned to a live preview element", async () => {
   const { panel, viewer } = mountViewer();
   try {
@@ -86,17 +101,7 @@ it.skipIf(!browserMode)("re-paginates a document assigned to a live preview elem
       format: "docx",
       pages: [page(595.3, 841.9, longParagraphs("Second document", 180))],
     };
-    await expect
-      .poll(
-        () =>
-          renderedCards(viewer) > 1 &&
-          !viewer.querySelector(".sidebar-office-docx__measure") &&
-          (viewer.textContent ?? "").includes("Second document paragraph 180")
-            ? renderedCards(viewer)
-            : 0,
-        { timeout: 5_000 },
-      )
-      .toBeGreaterThan(1);
+    await waitForPagination(viewer, "Second document paragraph 180");
     expect(viewer.textContent).not.toContain("First document");
     expect(bodyOverflow(viewer)).toBeLessThanOrEqual(2);
   } finally {
@@ -140,3 +145,78 @@ it.skipIf(!browserMode)(
     }
   },
 );
+
+it.skipIf(!browserMode)("paginates a document assigned while the reader is hidden", async () => {
+  const { panel, viewer } = mountViewer();
+  try {
+    // A minimized or inactive side panel keeps its reader at display: none
+    // while the preview payload arrives.
+    panel.style.display = "none";
+    viewer.preview = {
+      format: "docx",
+      pages: [page(595.3, 841.9, longParagraphs("Hidden document", 180))],
+    };
+    await expect
+      .poll(() => (viewer.querySelector(".sidebar-office-docx__measure") ? 1 : 0), {
+        timeout: 5_000,
+      })
+      .toBe(1);
+
+    panel.style.display = "";
+    await waitForPagination(viewer, "Hidden document paragraph 180");
+    expect(bodyOverflow(viewer)).toBeLessThanOrEqual(2);
+  } finally {
+    panel.remove();
+  }
+});
+
+it.skipIf(!browserMode)(
+  "paginates a second document assigned while the reader is hidden",
+  async () => {
+    const { panel, viewer } = mountViewer();
+    try {
+      viewer.preview = {
+        format: "docx",
+        pages: [page(595.3, 841.9, longParagraphs("First document", 180))],
+      };
+      await waitForPagination(viewer, "First document paragraph 180");
+
+      panel.style.display = "none";
+      viewer.preview = {
+        format: "docx",
+        pages: [page(595.3, 841.9, longParagraphs("Second document", 180))],
+      };
+      await expect
+        .poll(() => (viewer.querySelector(".sidebar-office-docx__measure") ? 1 : 0), {
+          timeout: 5_000,
+        })
+        .toBe(1);
+
+      panel.style.display = "";
+      await waitForPagination(viewer, "Second document paragraph 180");
+      expect(viewer.textContent).not.toContain("First document");
+      expect(bodyOverflow(viewer)).toBeLessThanOrEqual(2);
+    } finally {
+      panel.remove();
+    }
+  },
+);
+
+it.skipIf(!browserMode)("keeps only the newest preview across rapid switches", async () => {
+  const { panel, viewer } = mountViewer();
+  try {
+    viewer.preview = {
+      format: "docx",
+      pages: [page(595.3, 841.9, longParagraphs("Discarded document", 180))],
+    };
+    viewer.preview = {
+      format: "docx",
+      pages: [page(595.3, 841.9, longParagraphs("Final document", 180))],
+    };
+    await waitForPagination(viewer, "Final document paragraph 180");
+    expect(viewer.textContent).not.toContain("Discarded document");
+    expect(bodyOverflow(viewer)).toBeLessThanOrEqual(2);
+  } finally {
+    panel.remove();
+  }
+});

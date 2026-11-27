@@ -167,18 +167,34 @@ export function measureOfficeDocxPages(root: ParentNode): OfficeDocxPageLayout[]
     return null;
   }
   const metrics: OfficeDocxPageMetrics[] = [];
+  let measurable = 0;
   for (const card of cards) {
     const body = card.querySelector<HTMLElement>(".sidebar-office-docx__page-body");
+    const blocks = body
+      ? [...body.children].map((child) => measureBlock(child as HTMLElement))
+      : [];
     const capacity = Math.floor(body?.getBoundingClientRect().height ?? 0);
     const height = Math.round(card.getBoundingClientRect().height);
-    if (!body || capacity <= 0 || height <= 0) {
-      return null;
+    // A hidden reader (display:none) yields no boxes; that page keeps its
+    // declared card instead of failing the whole document.
+    const usable = Boolean(body) && capacity > 0 && height > 0;
+    if (usable) {
+      measurable += 1;
     }
     metrics.push({
-      capacity,
-      height,
-      blocks: [...body.children].map((child) => measureBlock(child as HTMLElement)),
+      capacity: usable ? capacity : 0,
+      height: usable ? height : declaredPageHeight(card),
+      blocks,
     });
   }
+  if (measurable === 0) {
+    return null;
+  }
   return paginateOfficeDocxPages(metrics);
+}
+
+/** Declared card height from the inline canvas variable, for unmeasurable pages. */
+function declaredPageHeight(card: HTMLElement): number {
+  const declared = Number.parseFloat(card.style.getPropertyValue("--office-doc-page-height"));
+  return Number.isFinite(declared) && declared > 0 ? Math.round(declared) : 1_123;
 }

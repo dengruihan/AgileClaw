@@ -59,7 +59,7 @@ it.skipIf(!browserMode)("keeps one fixed workbook grid across reader widths", as
     await viewer.updateComplete;
     await expect.poll(() => viewer.querySelector(".sidebar-office-sheet__table")).not.toBeNull();
     const wide = measure();
-    // 30-character columns resolve to real Excel units, not reader pixels.
+    // 10-character columns resolve to real Excel units, not reader pixels.
     expect(wide.columns).toEqual(["46px", "75px", "75px"]);
 
     for (const width of [440, 320, 260]) {

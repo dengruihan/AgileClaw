@@ -15,6 +15,7 @@ import {
 } from "./chat-office-docx-pagination.ts";
 import {
   fallbackOfficeDocxLayout,
+  officeDocxCanvasWidth,
   renderDocumentMeasure,
   renderDocumentPages,
 } from "./chat-office-docx-view.ts";
@@ -110,6 +111,10 @@ function renderSlide(slide: SessionFileOfficeSlide): TemplateResult {
   `;
 }
 
+/** First retry delay for a Word measurement that still has no reader box. */
+const OFFICE_DOCX_MEASURE_RETRY_MS = 200;
+const OFFICE_DOCX_MEASURE_RETRY_MAX_MS = 2_000;
+
 /** Read-only renderer for the structured Office payload the Gateway returns. */
 class ChatOfficePreview extends OpenClawLightDomContentsElement {
   @property({ attribute: false }) preview: SessionFileOfficePreview | null = null;
@@ -117,13 +122,18 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
 
   @state() private selectedSheet = 0;
   @state() private docxLayout: OfficeDocxPageLayout[] | null = null;
-  /** Keeps the measuring stage mounted until web fonts finished loading. */
-  @state() private docxFontsSettled = false;
+  /** Unmounts the measuring stage once fonts settled and a real measurement landed. */
+  @state() private docxStageRetired = false;
   private readonly sheetGeometry = new OfficeSheetGeometryController(this);
   private readonly canvas = new OfficeFixedCanvasController(() => this.requestUpdate());
   private docxLayoutSignature = "";
   /** Guards the measuring cycle so a stale settle cannot unmount a newer stage. */
   private docxMeasureToken = 0;
+  /** Web fonts for the current preview have settled; measurement must still land. */
+  private docxFontsReady = false;
+  /** Retries a pending measurement while the reader has no box (hidden panel). */
+  private docxMeasureTimer: ReturnType<typeof setTimeout> | null = null;
+  private docxMeasureRetryMs = OFFICE_DOCX_MEASURE_RETRY_MS;
 
   override connectedCallback(): void {
     super.connectedCallback();
@@ -134,6 +144,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   override disconnectedCallback(): void {
     this.sheetGeometry.disconnect();
     this.canvas.disconnect();
+    this.stopDocumentMeasureRetry();
     super.disconnectedCallback();
   }
 
@@ -151,15 +162,20 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       // A new payload owns new page geometry; remeasure it on this element.
       this.docxLayout = null;
       this.docxLayoutSignature = "";
-      this.docxFontsSettled = false;
+      this.docxFontsReady = false;
+      this.docxStageRetired = false;
+      this.stopDocumentMeasureRetry();
+      this.docxMeasureRetryMs = OFFICE_DOCX_MEASURE_RETRY_MS;
       void this.settleDocumentFonts();
     }
   }
 
   /**
    * Owns the measuring stage for the current preview: web fonts can change the
-   * measured block heights, so the final measurement runs after they settle and
-   * only then does the stage unmount. Assigning a new preview restarts it.
+   * measured block heights, so the final measurement runs after they settle.
+   * The stage only unmounts after a real, non-zero measurement, because a
+   * hidden reader (minimized or inactive side panel) has no box to measure;
+   * the reader's next resize finishes the cycle instead.
    */
   private async settleDocumentFonts(): Promise<void> {
     const token = ++this.docxMeasureToken;
@@ -172,48 +188,91 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
     if (token !== this.docxMeasureToken || !this.isConnected) {
       return;
     }
-    this.measureDocumentLayout();
-    this.docxFontsSettled = true;
+    this.docxFontsReady = true;
+    this.retireDocumentStage(this.measureDocumentLayout());
+  }
+
+  /** Unmount the stage only when fonts settled and a measurement really landed. */
+  private retireDocumentStage(measured: boolean): void {
+    if (!measured || !this.docxFontsReady || this.docxStageRetired) {
+      this.scheduleDocumentMeasureRetry();
+      return;
+    }
+    this.stopDocumentMeasureRetry();
+    this.docxMeasureRetryMs = OFFICE_DOCX_MEASURE_RETRY_MS;
+    this.docxStageRetired = true;
+  }
+
+  /**
+   * A reader with no box (minimized or inactive side panel) cannot be measured
+   * and browsers do not reliably report the moment it gets one again, so the
+   * pending measurement retries until it lands and the stage retires.
+   */
+  private scheduleDocumentMeasureRetry(): void {
+    if (this.docxMeasureTimer !== null || this.docxStageRetired) {
+      return;
+    }
+    if (this.preview?.format !== "docx" || this.documentPages().length === 0) {
+      return;
+    }
+    this.docxMeasureTimer = setTimeout(() => {
+      this.docxMeasureTimer = null;
+      if (!this.isConnected) {
+        return;
+      }
+      // Back off while the reader stays boxless so a minimized panel polls
+      // rarely instead of every frame.
+      this.docxMeasureRetryMs = Math.min(
+        this.docxMeasureRetryMs * 2,
+        OFFICE_DOCX_MEASURE_RETRY_MAX_MS,
+      );
+      this.retireDocumentStage(this.measureDocumentLayout());
+    }, this.docxMeasureRetryMs);
+  }
+
+  private stopDocumentMeasureRetry(): void {
+    if (this.docxMeasureTimer !== null) {
+      clearTimeout(this.docxMeasureTimer);
+      this.docxMeasureTimer = null;
+    }
   }
 
   private documentPages() {
     return this.preview?.format === "docx" ? (this.preview.pages ?? []) : [];
   }
 
-  /**
-   * Fit width serves the widest page: one scale drives every card, so keying it
-   * on the first page would leave a landscape page wider than the reader.
-   */
+  /** Fit width serves the widest page; one scale drives every card. */
   private documentCanvasWidth(): number {
-    return this.documentPages().reduce((widest, page) => {
-      const widthPt = page.widthPt > 0 ? page.widthPt : 595.3;
-      return Math.max(widest, Math.round((widthPt * 4) / 3));
-    }, 0);
+    return officeDocxCanvasWidth(this.documentPages());
   }
 
   /** Rebind the fixed canvas and turn the latest measurement into page cards. */
   private syncDocumentCanvas(): void {
     const scroll = this.querySelector<HTMLElement>(".sidebar-office-docx__scroll");
     this.canvas.sync(scroll, this.documentCanvasWidth());
-    this.measureDocumentLayout();
+    // Provisional pass: pages render paginated before web fonts settle.
+    this.retireDocumentStage(this.measureDocumentLayout());
   }
 
-  /** Read the hidden measuring stage; a no-op while none is mounted. */
-  private measureDocumentLayout(): void {
+  /**
+   * Read the hidden measuring stage. Returns false when none is mounted or it
+   * has no layout box (hidden reader), so the caller can keep waiting.
+   */
+  private measureDocumentLayout(): boolean {
     const measure = this.querySelector<HTMLElement>(".sidebar-office-docx__measure");
     if (!measure) {
-      return;
+      return false;
     }
     const layout = measureOfficeDocxPages(measure);
     if (!layout) {
-      return;
+      return false;
     }
     const signature = JSON.stringify(layout);
-    if (signature === this.docxLayoutSignature) {
-      return;
+    if (signature !== this.docxLayoutSignature) {
+      this.docxLayoutSignature = signature;
+      this.docxLayout = layout;
     }
-    this.docxLayoutSignature = signature;
-    this.docxLayout = layout;
+    return true;
   }
 
   private zoom(action: "in" | "out" | "fit" | "actual"): void {
@@ -304,7 +363,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
         ${this.renderZoomTools()}
         <div class="sidebar-office-docx__scroll">
           ${renderDocumentPages(preview, this.docxLayout ?? fallbackOfficeDocxLayout(preview))}
-          ${this.docxFontsSettled ? nothing : renderDocumentMeasure(preview)}
+          ${this.docxStageRetired ? nothing : renderDocumentMeasure(preview)}
         </div>
       </div>
     `;

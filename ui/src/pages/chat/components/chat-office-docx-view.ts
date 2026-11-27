@@ -206,6 +206,13 @@ function pageStyle(page: DocxPage, canvasHeight: number) {
   };
 }
 
+/** Widest declared page width in CSS pixels; fit width keys on it. */
+export function officeDocxCanvasWidth(
+  pages: NonNullable<SessionFileOfficePreview["pages"]>,
+): number {
+  return pages.reduce((widest, page) => Math.max(widest, pageCanvas(page).width), 0);
+}
+
 /** Declared pagination, used until the fixed canvas has been measured. */
 export function fallbackOfficeDocxLayout(
   preview: SessionFileOfficePreview,

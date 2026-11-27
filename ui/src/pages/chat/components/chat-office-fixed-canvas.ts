@@ -24,6 +24,7 @@ function clampScale(value: number): number {
 export class OfficeFixedCanvasController {
   private host: HTMLElement | null = null;
   private observer: ResizeObserver | null = null;
+  private visibility: IntersectionObserver | null = null;
   private frame: number | null = null;
   private canvasWidth = 0;
   private scale = 1;
@@ -60,9 +61,8 @@ export class OfficeFixedCanvasController {
       this.host = host;
       // A new reader owns a new element that has not received the property yet.
       this.applied = Number.NaN;
-      if (host && typeof ResizeObserver !== "undefined") {
-        this.observer = new ResizeObserver(() => this.schedule());
-        this.observer.observe(host);
+      if (host) {
+        this.observeHost(host);
       }
     }
     this.canvasWidth = Math.max(canvasWidth, 0);
@@ -141,6 +141,7 @@ export class OfficeFixedCanvasController {
       if (this.fit) {
         this.fitToHost();
       }
+      this.onChange();
       return;
     }
     this.frame = requestAnimationFrame(() => {
@@ -148,12 +149,42 @@ export class OfficeFixedCanvasController {
       if (this.fit) {
         this.fitToHost();
       }
+      // A resize can reveal a reader that had no box at all; notify even when
+      // the scale is unchanged so the owner can finish box-dependent work.
+      this.onChange();
     });
+  }
+
+  /**
+   * ResizeObserver covers ordinary reader resizes. Chrome delivers no
+   * ResizeObserver entry when a `display: none` reader is shown again, so an
+   * IntersectionObserver reports the reader regaining its box; the owner then
+   * finishes work that needs a measurable reader (Word page pagination).
+   */
+  private observeHost(host: HTMLElement): void {
+    if (typeof ResizeObserver !== "undefined") {
+      this.observer = new ResizeObserver(() => this.schedule());
+      this.observer.observe(host);
+    }
+    if (typeof IntersectionObserver !== "undefined") {
+      this.visibility = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) {
+          return;
+        }
+        if (this.fit) {
+          this.fitToHost();
+        }
+        this.onChange();
+      });
+      this.visibility.observe(host);
+    }
   }
 
   private disconnectObserver(): void {
     this.observer?.disconnect();
     this.observer = null;
+    this.visibility?.disconnect();
+    this.visibility = null;
     if (this.frame !== null) {
       if (typeof cancelAnimationFrame !== "undefined") {
         cancelAnimationFrame(this.frame);
