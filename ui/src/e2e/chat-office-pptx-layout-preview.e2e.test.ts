@@ -151,6 +151,45 @@ const slidesPayload = {
           },
         },
         { kind: "image", xPt: 780, yPt: 360, widthPt: 100, heightPt: 100, media: 0, alt: "Logo" },
+        // Connectors are lines, including the elbow preset and a flipped label.
+        {
+          kind: "shape",
+          xPt: 500,
+          yPt: 280,
+          widthPt: 200,
+          heightPt: 0,
+          preset: "line",
+          lineColor: "#4472c4",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 720,
+          yPt: 265,
+          widthPt: 60,
+          heightPt: 70,
+          preset: "bentConnector3",
+          lineColor: "#ed7d31",
+          lineWidthPt: 1,
+        },
+        {
+          kind: "shape",
+          xPt: 500,
+          yPt: 300,
+          widthPt: 180,
+          heightPt: 40,
+          preset: "roundRect",
+          fill: "#fff2cc",
+          lineColor: "#bf9000",
+          lineWidthPt: 1,
+          flipHorizontal: true,
+          paragraphs: [
+            {
+              ...paragraph("Flipped label", 14),
+              runs: [{ text: "Flipped label", fontSizePt: 14, color: "#000000" }],
+            },
+          ],
+        },
       ],
     },
     {
@@ -404,6 +443,39 @@ describeControlUiE2e("Control UI fixed slide preview", () => {
       ).toBe(true);
       expect(await image.getAttribute("alt")).toBe("Logo");
 
+      // Connectors draw rules (rotated when diagonal), never the box around them.
+      const connectors = firstSlide.locator(".sidebar-office-pptx__connector");
+      expect(await connectors.count()).toBe(2);
+      const connectorStyles = await connectors.evaluateAll((elements) =>
+        elements.map((element) => {
+          const style = getComputedStyle(element);
+          return {
+            borderTopColor: style.borderTopColor,
+            transform: style.transform,
+            width: (element as HTMLElement).offsetWidth,
+          };
+        }),
+      );
+      expect(connectorStyles[0]).toMatchObject({
+        borderTopColor: "rgb(68, 114, 196)",
+        transform: "none",
+      });
+      expect(connectorStyles[0]?.width).toBeGreaterThan(200);
+      expect(connectorStyles[1]?.borderTopColor).toBe("rgb(237, 125, 49)");
+      expect(connectorStyles[1]?.transform).not.toBe("none");
+
+      // A flipped shape mirrors its geometry/background layer, not its text.
+      const flipped = firstSlide.locator(".sidebar-office-pptx__shape", {
+        hasText: "Flipped label",
+      });
+      const flippedStyles = await flipped.evaluate((element) => ({
+        fill: getComputedStyle(element.querySelector(".sidebar-office-pptx__shape-fill")!)
+          .transform,
+        text: getComputedStyle(element.querySelector(".sidebar-office-pptx__text")!).transform,
+      }));
+      expect(flippedStyles.fill).toContain("-1");
+      expect(flippedStyles.text).toBe("none");
+
       const closing = view.locator(".sidebar-office-pptx__slide").nth(1);
       expect(await closing.evaluate((element) => getComputedStyle(element).backgroundColor)).toBe(
         "rgb(31, 56, 100)",
@@ -453,7 +525,7 @@ describeControlUiE2e("Control UI fixed slide preview", () => {
         expect(state.slideCount).toBe(2);
         expect(state.canvasWidth).toBe(1280);
         expect(state.canvasHeight).toBe(720);
-        expect(state.shapes).toHaveLength(5);
+        expect(state.shapes).toHaveLength(6);
         expect(state.text).toContain("Merged total");
         expect(state.text).toContain("Thank you");
         // The reader owns horizontal scrolling; the sidebar itself never grows.

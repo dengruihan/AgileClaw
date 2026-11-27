@@ -1,10 +1,12 @@
 /**
  * Slide text bodies for the PPTX reader.
  *
- * A slide paragraph resolves in three layers: the master level style, the
- * paragraph's own `a:pPr`/`a:defRPr`, and each run's `a:rPr`. Resolving every
- * layer here means the payload carries the effective size, weight, color, and
- * face per run, plus the bullet label the renderer shows.
+ * A slide paragraph resolves in four layers: the master level style, the
+ * shape's `p:style/a:fontRef` (the tier PowerPoint places just above the
+ * default chain), the paragraph's own `a:pPr`/`a:defRPr`, and each run's
+ * `a:rPr`. Resolving every layer here means the payload carries the effective
+ * size, weight, color, and face per run, plus the bullet label the renderer
+ * shows.
  */
 import type {
   SessionFileOfficeParagraph,
@@ -333,7 +335,7 @@ export function readSlideTextBody(params: {
   levels: PptxTextLevel[];
   theme: PptxTheme;
   budget: CharacterBudget;
-  /** Lowest-priority layer from the shape's `p:style/a:fontRef`. */
+  /** `p:style/a:fontRef` layer: above the master level, below paragraph/run. */
   baseStyle?: PptxRunStyle;
   onEquations: (count: number) => void;
   onTruncated: () => void;
@@ -354,9 +356,11 @@ export function readSlideTextBody(params: {
     const properties = childNamed(paragraph, "pPr");
     const levelIndex = paragraphLevel(properties);
     const level = levels[levelIndex] ?? {};
+    // PowerPoint consults the shape's fontRef before the default chain: a bare
+    // gallery-shape run on an accent fill is white (lt1), not the default tx1.
     const paragraphStyle = mergeStyle(
-      baseStyle ?? {},
       runStyleFromLevel(level),
+      baseStyle ?? {},
       runStyleFromProperties(childNamed(properties, "defRPr"), theme),
     );
     const runs = readParagraphRuns(paragraph, paragraphStyle, theme, onEquations);

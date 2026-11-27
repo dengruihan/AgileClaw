@@ -1302,11 +1302,24 @@ openclaw-session-discussion {
   overflow: hidden;
 }
 
+/* Fill, border, and preset radius sit on their own layer so a flipped shape
+   mirrors its geometry while its label stays readable. */
+.sidebar-office-pptx__shape-fill {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+}
+
+/* Connectors are one rotated rule between their declared bounds. */
 .sidebar-office-pptx__connector {
+  height: 0;
+  border-top-style: solid;
   background: transparent;
 }
 
 .sidebar-office-pptx__text {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;

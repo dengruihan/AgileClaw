@@ -12,6 +12,7 @@ import { readOfficeTheme, type ThemeColorSlot } from "./office-preview-theme.js"
 import {
   attribute,
   childNamed,
+  childrenNamed,
   elements,
   resolvePackagePath,
   tryParseXml,
@@ -179,6 +180,20 @@ export function resolveDrawingColor(
     hexOrUndefined(attribute(childNamed(element, "prstClr"), "val")) ??
     hexOrUndefined(attribute(childNamed(element, "sysClr"), "lastClr"))
   );
+}
+
+/** Gradient fills collapse to their first resolvable stop. */
+export function gradientFirstStop(
+  gradient: XmlElement | undefined,
+  theme: PptxTheme,
+): string | undefined {
+  for (const stop of childrenNamed(childNamed(gradient, "gsLst"), "gs")) {
+    const color = resolveDrawingColor(stop, theme);
+    if (color) {
+      return color;
+    }
+  }
+  return undefined;
 }
 
 /** Solid fill of a shape/text property element, or `undefined` for no fill. */

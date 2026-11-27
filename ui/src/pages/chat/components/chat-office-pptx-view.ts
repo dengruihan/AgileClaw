@@ -165,15 +165,20 @@ function shapeRadius(shape: SlideShape, widthPx: number, heightPx: number): stri
   return undefined;
 }
 
-function transforms(shape: SlideShape): string | undefined {
-  const parts: string[] = [];
-  if (shape.rotationDeg) {
-    parts.push(`rotate(${shape.rotationDeg}deg)`);
+/** Rotation turns the whole shape the way PowerPoint does; mirroring does not. */
+function rotationTransform(shape: SlideShape): string | undefined {
+  return shape.rotationDeg ? `rotate(${shape.rotationDeg}deg)` : undefined;
+}
+
+/**
+ * PowerPoint flips geometry only: a mirrored callout keeps its label readable,
+ * so the mirror applies to the background/image layer, never to text.
+ */
+function flipTransform(shape: SlideShape): string | undefined {
+  if (!shape.flipHorizontal && !shape.flipVertical) {
+    return undefined;
   }
-  if (shape.flipHorizontal || shape.flipVertical) {
-    parts.push(`scale(${shape.flipHorizontal ? -1 : 1}, ${shape.flipVertical ? -1 : 1})`);
-  }
-  return parts.length > 0 ? parts.join(" ") : undefined;
+  return `scale(${shape.flipHorizontal ? -1 : 1}, ${shape.flipVertical ? -1 : 1})`;
 }
 
 function renderImage(shape: SlideShape, preview: SessionFileOfficePreview): TemplateResult {
@@ -188,27 +193,66 @@ function renderImage(shape: SlideShape, preview: SessionFileOfficePreview): Temp
     src=${media}
     alt=${shape.alt ?? ""}
     draggable="false"
+    style=${styleMap({ transform: flipTransform(shape) })}
   />`;
 }
 
-/** Thin connector shapes render as a rule instead of a stroked rectangle. */
+/** Connector presets that must draw a line, never the box around their bounds. */
+const CONNECTOR_PRESET = /^(?:line|straightConnector\d*|bentConnector\d*|curvedConnector\d*)$/u;
+
+function isConnector(shape: SlideShape): boolean {
+  return (
+    shape.kind === "shape" && shape.preset !== undefined && CONNECTOR_PRESET.test(shape.preset)
+  );
+}
+
+/**
+ * A connector is one stroked segment between its declared bounds: horizontal
+ * and vertical runs stay axis-aligned, diagonal runs rotate the same rule. Flip
+ * chooses which corner the segment starts from.
+ */
 function renderConnector(shape: SlideShape): TemplateResult {
+  const x = officePointsToPx(shape.xPt) ?? 0;
+  const y = officePointsToPx(shape.yPt) ?? 0;
   const width = Math.max(0, officePointsToPx(shape.widthPt) ?? 0);
   const height = Math.max(0, officePointsToPx(shape.heightPt) ?? 0);
+  const horizontal = height <= 1.5;
+  const vertical = width <= 1.5;
+  const horizontalRun = horizontal || (!vertical && width >= height);
+  const verticalRun = vertical && !horizontal;
+  const start = {
+    x: horizontalRun ? x : verticalRun ? x + width / 2 : shape.flipHorizontal ? x + width : x,
+    y: horizontalRun
+      ? y + height / 2
+      : verticalRun
+        ? shape.flipVertical
+          ? y + height
+          : y
+        : shape.flipVertical
+          ? y + height
+          : y,
+  };
+  const end = {
+    x: horizontalRun ? x + width : start.x,
+    y: horizontalRun
+      ? start.y
+      : verticalRun
+        ? shape.flipVertical
+          ? y
+          : y + height
+        : shape.flipVertical
+          ? y
+          : y + height,
+  };
+  const length = Math.hypot(end.x - start.x, end.y - start.y);
+  const angle = (Math.atan2(end.y - start.y, end.x - start.x) * 180) / Math.PI;
   const thickness = Math.max(1, Math.round(officePointsToPx(shape.lineWidthPt ?? 1) ?? 1));
-  const vertical = height > width;
   const style: StyleInfo = {
-    left: px(shape.xPt),
-    top: px(shape.yPt),
-    width: vertical ? undefined : px(shape.widthPt),
-    height: vertical ? px(shape.heightPt) : undefined,
-    borderLeft: vertical
-      ? `${thickness}px ${shape.lineStyle ?? "solid"} ${shape.lineColor ?? "currentcolor"}`
-      : undefined,
-    borderTop: vertical
-      ? undefined
-      : `${thickness}px ${shape.lineStyle ?? "solid"} ${shape.lineColor ?? "currentcolor"}`,
-    transform: transforms(shape),
+    left: `${start.x}px`,
+    top: `${start.y}px`,
+    width: `${Math.max(1, length)}px`,
+    borderTop: `${thickness}px ${shape.lineStyle ?? "solid"} ${shape.lineColor ?? "currentcolor"}`,
+    transform: angle === 0 ? undefined : `rotate(${angle}deg)`,
   };
   return html`<div
     class="sidebar-office-pptx__connector"
@@ -228,16 +272,18 @@ function renderShape(shape: SlideShape, preview: SessionFileOfficePreview): Temp
       ${shape.table ? renderTable(shape.table) : nothing}
     </div>`;
   }
-  if (shape.preset === "line") {
+  if (isConnector(shape)) {
     return renderConnector(shape);
   }
   const widthPx = officePointsToPx(shape.widthPt) ?? 0;
   const heightPx = officePointsToPx(shape.heightPt) ?? 0;
   const paragraphs = shape.paragraphs ?? [];
-  return html`<div
-    class="sidebar-office-pptx__shape"
-    style=${styleMap(shapeFrameStyle(shape, widthPx, heightPx))}
-  >
+  return html`<div class="sidebar-office-pptx__shape" style=${styleMap(baseFrameStyle(shape))}>
+    <div
+      class="sidebar-office-pptx__shape-fill"
+      aria-hidden="true"
+      style=${styleMap(shapeBackgroundStyle(shape, widthPx, heightPx))}
+    ></div>
     ${
       paragraphs.length > 0
         ? html`<div
@@ -263,15 +309,16 @@ function baseFrameStyle(shape: SlideShape): StyleInfo {
     top: px(shape.yPt),
     width: px(shape.widthPt),
     height: px(shape.heightPt),
-    transform: transforms(shape),
+    transform: rotationTransform(shape),
   };
 }
 
-function shapeFrameStyle(shape: SlideShape, widthPx: number, heightPx: number): StyleInfo {
+/** Fill, border, and radius live on a mirrored layer beneath the text. */
+function shapeBackgroundStyle(shape: SlideShape, widthPx: number, heightPx: number): StyleInfo {
   return {
-    ...baseFrameStyle(shape),
     backgroundColor: shape.fill,
     borderRadius: shapeRadius(shape, widthPx, heightPx),
+    transform: flipTransform(shape),
     ...(shape.lineColor
       ? {
           border: `${Math.max(1, Math.round(officePointsToPx(shape.lineWidthPt ?? 1) ?? 1))}px ${

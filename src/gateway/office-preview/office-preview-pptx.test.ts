@@ -76,15 +76,19 @@ function placeholderTree(): string {
 ${shape({ id: 3, name: "Body", placeholder: "body", idx: 1, xfrm: LAYOUT_BODY_XFRM, paragraphs: "<a:p/>" })}`;
 }
 
-const MASTER_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${spTree(placeholderTree())}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" hlink="hlink" folHlink="folHlink"/><p:txStyles>
-<p:titleStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="4400" b="1"><a:solidFill><a:schemeClr val="tx2"/></a:solidFill></a:defRPr></a:lvl1pPr></p:titleStyle>
+function masterXml(options?: { background?: string; titleColor?: string }): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldMaster xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${options?.background ?? ""}${spTree(placeholderTree())}</p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" hlink="hlink" folHlink="folHlink"/><p:txStyles>
+<p:titleStyle><a:lvl1pPr algn="ctr"><a:defRPr sz="4400" b="1"><a:solidFill><a:schemeClr val="${options?.titleColor ?? "tx2"}"/></a:solidFill></a:defRPr></a:lvl1pPr></p:titleStyle>
 <p:bodyStyle><a:lvl1pPr marL="342900" indent="-342900"><a:buChar char="&#8226;"/><a:defRPr sz="1800"/></a:lvl1pPr></p:bodyStyle>
-<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle>
+<p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="75000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:lvl1pPr></p:otherStyle>
 </p:txStyles></p:sldMaster>`;
+}
 
-const LAYOUT_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldLayout xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${spTree(placeholderTree())}</p:cSld></p:sldLayout>`;
+function layoutXml(background = ""): string {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<p:sldLayout xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld>${background}${spTree(placeholderTree())}</p:cSld></p:sldLayout>`;
+}
 
 const NOTES_SHAPE = shape({
   id: 3,
@@ -135,6 +139,15 @@ const ORPHAN_SHAPE = shape({
 
 const VIDEO_PICTURE = `<p:pic><p:nvPicPr><p:cNvPr id="12" name="Clip"/><p:cNvPicPr/><p:nvPr><a:videoFile r:link="rIdVideo"/></p:nvPr></p:nvPicPr><p:blipFill/><p:spPr><a:xfrm><a:off x="8890000" y="2540000"/><a:ext cx="1270000" cy="762000"/></a:xfrm></p:spPr></p:pic>`;
 
+const TITLE_ONLY = spTree(
+  shape({
+    id: 2,
+    name: "Title 1",
+    placeholder: "ctrTitle",
+    paragraphs: `<a:p>${run("Inherited background title")}</a:p>`,
+  }),
+);
+
 const SLIDE_ONE_BODY = spTree(
   [
     shape({
@@ -183,6 +196,8 @@ function relationshipsXml(entries: readonly OfficeFixtureRelationship[]): string
 async function buildDeckFixture(options?: {
   slideSize?: { cx: number; cy: number } | null;
   slideOneBody?: string;
+  masterXml?: string;
+  layoutXml?: string;
   extraSlides?: readonly OfficeFixtureFile[];
 }): Promise<Buffer> {
   const slideSize =
@@ -202,7 +217,7 @@ async function buildDeckFixture(options?: {
         { id: "rId3", type: `${R}/slide`, target: "slides/slide2.xml" },
       ]),
     },
-    { path: "ppt/slideMasters/slideMaster1.xml", content: MASTER_XML },
+    { path: "ppt/slideMasters/slideMaster1.xml", content: options?.masterXml ?? masterXml() },
     {
       path: "ppt/slideMasters/_rels/slideMaster1.xml.rels",
       content: relationshipsXml([
@@ -210,7 +225,7 @@ async function buildDeckFixture(options?: {
         { id: "rId2", type: `${R}/theme`, target: "../theme/theme1.xml" },
       ]),
     },
-    { path: "ppt/slideLayouts/slideLayout1.xml", content: LAYOUT_XML },
+    { path: "ppt/slideLayouts/slideLayout1.xml", content: options?.layoutXml ?? layoutXml() },
     {
       path: "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
       content: relationshipsXml([
@@ -490,8 +505,38 @@ describe("PPTX fixed slide geometry", () => {
     expect(outline?.paragraphs?.[0]?.runs?.[0]).toMatchObject({
       text: "Outline only",
       fontSizePt: 18,
+      // fontRef idx="none" leaves the master default (tx1, the real default theme).
+      color: "#000000",
+      fontName: "Aptos",
     });
-    expect(outline?.paragraphs?.[0]?.runs?.[0]?.color).toBeUndefined();
+  });
+
+  it("keeps the shape fontRef above the default theme text chain", async () => {
+    // Real Office masters style `otherStyle` with tx1 + `+mn-lt`; a bare
+    // gallery-shape run still resolves to the fontRef color (lt1 = white).
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Plain"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Plain default</a:t></a:r></a:p></p:txBody></p:sp>` +
+        `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Gallery"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="2540000"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:style><a:lnRef idx="1"><a:schemeClr val="accent1"/></a:lnRef><a:fillRef idx="3"><a:schemeClr val="accent1"/></a:fillRef><a:fontRef idx="minor"><a:schemeClr val="lt1"/></a:fontRef></p:style><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>Gallery default</a:t></a:r></a:p></p:txBody></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    // A shape without `p:style` keeps the master default chain: tx1 + Aptos.
+    expect(preview?.slides?.[0]?.shapes?.[0]?.paragraphs?.[0]?.runs?.[0]).toMatchObject({
+      text: "Plain default",
+      color: "#000000",
+      fontName: "Aptos",
+      fontSizePt: 18,
+    });
+    // The fontRef tier wins over that same default chain.
+    expect(preview?.slides?.[0]?.shapes?.[1]?.paragraphs?.[0]?.runs?.[0]).toMatchObject({
+      text: "Gallery default",
+      color: "#ffffff",
+      fontName: "Aptos",
+      fontSizePt: 18,
+    });
   });
 
   it("keeps gradient-filled custom geometry and takes its first stop", async () => {
@@ -548,5 +593,145 @@ describe("PPTX fixed slide geometry", () => {
     expect(extreme?.paragraphs?.[1]).toMatchObject({ lineSpacingPt: 1_000 });
     const wide = (preview?.slides?.[0]?.shapes ?? []).find((entry) => entry.kind === "table");
     expect(wide?.table?.columnWidthsPt).toHaveLength(64);
+  });
+
+  it("inherits slide backgrounds from the layout and master", async () => {
+    const darkMaster = {
+      background:
+        '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="dk2"/></a:solidFill><a:effectLst/></p:bgPr></p:bg>',
+      titleColor: "lt1",
+    };
+    // A dark master keeps its light title readable on the inherited paper.
+    const masterOnly = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml(darkMaster),
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(masterOnly);
+    expect(masterOnly?.slides?.[0]?.background).toBe("#44546a");
+    expect(masterOnly?.slides?.[0]?.shapes?.[0]?.paragraphs?.[0]?.runs?.[0]?.color).toBe("#ffffff");
+
+    // The layout background wins over the master, and gradients take the first stop.
+    const layoutGradient = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml(darkMaster),
+        layoutXml: layoutXml(
+          '<p:bg><p:bgPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="112233"/></a:gs><a:gs pos="100000"><a:srgbClr val="445566"/></a:gs></a:gsLst></a:gradFill></p:bgPr></p:bg>',
+        ),
+        slideOneBody: TITLE_ONLY,
+      }),
+      "pptx",
+    );
+    expectValidPreview(layoutGradient);
+    expect(layoutGradient?.slides?.[0]?.background).toBe("#112233");
+
+    // A slide background wins over both parents, gradients included.
+    const slideGradient = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml(darkMaster),
+        slideOneBody: `<p:bg><p:bgPr><a:gradFill><a:gsLst><a:gs pos="0"><a:srgbClr val="ABCDEF"/></a:gs><a:gs pos="100000"><a:srgbClr val="111111"/></a:gs></a:gsLst></a:gradFill></p:bgPr></p:bg>${TITLE_ONLY}`,
+      }),
+      "pptx",
+    );
+    expectValidPreview(slideGradient);
+    expect(slideGradient?.slides?.[0]?.background).toBe("#abcdef");
+  });
+
+  it("reports an undrawable background instead of hiding it", async () => {
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        masterXml: masterXml({
+          background:
+            '<p:bg><p:bgPr><a:solidFill><a:schemeClr val="dk2"/></a:solidFill></p:bgPr></p:bg>',
+        }),
+        slideOneBody: `<p:bg><p:bgPr><a:pattFill prst="pct5"><a:fgClr><a:srgbClr val="FF0000"/></a:fgClr><a:bgClr><a:srgbClr val="FFFFFF"/></a:bgClr></a:pattFill></p:bgPr></p:bg>${TITLE_ONLY}`,
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    // The undrawable slide background falls back to the inherited master color.
+    expect(preview?.slides?.[0]?.background).toBe("#44546a");
+    expect(preview?.omitted?.find((entry) => entry.feature === "drawings")?.count).toBe(1);
+  });
+
+  it("renders every connector preset as a line, never a box", async () => {
+    const connector = (id: number, name: string, preset: string, hidden = false): string =>
+      `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="${name}"/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>${
+        hidden
+          ? "<a:ln><a:noFill/></a:ln>"
+          : '<a:ln w="12700"><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></a:ln>'
+      }</p:spPr></p:cxnSp>`;
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({
+        slideOneBody: spTree(
+          connector(2, "Straight", "straightConnector1") +
+            connector(3, "Elbow", "bentConnector3") +
+            connector(4, "Curved", "curvedConnector3") +
+            connector(5, "Hidden", "straightConnector1", true),
+        ),
+      }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    const shapes = preview?.slides?.[0]?.shapes ?? [];
+    // The `a:ln noFill` connector paints nothing, so it is not placed.
+    expect(shapes).toHaveLength(3);
+    for (const connectorShape of shapes) {
+      expect(connectorShape).toMatchObject({
+        kind: "shape",
+        preset: "line",
+        lineColor: "#4472c4",
+        lineWidthPt: 1,
+      });
+    }
+    // Elbow and curved routing become straight segments; straight is exact.
+    expect(preview?.omitted?.find((entry) => entry.feature === "drawings")?.count).toBe(2);
+  });
+
+  it("keeps the theme line color for a width-only a:ln override", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="WidthOnly"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:ln w="38100"/></p:spPr><p:style><a:lnRef idx="2"><a:schemeClr val="accent2"/></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef></p:style></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    expect(preview?.slides?.[0]?.shapes?.[0]).toMatchObject({
+      fill: "#4472c4",
+      lineColor: "#ed7d31",
+      lineWidthPt: 3,
+    });
+  });
+
+  it("counts an undrawable gradient once per shape", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Unresolved"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:custGeom><a:avLst/><a:pathLst/></a:custGeom><a:gradFill><a:gsLst><a:gs pos="0"><a:schemeClr val="accent9"/></a:gs><a:gs pos="100000"><a:schemeClr val="accent9"/></a:gs></a:gsLst></a:gradFill></p:spPr></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    expect(preview?.slides?.[0]?.shapes).toBeUndefined();
+    expect(preview?.omitted?.find((entry) => entry.feature === "drawings")?.count).toBe(1);
+  });
+
+  it("retains flip facts while text stays readable in the renderer", async () => {
+    const body = spTree(
+      `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Flipped"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm flipH="1"><a:off x="1270000" y="1270000"/><a:ext cx="2540000" cy="1270000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="4472C4"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:r><a:rPr sz="1800"><a:solidFill><a:srgbClr val="FFFFFF"/></a:solidFill></a:rPr><a:t>Flipped text</a:t></a:r></a:p></p:txBody></p:sp>`,
+    );
+    const preview = parseOfficePreviewBuffer(
+      await buildDeckFixture({ slideOneBody: body }),
+      "pptx",
+    );
+    expectValidPreview(preview);
+    expect(preview?.slides?.[0]?.shapes?.[0]).toMatchObject({
+      kind: "shape",
+      flipHorizontal: true,
+    });
+    expect(preview?.slides?.[0]?.shapes?.[0]?.paragraphs?.[0]?.text).toBe("Flipped text");
   });
 });

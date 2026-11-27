@@ -24,6 +24,7 @@ import {
 } from "./office-preview-limits.js";
 import {
   firstRelationshipOfType,
+  gradientFirstStop,
   parsePartXml,
   pptxPoints,
   readMasterStyles,
@@ -186,19 +187,41 @@ function readSlideSize(presentation: XmlDocumentBody | undefined): {
   };
 }
 
-/** Single slide background color resolved from `p:bg`. */
-function readSlideBackground(
-  doc: XmlDocumentBody | undefined,
-  theme: PptxTheme,
-): string | undefined {
+type PartBackground = {
+  color?: string;
+  /** A declared background this reader cannot draw; reported, never silent. */
+  unsupported?: boolean;
+};
+
+/**
+ * Reads one part's `p:bg`. Slides inherit their background from the slide
+ * layout and then the master, so every part resolves the same way: solid fill,
+ * gradient first stop, or a `p:bgRef` theme fill.
+ */
+function readBackground(doc: XmlDocumentBody | undefined, theme: PptxTheme): PartBackground {
   const background = doc ? elements(doc, "p:bg")[0] : undefined;
-  const properties = childNamed(background, "bgPr");
-  const solid = resolveDrawingColor(childNamed(properties, "solidFill"), theme);
-  if (solid) {
-    return solid;
+  if (!background) {
+    return {};
   }
-  // `p:bgRef` points at a theme fill; its scheme color is the usable value.
-  return resolveDrawingColor(childNamed(background, "bgRef"), theme);
+  const properties = childNamed(background, "bgPr");
+  if (properties) {
+    const solid = resolveDrawingColor(childNamed(properties, "solidFill"), theme);
+    if (solid) {
+      return { color: solid };
+    }
+    const gradient = childNamed(properties, "gradFill");
+    if (gradient) {
+      const color = gradientFirstStop(gradient, theme);
+      return color ? { color } : { unsupported: true };
+    }
+    // Pattern, texture, and group fills are not drawable on the canvas.
+    return { unsupported: true };
+  }
+  if (childNamed(background, "bgRef")) {
+    const color = resolveDrawingColor(childNamed(background, "bgRef"), theme);
+    return color ? { color } : { unsupported: true };
+  }
+  return {};
 }
 
 /** Resolved per-slide inheritance context, cached by package part. */
@@ -206,9 +229,12 @@ class SlideInheritance {
   private readonly themes = new Map<string, PptxTheme>();
   private readonly masters = new Map<
     string,
-    { styles: PptxMasterStyles; placeholders: PptxPlaceholders }
+    { styles: PptxMasterStyles; placeholders: PptxPlaceholders; background: PartBackground }
   >();
-  private readonly layouts = new Map<string, PptxPlaceholders>();
+  private readonly layouts = new Map<
+    string,
+    { placeholders: PptxPlaceholders; background: PartBackground }
+  >();
   private readonly presentationMaster: string | undefined;
 
   constructor(
@@ -225,6 +251,11 @@ class SlideInheritance {
     theme: PptxTheme;
     masterStyles: PptxMasterStyles;
     relationships: Map<string, string>;
+    /** Slide layout background, then master background (first `p:bg` wins). */
+    layoutBackground: PartBackground;
+    masterBackground: PartBackground;
+    /** Parts whose declared background cannot be drawn; counted once each. */
+    unsupportedBackgroundKeys: string[];
   } {
     const slideRelationships = readTypedRelationships(
       this.archive,
@@ -263,20 +294,31 @@ class SlideInheritance {
       master = {
         styles: readMasterStyles(masterDoc, theme),
         placeholders: readPlaceholderFrames(masterDoc),
+        background: readBackground(masterDoc, theme),
       };
       this.masters.set(masterKey, master);
     }
-    let layoutPlaceholders = layoutPath ? this.layouts.get(layoutPath) : undefined;
-    if (layoutPath && !layoutPlaceholders) {
-      layoutPlaceholders = readPlaceholderFrames(parsePartXml(this.archive, layoutPath));
-      this.layouts.set(layoutPath, layoutPlaceholders);
+    let layout = layoutPath ? this.layouts.get(layoutPath) : undefined;
+    if (layoutPath && !layout) {
+      const layoutDoc = parsePartXml(this.archive, layoutPath);
+      layout = {
+        placeholders: readPlaceholderFrames(layoutDoc),
+        background: readBackground(layoutDoc, theme),
+      };
+      this.layouts.set(layoutPath, layout);
     }
     return {
-      layoutPlaceholders: layoutPlaceholders ?? new Map(),
+      layoutPlaceholders: layout?.placeholders ?? new Map(),
       masterPlaceholders: master.placeholders,
       theme,
       masterStyles: master.styles,
       relationships: new Map([...slideRelationships].map(([id, entry]) => [id, entry.path])),
+      layoutBackground: layout?.background ?? {},
+      masterBackground: master.background,
+      unsupportedBackgroundKeys: [
+        ...(layout?.background.unsupported && layoutPath ? [layoutPath] : []),
+        ...(master.background.unsupported ? [`master:${masterKey}`] : []),
+      ],
     };
   }
 }
@@ -303,6 +345,7 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
   const media = createSlideImageReader(archive, counter);
   const budget = new CharacterBudget(OFFICE_PREVIEW_MAX_PRESENTATION_CHARS);
   const slides: SessionFileOfficeSlide[] = [];
+  const countedBackgroundParts = new Set<string>();
   let truncated = false;
 
   for (const part of slideParts(archive)) {
@@ -321,9 +364,22 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
       .filter((line) => line.length > 0);
     if (parsed.doc) {
       const context = inheritance.resolve(part);
-      const background = readSlideBackground(parsed.doc, context.theme);
+      const slideBackground = readBackground(parsed.doc, context.theme);
+      if (slideBackground.unsupported) {
+        counter.add("drawings");
+      }
+      // Backgrounds inherit slide -> layout -> master; the first declared `p:bg`
+      // wins, and an undrawable one is reported once per owning part.
+      const background =
+        slideBackground.color ?? context.layoutBackground.color ?? context.masterBackground.color;
       if (background) {
         parsed.slide.background = background;
+      }
+      for (const key of context.unsupportedBackgroundKeys) {
+        if (!countedBackgroundParts.has(key)) {
+          countedBackgroundParts.add(key);
+          counter.add("drawings");
+        }
       }
       const shapes: SlideShape[] = readSlideShapes(elements(parsed.doc, "p:spTree")[0], {
         theme: context.theme,

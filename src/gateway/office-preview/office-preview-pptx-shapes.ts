@@ -13,6 +13,7 @@ import {
   placeholderFrame,
   resolveDrawingColor,
   solidFillColor,
+  gradientFirstStop,
   styleRoleForPlaceholder,
   themeFontFace,
   type PptxFrame,
@@ -27,7 +28,6 @@ import type { OmittedFeatureCounter } from "./office-preview-theme.js";
 import {
   attribute,
   childNamed,
-  childrenNamed,
   elementChildren,
   localName,
   type XmlElement,
@@ -129,36 +129,19 @@ function flipsOf(element: XmlElement): Pick<SlideShape, "flipHorizontal" | "flip
 
 type ShapePaint = {
   fill?: string;
-  /** Fill kinds the reader cannot draw; counted instead of silently dropping. */
+  /** Paint kinds the reader cannot draw; counted instead of silently dropping. */
   unsupportedFill?: "drawings" | "images";
+  unsupportedStroke?: boolean;
   lineColor?: string;
   lineWidthPt?: number;
   lineStyle?: SlideShape["lineStyle"];
-  /** `p:style/a:fontRef` defaults, the lowest-priority run layer. */
+  /** `p:style/a:fontRef` defaults, the tier above the master text chain. */
   textStyle?: PptxRunStyle;
 };
 
-function styleReference(
-  style: XmlElement | undefined,
-  name: "fillRef" | "lnRef" | "fontRef",
-): XmlElement | undefined {
-  return childNamed(style, name);
-}
-
-function referenceIndex(reference: XmlElement | undefined): number | undefined {
-  const index = Number.parseInt(attribute(reference, "idx") ?? "", 10);
+function referenceIndex(style: XmlElement | undefined, name: string): number | undefined {
+  const index = Number.parseInt(attribute(childNamed(style, name), "idx") ?? "", 10);
   return Number.isSafeInteger(index) && index >= 0 ? index : undefined;
-}
-
-/** Gradient fills collapse to their first resolvable stop. */
-function gradientFirstStop(gradient: XmlElement | undefined, theme: PptxTheme): string | undefined {
-  for (const stop of childrenNamed(childNamed(gradient, "gsLst"), "gs")) {
-    const color = resolveDrawingColor(stop, theme);
-    if (color) {
-      return color;
-    }
-  }
-  return undefined;
 }
 
 /** Theme line-style references map to the Office widths of 0.5/1/1.5pt. */
@@ -193,48 +176,59 @@ function readShapePaint(
   } else if (childNamed(properties, "blipFill")) {
     paint.unsupportedFill = "images";
   } else {
-    const reference = styleReference(style, "fillRef");
-    const index = referenceIndex(reference);
+    const index = referenceIndex(style, "fillRef");
     if (index !== undefined && index > 0) {
-      paint.fill = resolveDrawingColor(reference, theme);
-      if (!paint.fill) {
+      const color = resolveDrawingColor(childNamed(style, "fillRef"), theme);
+      paint.fill = color;
+      if (!color) {
         paint.unsupportedFill = "drawings";
       }
     }
   }
 
   const line = childNamed(properties, "ln");
-  if (line) {
-    if (!childNamed(line, "noFill")) {
-      const color = resolveDrawingColor(childNamed(line, "solidFill"), theme);
-      if (color) {
-        const width = pptxPoints(attribute(line, "w"));
-        const dash = attribute(childNamed(line, "prstDash"), "val");
-        paint.lineColor = color;
-        paint.lineWidthPt = Math.max(
-          0,
-          Math.min(100, Math.round((width !== undefined && width >= 0 ? width : 1) * 10) / 10),
-        );
-        if (dash === "dot" || dash === "sysDot") {
-          paint.lineStyle = "dotted";
-        } else if (dash && dash !== "solid") {
-          paint.lineStyle = "dashed";
-        }
-      }
-    }
+  const lineDash = attribute(childNamed(line, "prstDash"), "val");
+  if (line && childNamed(line, "noFill")) {
+    // An explicit `a:ln` with no fill suppresses the stroke entirely.
   } else {
-    const reference = styleReference(style, "lnRef");
-    const index = referenceIndex(reference);
-    if (index !== undefined && index > 0) {
-      const color = resolveDrawingColor(reference, theme);
-      if (color) {
-        paint.lineColor = color;
-        paint.lineWidthPt = lineRefWidth(index);
+    const explicitColor =
+      (line ? resolveDrawingColor(childNamed(line, "solidFill"), theme) : undefined) ??
+      (line ? gradientFirstStop(childNamed(line, "gradFill"), theme) : undefined);
+    if (line && !explicitColor && (childNamed(line, "pattFill") || childNamed(line, "gradFill"))) {
+      // Pattern strokes and gradients without a stop are approximated or absent.
+      paint.unsupportedStroke = true;
+    }
+    const index = referenceIndex(style, "lnRef");
+    const refColor =
+      index !== undefined && index > 0
+        ? resolveDrawingColor(childNamed(style, "lnRef"), theme)
+        : undefined;
+    const color = explicitColor ?? refColor;
+    if (color) {
+      const explicitWidth = pptxPoints(attribute(line, "w"));
+      paint.lineColor = color;
+      paint.lineWidthPt = Math.max(
+        0,
+        Math.min(
+          100,
+          Math.round(
+            (explicitWidth !== undefined && explicitWidth >= 0
+              ? explicitWidth
+              : index !== undefined && index > 0
+                ? lineRefWidth(index)
+                : 1) * 10,
+          ) / 10,
+        ),
+      );
+      if (lineDash === "dot" || lineDash === "sysDot") {
+        paint.lineStyle = "dotted";
+      } else if (lineDash && lineDash !== "solid") {
+        paint.lineStyle = "dashed";
       }
     }
   }
 
-  const fontReference = styleReference(style, "fontRef");
+  const fontReference = childNamed(style, "fontRef");
   if (fontReference) {
     const index = attribute(fontReference, "idx");
     const color = resolveDrawingColor(fontReference, theme);
@@ -310,6 +304,7 @@ function tableOf(
       const span = Number.parseInt(attribute(cell, "gridSpan") ?? "1", 10);
       const rowSpan = Number.parseInt(attribute(cell, "rowSpan") ?? "1", 10);
       const textBody = childNamed(cell, "txBody");
+      const shading = solidFillColor(properties, context.theme);
       cells.push({
         ...(Number.isSafeInteger(span) && span > 1
           ? { columnSpan: Math.max(1, Math.min(63, span)) }
@@ -317,9 +312,7 @@ function tableOf(
         ...(Number.isSafeInteger(rowSpan) && rowSpan > 1
           ? { rowSpan: Math.max(1, Math.min(255, rowSpan)) }
           : {}),
-        ...(solidFillColor(properties, context.theme)
-          ? { shading: solidFillColor(properties, context.theme)! }
-          : {}),
+        ...(shading ? { shading } : {}),
         ...borderOfCell(properties, context.theme),
         paragraphs: textBody
           ? context.readText(textBody, context.masterStyles.styles.other).paragraphs
@@ -380,11 +373,15 @@ function borderOfCell(
   };
 }
 
+/** Connector presets whose elbow/curve geometry becomes one straight segment. */
+const APPROXIMATED_CONNECTOR_PRESET = /^(?:bentConnector|curvedConnector)/u;
+
 function addShape(
   element: XmlElement,
   transform: GroupTransform,
   out: SlideShape[],
   context: PptxShapeContext,
+  isConnector = false,
 ): void {
   const placeholder = placeholderOf(element);
   const local =
@@ -403,13 +400,27 @@ function addShape(
   if (paint.unsupportedFill) {
     context.counter.add(paint.unsupportedFill);
   }
-  const preset = presetOf(properties);
+  if (paint.unsupportedStroke) {
+    context.counter.add("drawings");
+  }
+  const authoredPreset = presetOf(properties);
+  if (isConnector && authoredPreset && APPROXIMATED_CONNECTOR_PRESET.test(authoredPreset)) {
+    // Elbow/curved routing becomes one straight segment between the same ends.
+    context.counter.add("drawings");
+  }
+  // Every connector renders as a line, never as the box around its bounds.
+  const preset = isConnector ? "line" : authoredPreset;
   const text = textOfShape(element, context, placeholder, paint.textStyle);
   const paragraphs = text?.paragraphs ?? [];
   const visibleText = paragraphs.some((paragraph) => paragraph.text.trim().length > 0);
+  if (isConnector && !paint.lineColor && !visibleText) {
+    // `a:ln noFill` hides a connector's stroke; nothing is visible to draw.
+    return;
+  }
   if (!paint.fill && !paint.lineColor && !visibleText && !preset) {
-    // Nothing would paint; a custom geometry we cannot draw still gets a notice.
-    if (childNamed(properties, "custGeom")) {
+    // Nothing would paint; a custom geometry we cannot draw still gets a notice
+    // (an unsupported fill was already counted above).
+    if (!paint.unsupportedFill && childNamed(properties, "custGeom")) {
       context.counter.add("drawings");
     }
     return;
@@ -604,8 +615,10 @@ function walkContainer(
   for (const child of elementChildren(container)) {
     switch (localName(child.nodeName)) {
       case "sp":
-      case "cxnSp":
         addShape(child, transform, out, context);
+        break;
+      case "cxnSp":
+        addShape(child, transform, out, context, true);
         break;
       case "pic":
         addPicture(child, transform, out, context);
