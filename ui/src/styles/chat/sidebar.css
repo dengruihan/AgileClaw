@@ -1079,8 +1079,10 @@ openclaw-session-discussion {
   text-align: center;
 }
 
-/* The scaler reserves the on-screen box of the transformed page; margins stay
-   auto so a zoomed page is reachable by scrolling instead of clipping. */
+/* The scaler reserves the on-screen box of the transformed page and declares
+   that page's canvas size, since only the reserving element can read it; the
+   page box below inherits the same values. Margins stay auto so a zoomed page
+   is reachable by scrolling instead of clipping. */
 .sidebar-office-docx__page-scaler {
   flex: 0 0 auto;
   width: calc(var(--office-doc-page-width, 794px) * var(--office-canvas-scale, 1));
@@ -1146,7 +1148,6 @@ openclaw-session-discussion {
 .sidebar-office-docx__paragraph {
   min-width: 0;
   margin: 0;
-  white-space: pre-wrap;
 
   &[data-role="title"] {
     font-size: 24pt;
@@ -1189,6 +1190,9 @@ openclaw-session-discussion {
   color: inherit;
 }
 
+/* Authored spaces and line breaks live in the text span; the paragraph box
+   around it keeps the template's own indentation collapsible, or every
+   paragraph would start with blank lines. */
 .sidebar-office-docx__text {
   min-width: 0;
   white-space: pre-wrap;

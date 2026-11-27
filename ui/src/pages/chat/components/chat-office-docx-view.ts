@@ -188,17 +188,28 @@ function pageCanvas(page: DocxPage): { width: number; height: number; widthPt: n
 }
 
 /**
- * Fixed canvas size plus the resolved page margins. Margins stay in pixels: a
- * percentage padding resolves against the containing block, which would let a
- * zoomed page shrink its own text column and rewrap the document.
+ * Declared canvas size of one fixed page. The element that reserves the page's
+ * on-screen box declares these, so a scaled Letter or landscape page reserves
+ * its own size instead of the A4 fallback; the page box inherits them.
  */
-function pageStyle(page: DocxPage, canvasHeight: number) {
-  const { widthPt, width, height } = pageCanvas(page);
-  const margin = (points: number) =>
-    `${Math.max(0, Math.round((width * Math.max(0, points)) / widthPt))}px`;
+function pageCanvasStyle(page: DocxPage, canvasHeight: number) {
+  const { width, height } = pageCanvas(page);
   return {
     "--office-doc-page-width": `${width}px`,
     "--office-doc-page-height": `${Math.max(height, canvasHeight)}px`,
+  };
+}
+
+/**
+ * Resolved page margins in pixels. A percentage padding resolves against the
+ * containing block, which would let a zoomed page shrink its own text column
+ * and rewrap the document.
+ */
+function pageMarginStyle(page: DocxPage) {
+  const { widthPt, width } = pageCanvas(page);
+  const margin = (points: number) =>
+    `${Math.max(0, Math.round((width * Math.max(0, points)) / widthPt))}px`;
+  return {
     paddingTop: margin(page.marginTopPt),
     paddingRight: margin(page.marginRightPt),
     paddingBottom: margin(page.marginBottomPt),
@@ -281,13 +292,16 @@ export function renderDocumentPages(
       data-page-source=${card.source + 1}
     >
       <div class="sidebar-office-docx__page-label">${label}</div>
-      <div class="sidebar-office-docx__page-scaler">
+      <div
+        class="sidebar-office-docx__page-scaler"
+        style=${styleMap(pageCanvasStyle(page, card.height))}
+      >
         <article
           class="sidebar-office-docx__page"
           role="group"
           aria-label=${label}
           data-page-continued=${continued ? "true" : nothing}
-          style=${styleMap(pageStyle(page, card.height))}
+          style=${styleMap(pageMarginStyle(page))}
         >
           ${renderPageHeader(preview)}
           <div class="sidebar-office-docx__page-body">
@@ -313,7 +327,10 @@ export function renderDocumentMeasure(preview: SessionFileOfficePreview): Templa
       (page) => html`<article
         class="sidebar-office-docx__measure-page"
         data-office-docx-measure
-        style=${styleMap(pageStyle(page, pageCanvas(page).height))}
+        style=${styleMap({
+          ...pageCanvasStyle(page, pageCanvas(page).height),
+          ...pageMarginStyle(page),
+        })}
       >
         ${renderPageHeader(preview)}
         <div class="sidebar-office-docx__page-body">

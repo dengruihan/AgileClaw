@@ -42,6 +42,26 @@ function longParagraphs(label: string, count: number): string[] {
   return Array.from({ length: count }, (_, index) => `${label} paragraph ${index + 1}.`);
 }
 
+/** Authored CSS pixels of one page's declared size. */
+const PAGE_PX_PER_PT = 4 / 3;
+const A4_WIDTH_PX = Math.round(595.3 * PAGE_PX_PER_PT);
+const LETTER_WIDTH_PX = Math.round(612 * PAGE_PX_PER_PT);
+const LETTER_LANDSCAPE_WIDTH_PX = Math.round(792 * PAGE_PX_PER_PT);
+/** One 11pt line at the document's 1.35 line height, in layout pixels. */
+const LINE_BOX_PX = 11 * PAGE_PX_PER_PT * 1.35;
+
+async function waitForSettledCards(viewer: HTMLElement, count: number) {
+  await expect
+    .poll(
+      () =>
+        renderedCards(viewer) === count && !viewer.querySelector(".sidebar-office-docx__measure")
+          ? 1
+          : 0,
+      { timeout: 5_000 },
+    )
+    .toBe(1);
+}
+
 function mountViewer() {
   const panel = document.createElement("div");
   panel.className = "side-panel__panel";
@@ -216,6 +236,87 @@ it.skipIf(!browserMode)("keeps only the newest preview across rapid switches", a
     await waitForPagination(viewer, "Final document paragraph 180");
     expect(viewer.textContent).not.toContain("Discarded document");
     expect(bodyOverflow(viewer)).toBeLessThanOrEqual(2);
+  } finally {
+    panel.remove();
+  }
+});
+
+it.skipIf(!browserMode)(
+  "reserves each page's authored box for non-A4 sizes at fit width",
+  async () => {
+    const { panel, viewer } = mountViewer();
+    try {
+      viewer.preview = {
+        format: "docx",
+        pages: [
+          page(595.3, 841.9, longParagraphs("A4", 2)),
+          page(612, 792, longParagraphs("Letter", 2)),
+          page(792, 612, longParagraphs("Landscape", 2)),
+        ],
+      };
+      await waitForSettledCards(viewer, 3);
+
+      const scroller = viewer.querySelector<HTMLElement>(".sidebar-office-docx__scroll")!;
+      const scale = Number.parseFloat(
+        getComputedStyle(scroller).getPropertyValue("--office-canvas-scale"),
+      );
+      // The widest page (Landscape Letter) drives the single fit scale, so every
+      // reserved box must fit the reader without a horizontal scrollbar.
+      expect(scroller.scrollWidth).toBeLessThanOrEqual(scroller.clientWidth + 1);
+
+      const cards = [...viewer.querySelectorAll<HTMLElement>(".sidebar-office-docx__page")];
+      const canvases = [A4_WIDTH_PX, LETTER_WIDTH_PX, LETTER_LANDSCAPE_WIDTH_PX];
+      for (const [index, card] of cards.entries()) {
+        const scaler = card.parentElement!;
+        expect(scaler.classList.contains("sidebar-office-docx__page-scaler")).toBe(true);
+        const cardRect = card.getBoundingClientRect();
+        const scalerRect = scaler.getBoundingClientRect();
+        // The page keeps its authored canvas width and the scaler reserves it.
+        expect(cardRect.width).toBeCloseTo(canvases[index]! * scale, 0);
+        expect(scalerRect.width).toBeCloseTo(cardRect.width, 0);
+        expect(scalerRect.height).toBeCloseTo(cardRect.height, 0);
+      }
+      // Declared page shapes survive the scale: portrait Letter is 816x1056.
+      expect(cards[1]!.getBoundingClientRect().width).toBeGreaterThan(
+        cards[0]!.getBoundingClientRect().width,
+      );
+      expect(cards[2]!.getBoundingClientRect().width).toBeGreaterThan(
+        cards[1]!.getBoundingClientRect().width,
+      );
+      expect(
+        cards[2]!.getBoundingClientRect().width / cards[2]!.getBoundingClientRect().height,
+      ).toBeCloseTo(792 / 612, 1);
+    } finally {
+      panel.remove();
+    }
+  },
+);
+
+it.skipIf(!browserMode)("keeps a one-line paragraph to a single line box", async () => {
+  const { panel, viewer } = mountViewer();
+  try {
+    viewer.preview = {
+      format: "docx",
+      pages: [page(595.3, 841.9, ["Single authored line", "Alpha\nBeta"])],
+    };
+    await waitForSettledCards(viewer, 1);
+
+    const paragraphs = [
+      ...viewer.querySelectorAll<HTMLElement>(".sidebar-office-docx__page [data-role='body']"),
+    ];
+    expect(paragraphs).toHaveLength(2);
+    const single = paragraphs[0]!;
+    const broken = paragraphs[1]!;
+    // Template indentation must not become blank lines before the authored text.
+    expect(single.offsetHeight).toBeLessThanOrEqual(Math.round(LINE_BOX_PX * 1.5));
+    const text = single.querySelector<HTMLElement>(".sidebar-office-docx__text")!;
+    expect(
+      text.getBoundingClientRect().top - single.getBoundingClientRect().top,
+    ).toBeLessThanOrEqual(2);
+    // An authored line break still renders as a second line.
+    expect(broken.textContent).toContain("Alpha\nBeta");
+    expect(broken.offsetHeight).toBeGreaterThan(Math.round(LINE_BOX_PX * 1.5));
+    expect(broken.offsetHeight).toBeLessThan(Math.round(LINE_BOX_PX * 2.5));
   } finally {
     panel.remove();
   }
