@@ -20,6 +20,11 @@ import {
   renderDocumentPages,
 } from "./chat-office-docx-view.ts";
 import { OfficeFixedCanvasController } from "./chat-office-fixed-canvas.ts";
+import {
+  hasFixedSlideLayout,
+  officePptxCanvasWidth,
+  renderPresentationSlides,
+} from "./chat-office-pptx-view.ts";
 import { OfficeSheetGeometryController } from "./chat-office-sheet-geometry.ts";
 import { renderWorkbook } from "./chat-office-sheet-view.ts";
 
@@ -150,7 +155,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
 
   override updated(): void {
     this.sheetGeometry.sync();
-    this.syncDocumentCanvas();
+    this.syncPreviewCanvas();
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
@@ -247,11 +252,25 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   }
 
   /** Rebind the fixed canvas and turn the latest measurement into page cards. */
-  private syncDocumentCanvas(): void {
-    const scroll = this.querySelector<HTMLElement>(".sidebar-office-docx__scroll");
-    this.canvas.sync(scroll, this.documentCanvasWidth());
-    // Provisional pass: pages render paginated before web fonts settle.
-    this.retireDocumentStage(this.measureDocumentLayout());
+  private syncPreviewCanvas(): void {
+    const format = this.preview?.format;
+    if (format === "pptx") {
+      this.canvas.sync(
+        this.querySelector<HTMLElement>(".sidebar-office-pptx__scroll"),
+        officePptxCanvasWidth(this.preview),
+      );
+      return;
+    }
+    if (format === "docx") {
+      this.canvas.sync(
+        this.querySelector<HTMLElement>(".sidebar-office-docx__scroll"),
+        this.documentCanvasWidth(),
+      );
+      // Provisional pass: pages render paginated before web fonts settle.
+      this.retireDocumentStage(this.measureDocumentLayout());
+      return;
+    }
+    this.canvas.sync(null, 0);
   }
 
   /**
@@ -295,13 +314,13 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
   private renderZoomTools(): TemplateResult {
     const canvas = this.canvas;
     return html`<div
-      class="sidebar-office-docx__tools"
+      class="sidebar-office-canvas__tools"
       role="toolbar"
       aria-label=${t("chat.officePreview.zoom")}
     >
       <button
         type="button"
-        class="sidebar-office-docx__zoom"
+        class="sidebar-office-canvas__zoom"
         data-office-zoom="out"
         aria-label=${t("chat.officePreview.zoomOut")}
         title=${t("chat.officePreview.zoomOut")}
@@ -310,12 +329,12 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       >
         −
       </button>
-      <span class="sidebar-office-docx__zoom-level" data-office-zoom-level
+      <span class="sidebar-office-canvas__zoom-level" data-office-zoom-level
         >${t("chat.officePreview.zoomLevel", { percent: String(canvas.percent) })}</span
       >
       <button
         type="button"
-        class="sidebar-office-docx__zoom"
+        class="sidebar-office-canvas__zoom"
         data-office-zoom="in"
         aria-label=${t("chat.officePreview.zoomIn")}
         title=${t("chat.officePreview.zoomIn")}
@@ -326,7 +345,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       </button>
       <button
         type="button"
-        class="sidebar-office-docx__zoom sidebar-office-docx__zoom--mode"
+        class="sidebar-office-canvas__zoom sidebar-office-canvas__zoom--mode"
         data-office-zoom="fit"
         aria-pressed=${canvas.fitWidth ? "true" : "false"}
         @click=${() => this.zoom("fit")}
@@ -335,7 +354,7 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
       </button>
       <button
         type="button"
-        class="sidebar-office-docx__zoom sidebar-office-docx__zoom--mode"
+        class="sidebar-office-canvas__zoom sidebar-office-canvas__zoom--mode"
         data-office-zoom="actual"
         aria-pressed=${!canvas.fitWidth && canvas.percent === 100 ? "true" : "false"}
         @click=${() => this.zoom("actual")}
@@ -393,15 +412,23 @@ class ChatOfficePreview extends OpenClawLightDomContentsElement {
 
   private renderPresentation(preview: SessionFileOfficePreview): TemplateResult {
     const slides = preview.slides ?? [];
+    const fixed = hasFixedSlideLayout(preview);
     return html`
       <div class="sidebar-office-preview" data-office-format="pptx" aria-label=${this.label}>
         ${renderNotice(preview)} ${renderOmitted(preview)}
         ${
           slides.length === 0
             ? renderEmpty()
-            : html`<ol class="sidebar-office-preview__slides">
-                ${slides.map((slide) => renderSlide(slide))}
-              </ol>`
+            : fixed
+              ? html`<div class="sidebar-office-pptx">
+                  ${this.renderZoomTools()}
+                  <div class="sidebar-office-pptx__scroll">
+                    ${renderPresentationSlides(preview)}
+                  </div>
+                </div>`
+              : html`<ol class="sidebar-office-preview__slides">
+                  ${slides.map((slide) => renderSlide(slide))}
+                </ol>`
         }
       </div>
     `;
