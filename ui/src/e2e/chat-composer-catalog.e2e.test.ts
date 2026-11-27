@@ -85,7 +85,7 @@ suite.define(() => {
   );
 
   it.each([1280, 390])(
-    "keeps the selected model during startup, then tracks fallback and recovery at %ipx",
+    "keeps the selected model during startup, fallback runs, and recovery at %ipx",
     async (width) => {
       const artifactDir = suite.artifactDir;
       await suite.withPage(
@@ -132,7 +132,8 @@ suite.define(() => {
           const composer = page.locator(".agent-chat__input");
           const trigger = composer.locator('[data-chat-model-select="true"]');
 
-          await expect.poll(() => trigger.textContent()).toContain("Qwen 3.5 9B");
+          await expect.poll(() => trigger.textContent()).toContain(selectedModel.name);
+          expect(await trigger.textContent()).not.toContain(activeModel.name);
           await expect
             .poll(() =>
               composer
@@ -160,15 +161,33 @@ suite.define(() => {
           expect(await trigger.getAttribute("aria-busy")).toBe("true");
           await page.screenshot({ path: `${artifactDir}/pending-executing-model.png` });
           const startedAt = Date.now();
-          for (const [index, model] of [selectedModel, activeModel].entries()) {
-            const running = {
-              ...session,
-              status: "running" as const,
-              hasActiveRun: true,
-              activeModel: model.id,
-              activeModelProvider: model.provider,
-              updatedAt: startedAt + index + 1,
-            };
+          const routedModel = { id: "server-routed-2026", provider: "openai" };
+          const runningPhases = [
+            {
+              activeModel: selectedModel.id,
+              activeModelProvider: selectedModel.provider,
+              shot: "primary",
+            },
+            {
+              activeModel: activeModel.id,
+              activeModelProvider: activeModel.provider,
+              shot: "fallback",
+            },
+            {
+              activeModel: routedModel.id,
+              activeModelProvider: routedModel.provider,
+              shot: "unresolved",
+            },
+          ];
+          const runningRows = runningPhases.map((phase, index) => ({
+            ...session,
+            status: "running" as const,
+            hasActiveRun: true,
+            activeModel: phase.activeModel,
+            activeModelProvider: phase.activeModelProvider,
+            updatedAt: startedAt + index + 1,
+          }));
+          for (const [index, running] of runningRows.entries()) {
             await gateway.setSessionsListResponse({
               count: 1,
               defaults: { model: selectedModel.id, modelProvider: selectedModel.provider },
@@ -194,26 +213,50 @@ suite.define(() => {
                 activeRunState: { active: true },
               }),
             });
-            await expect.poll(() => trigger.textContent()).toContain(model.name);
             await expect.poll(() => trigger.getAttribute("aria-busy")).toBe("false");
             expect(await trigger.locator(".btn__spinner").count()).toBe(0);
+            const phase = runningPhases[index];
+            if (!phase) {
+              throw new Error("Expected the routed model phase");
+            }
+            if (phase.shot === "unresolved") {
+              await expect.poll(() => trigger.textContent()).toContain("Models unavailable");
+              const triggerText = await trigger.textContent();
+              const triggerLabel = await trigger.getAttribute("aria-label");
+              expect(triggerText).not.toContain(routedModel.id);
+              expect(triggerLabel).not.toContain(routedModel.id);
+              expect(triggerLabel).not.toContain(`${routedModel.provider}/${routedModel.id}`);
+              expect(await trigger.getAttribute("title")).toBeNull();
+            } else {
+              await expect.poll(() => trigger.textContent()).toContain(selectedModel.name);
+              expect(await trigger.textContent()).not.toContain(
+                phase.shot === "fallback" ? activeModel.name : "Model pending",
+              );
+            }
             expect(
               await composer
                 .locator('[data-chat-model-option="codex/gpt-5.5"]')
                 .getAttribute("aria-selected"),
             ).toBe("true");
             await page.screenshot({
-              path: `${artifactDir}/running-${index === 0 ? "primary" : "fallback"}-model.png`,
+              path: `${artifactDir}/running-${phase.shot}-model.png`,
             });
           }
+          const runningFallback = runningRows[1];
+          if (!runningFallback) {
+            throw new Error("Expected the fallback running row");
+          }
+          await gateway.setSessionsListResponse({
+            count: 1,
+            defaults: { model: selectedModel.id, modelProvider: selectedModel.provider },
+            sessions: [runningFallback],
+            path: "",
+            ts: runningFallback.updatedAt,
+          });
           await page.reload();
           await gateway.waitForRequest("chat.startup");
-          await expect.poll(() => trigger.textContent()).toContain(activeModel.name);
-          expect(
-            await composer
-              .locator('[data-chat-model-option="codex/gpt-5.5"]')
-              .getAttribute("aria-selected"),
-          ).toBe("true");
+          await expect.poll(() => trigger.textContent()).toContain(selectedModel.name);
+          expect(await trigger.textContent()).not.toContain(activeModel.name);
           await page.screenshot({ path: `${artifactDir}/refreshed-fallback-model.png` });
           const recovered = {
             ...session,
