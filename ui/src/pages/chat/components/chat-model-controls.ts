@@ -291,14 +291,20 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
           activeSession?.activeModelProvider,
           props.modelCatalog,
         );
+  const observedActiveModelEntry = catalog.entry(observedActiveModelValue);
   const activeModelValue =
-    !catalogOwnsChoices || (!retired && catalog.entry(observedActiveModelValue))
-      ? observedActiveModelValue
-      : "";
+    !catalogOwnsChoices || (!retired && observedActiveModelEntry) ? observedActiveModelValue : "";
   const modelPending = executionPending && !activeModelValue;
   // A pending execution does not erase the saved choice or reuse the previous
-  // turn's fallback. Keep the choice visible until this run identifies its model.
-  const triggerModelValue = activeModelValue || currentOverride;
+  // turn's fallback. The saved choice owns the trigger label even once this run
+  // identifies its model; an identity the catalog cannot resolve never becomes
+  // visible copy and reports through the existing catalog error instead.
+  const observedModelUnresolved =
+    executionPending &&
+    Boolean(observedActiveModelValue) &&
+    !catalogOwnsChoices &&
+    observedActiveModelEntry === undefined;
+  const triggerModelValue = currentOverride;
   const modelStarting =
     modelPending && Boolean(triggerModelValue || (!props.modelSelectionLocked && defaultModel));
   const defaultProviderHint = props.sessionsResult?.defaults?.modelProvider ?? "";
@@ -484,8 +490,8 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
   ) {
     activeModelOption.contextTokens = activeSession.contextTokens;
   }
-  // Observed models lack runtime provenance, even when a harness fallback keeps the same model.
-  const triggerRuntime = activeModelValue ? null : (selectedAgentRuntime ?? defaultRuntime);
+  // The trigger names the saved selection, so its runtime provenance applies too.
+  const triggerRuntime = selectedAgentRuntime ?? defaultRuntime;
   // A lock prevents model changes; the concrete selection still owns its label.
   // Without a selection, neither the runtime nor the agent default identifies it.
   const committedModelLabel =
@@ -581,11 +587,13 @@ export function renderChatModelControls(props: ChatModelControlsProps) {
         triggerStarting: modelStarting,
         triggerStatusLabel: modelStarting
           ? undefined
-          : modelPending
-            ? t("chat.modelControls.modelPending")
-            : props.modelSelectionLocked
-              ? undefined
-              : catalogTriggerStatus,
+          : observedModelUnresolved
+            ? t("chat.modelControls.modelsUnavailable")
+            : modelPending
+              ? t("chat.modelControls.modelPending")
+              : props.modelSelectionLocked
+                ? undefined
+                : catalogTriggerStatus,
         triggerLoading:
           !modelPending &&
           !props.modelSelectionLocked &&

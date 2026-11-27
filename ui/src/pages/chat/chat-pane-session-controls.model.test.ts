@@ -83,6 +83,7 @@ describe("chat pane model controls", () => {
       { id: "primary", name: "Primary", provider: "example" },
       { id: "fallback", name: "Fallback", provider: "example" },
     ];
+    state.chatModelCatalogInitialized = true;
     await sessions.refresh({ agentId: "main", force: true });
     state.sessionsResult = sessions.state.result;
     state.sessionsResultAgentId = sessions.state.agentId;
@@ -148,37 +149,42 @@ describe("chat pane model controls", () => {
     observe("current-run", "primary", 3);
     expect(draw()).toContain("Primary");
     observe("current-run", "fallback", 4);
-    expect(draw()).toContain("Fallback");
+    // A resolvable run model stays a run fact; the saved selection owns the label.
+    expect(draw()).toContain("Primary");
+    observe("current-run", "unlisted-alias", 5);
+    const unresolved = draw();
+    expect(unresolved).toContain("Models unavailable");
+    expect(unresolved).not.toContain("unlisted-alias");
     observe("previous-run", "primary", 1);
-    expect(draw()).toContain("Fallback");
-    observe("elsewhere-run", "primary", 5, "agent:main:elsewhere");
-    expect(draw()).toContain("Fallback");
-    observe("current-run", null, 6);
+    expect(draw()).toContain("Models unavailable");
+    observe("elsewhere-run", "primary", 6, "agent:main:elsewhere");
+    expect(draw()).toContain("Models unavailable");
+    observe("current-run", null, 7);
     expect(draw(true)).toContain("Primary");
-    observe("current-run", "fallback", 7);
-    expect(draw()).toContain("Fallback");
-    adoptStartedChatRun(state, "replacement-run", 8);
+    observe("current-run", "fallback", 8);
+    expect(draw()).toContain("Primary");
+    adoptStartedChatRun(state, "replacement-run", 9);
     expect(draw(true)).toContain("Primary");
-    observe("replacement-run", "primary", 9);
+    observe("replacement-run", "primary", 10);
     expect(draw()).toContain("Primary");
     state.chatSending = true;
     state.chatQueue = [
       {
         id: "next-send",
         text: "Continue",
-        createdAt: 10,
+        createdAt: 11,
         sendState: "sending",
         sendRunId: "next-run",
       },
     ];
-    observe("next-run", "fallback", 10);
+    observe("next-run", "fallback", 11);
     // A delayed event can carry the latest session projection but an older emitter ID.
-    observe("replacement-run", "fallback", 10);
+    observe("replacement-run", "fallback", 11);
     expect(draw(true)).toContain("Primary");
-    adoptStartedChatRun(state, "next-run", 11);
+    adoptStartedChatRun(state, "next-run", 12);
     state.chatSending = false;
-    expect(draw()).toContain("Fallback");
-    observe("next-run", "primary", 12);
+    expect(draw()).toContain("Primary");
+    observe("next-run", "primary", 13);
     expect(draw()).toContain("Primary");
     vi.stubGlobal("sessionStorage", window.sessionStorage);
     onTestFinished(() => {
@@ -189,7 +195,7 @@ describe("chat pane model controls", () => {
     const steer = {
       id: "held-steer",
       text: "Keep going",
-      createdAt: 13,
+      createdAt: 14,
       sendRunId: "steer-operation",
       sessionKey: state.sessionKey,
       agentId: "main",
@@ -213,12 +219,12 @@ describe("chat pane model controls", () => {
       ),
     );
     expect(state.chatSending).toBe(true);
-    observe("next-run", "fallback", 13);
+    observe("next-run", "fallback", 14);
     steerAck.resolve({ runId: steer.sendRunId, status: "started", messageSeq: 1 });
     await steering;
     await vi.waitFor(() => expect(state.chatSending).toBe(false));
     expect(state.chatRunId).toBe("next-run");
-    expect(draw()).toContain("Fallback");
+    expect(draw()).toContain("Primary");
     reconcileChatRunLifecycle(state, { clearLocalRun: true, clearChatStream: true });
     expect(getChatModelObservedRunId(state, state.sessionsResult?.sessions[0])).toBeUndefined();
   });

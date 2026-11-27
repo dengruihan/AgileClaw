@@ -3744,24 +3744,6 @@ describe("chat welcome", () => {
 });
 
 describe("chat model controls", () => {
-  it("preserves the executing provider when its model id exists in another provider's catalog", () => {
-    const { state } = createChatHeaderState({
-      model: "shared",
-      modelProvider: "example",
-      models: [{ id: "shared", name: "Configured model", provider: "example" }],
-    });
-    state.chatRunId = "current-run";
-    Object.assign(expectDefined(state.sessionsResult?.sessions[0], "selected session"), {
-      hasActiveRun: true,
-      activeRunIds: ["current-run"],
-      activeModel: "shared",
-      activeModelProvider: "fallback-provider",
-    });
-    const trigger = getChatModelSelect(renderModelControls(state));
-    expect(trigger.textContent).toContain("fallback-provider/shared");
-    expect(trigger.dataset.chatSelectValue).toBe("example/shared");
-  });
-
   it.each([
     {
       name: "previous run without exact identities",
