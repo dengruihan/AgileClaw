@@ -163,13 +163,6 @@ export const SessionFileOfficeBlockSchema = closedObject({
   text: Type.String({ maxLength: 8_000 }),
 });
 
-/** One slide outline of a presentation preview. */
-export const SessionFileOfficeSlideSchema = closedObject({
-  index: Type.Integer({ minimum: 1 }),
-  title: Type.Optional(Type.String({ maxLength: 512 })),
-  lines: Type.Array(Type.String({ maxLength: 2_000 }), { maxItems: 80 }),
-});
-
 /** One styled text run inside a document paragraph. */
 const SessionFileOfficeRunSchema = closedObject({
   text: Type.String({ maxLength: 8_000 }),
@@ -251,6 +244,69 @@ const SessionFileOfficeDocBlockSchema = Type.Union([
   SessionFileOfficeImageSchema,
 ]);
 
+/** Declared slide canvas size shared by every slide of one presentation. */
+const SessionFileOfficeSlideSizeSchema = closedObject({
+  widthPt: Type.Number({ minimum: 1, maximum: 4_000 }),
+  heightPt: Type.Number({ minimum: 1, maximum: 4_000 }),
+});
+
+const OfficeSlideLineStyleSchema = Type.Union([
+  Type.Literal("solid"),
+  Type.Literal("dashed"),
+  Type.Literal("dotted"),
+  Type.Literal("double"),
+]);
+
+/**
+ * One absolutely placed slide shape, box coordinates in slide points.
+ *
+ * Text shapes carry resolved paragraphs, tables carry the document table grid,
+ * and pictures carry an index into `SessionFileOfficePreview.media`. Anything
+ * the reader cannot place or draw is reported through `omitted` instead.
+ */
+const SessionFileOfficeSlideShapeSchema = closedObject({
+  kind: Type.Union([Type.Literal("shape"), Type.Literal("table"), Type.Literal("image")]),
+  /** Position can sit just outside the canvas, as declared by the slide. */
+  xPt: Type.Number({ minimum: -4_000, maximum: 4_000 }),
+  yPt: Type.Number({ minimum: -4_000, maximum: 4_000 }),
+  widthPt: Type.Number({ minimum: 0, maximum: 8_000 }),
+  heightPt: Type.Number({ minimum: 0, maximum: 8_000 }),
+  rotationDeg: Type.Optional(Type.Number({ minimum: -360, maximum: 360 })),
+  flipHorizontal: Type.Optional(Type.Boolean()),
+  flipVertical: Type.Optional(Type.Boolean()),
+  /** Preset geometry name such as `rect`, `roundRect`, or `ellipse`. */
+  preset: Type.Optional(Type.String({ maxLength: 32 })),
+  fill: Type.Optional(OfficeHexColorSchema),
+  lineColor: Type.Optional(OfficeHexColorSchema),
+  lineWidthPt: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  lineStyle: Type.Optional(OfficeSlideLineStyleSchema),
+  paragraphs: Type.Optional(Type.Array(SessionFileOfficeParagraphSchema, { maxItems: 40 })),
+  verticalAnchor: Type.Optional(OfficeVerticalAlignmentSchema),
+  /** Text-box insets in points. */
+  insetTopPt: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  insetRightPt: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  insetBottomPt: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  insetLeftPt: Type.Optional(Type.Number({ minimum: 0, maximum: 100 })),
+  /** `false` keeps single-line text on one line (`a:bodyPr wrap="none"`). */
+  wrapText: Type.Optional(Type.Boolean()),
+  /** Declared auto-shrink factor from `a:normAutofit`; `100` keeps authored sizes. */
+  textScalePct: Type.Optional(Type.Integer({ minimum: 10, maximum: 100 })),
+  table: Type.Optional(SessionFileOfficeTableSchema),
+  /** Index into `SessionFileOfficePreview.media`. */
+  media: Type.Optional(Type.Integer({ minimum: 0, maximum: 23 })),
+  alt: Type.Optional(Type.String({ maxLength: 512 })),
+});
+
+/** One slide of a presentation preview: outline text plus placed shapes. */
+export const SessionFileOfficeSlideSchema = closedObject({
+  index: Type.Integer({ minimum: 1 }),
+  title: Type.Optional(Type.String({ maxLength: 512 })),
+  lines: Type.Array(Type.String({ maxLength: 2_000 }), { maxItems: 80 }),
+  background: Type.Optional(OfficeHexColorSchema),
+  /** Placed shapes in z-order; absent when the slide carries no usable geometry. */
+  shapes: Type.Optional(Type.Array(SessionFileOfficeSlideShapeSchema, { maxItems: 200 })),
+});
+
 /** One approximate page card of a document preview. */
 const SessionFileOfficePageSchema = closedObject({
   widthPt: Type.Number({ minimum: 1, maximum: 2_000 }),
@@ -268,12 +324,14 @@ const SessionFileOfficeOmittedFeatureSchema = Type.Union([
   Type.Literal("comments"),
   Type.Literal("conditionalFormatting"),
   Type.Literal("dataValidation"),
+  Type.Literal("diagrams"),
   Type.Literal("drawings"),
   Type.Literal("embeddedObjects"),
   Type.Literal("equations"),
   Type.Literal("exactPagination"),
   Type.Literal("floatingObjects"),
   Type.Literal("images"),
+  Type.Literal("media"),
   Type.Literal("multipleSections"),
   Type.Literal("pivotTables"),
 ]);
@@ -293,6 +351,8 @@ export const SessionFileOfficePreviewSchema = closedObject({
   sheets: Type.Optional(Type.Array(SessionFileOfficeSheetSchema, { maxItems: 20 })),
   blocks: Type.Optional(Type.Array(SessionFileOfficeBlockSchema, { maxItems: 2_000 })),
   slides: Type.Optional(Type.Array(SessionFileOfficeSlideSchema, { maxItems: 100 })),
+  /** Declared slide canvas for presentation previews; every slide shares it. */
+  slideSize: Type.Optional(SessionFileOfficeSlideSizeSchema),
   /** Approximate page cards for word-processing documents. */
   pages: Type.Optional(Type.Array(SessionFileOfficePageSchema, { maxItems: 50 })),
   /** Unique inline images referenced by page image blocks. */

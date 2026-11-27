@@ -1,10 +1,16 @@
 /**
- * Read-only PPTX slide outline parser.
+ * Read-only PPTX reader: slide outlines plus fixed slide geometry.
  *
- * Presentations keep their existing outline contract: ordered slides with a
- * title and visible text lines. Geometry, themes, and media are intentionally
- * out of scope for the text outline; slide order follows `p:sldIdLst` and falls
- * back to numeric part order, and external relationships are never read.
+ * Presentations keep their ordered outline (title and visible text lines) for
+ * text readers, and additionally carry the declared slide canvas, background,
+ * and absolutely placed shapes so the Control UI can render the slide layout
+ * once and only scale it. OOXML places almost everything outside the slide part
+ * itself, so the reader resolves the slide layout and master placeholders, the
+ * master text styles, and the package theme before reading `p:spTree`.
+ *
+ * This is not PowerPoint's layout engine: charts, SmartArt, embedded objects,
+ * audio/video, and shapes without a resolvable box are reported through
+ * `omitted`, never silently dropped or reflowed into a text outline.
  */
 import type {
   SessionFileOfficePreview,
@@ -17,18 +23,41 @@ import {
   OFFICE_PREVIEW_MAX_SLIDES,
 } from "./office-preview-limits.js";
 import {
+  firstRelationshipOfType,
+  parsePartXml,
+  pptxPoints,
+  readMasterStyles,
+  readPlaceholderFrames,
+  readPptxTheme,
+  readTypedRelationships,
+  relationshipsPathFor,
+  resolveDrawingColor,
+  type PptxMasterStyles,
+  type PptxPlaceholders,
+  type PptxTheme,
+} from "./office-preview-pptx-master.js";
+import { createSlideImageReader } from "./office-preview-pptx-media.js";
+import { readSlideShapes, type SlideShape } from "./office-preview-pptx-shapes.js";
+import { readSlideTextBody } from "./office-preview-pptx-text.js";
+import { OmittedFeatureCounter } from "./office-preview-theme.js";
+import {
   attribute,
   CharacterBudget,
+  childNamed,
   cleanText,
   elements,
-  readRelationships,
   truncate,
   tryParseXml,
+  type XmlDocumentBody,
   type XmlElement,
 } from "./office-preview-xml.js";
 import type { OfficeZipArchive } from "./office-preview-zip.js";
 
 type SlideText = { lines: string[]; truncated: boolean };
+
+/** PowerPoint's default canvas when a package declares no `p:sldSz`. */
+const DEFAULT_SLIDE_WIDTH_PT = 720;
+const DEFAULT_SLIDE_HEIGHT_PT = 540;
 
 function shapeLines(shape: XmlElement): SlideText {
   const lines: string[] = [];
@@ -59,7 +88,7 @@ function isTitleShape(shape: XmlElement): boolean {
 function parseSlide(
   xml: string,
   index: number,
-): { slide: SessionFileOfficeSlide; truncated: boolean } {
+): { slide: SessionFileOfficeSlide; truncated: boolean; doc?: XmlDocumentBody } {
   const doc = tryParseXml(xml);
   if (!doc) {
     return { slide: { index, lines: [] }, truncated: true };
@@ -91,6 +120,7 @@ function parseSlide(
       lines: visibleLines.slice(0, OFFICE_PREVIEW_MAX_SLIDE_LINES),
     },
     truncated,
+    doc,
   };
 }
 
@@ -99,7 +129,11 @@ function slideParts(archive: OfficeZipArchive): string[] {
   if (presentationXml) {
     const doc = tryParseXml(presentationXml);
     if (doc) {
-      const relationships = readRelationships(archive, "ppt/_rels/presentation.xml.rels", "ppt/");
+      const relationships = readSlideRelationshipTargets(
+        archive,
+        "ppt/_rels/presentation.xml.rels",
+        "ppt/",
+      );
       const parts: string[] = [];
       for (const slideId of elements(doc, "p:sldId")) {
         const target = relationships.get(attribute(slideId, "r:id") ?? "");
@@ -123,14 +157,154 @@ function slideParts(archive: OfficeZipArchive): string[] {
     });
 }
 
+/** Id -> in-package path for the presentation part's slide relationships. */
+function readSlideRelationshipTargets(
+  archive: OfficeZipArchive,
+  relsPath: string,
+  baseDir: string,
+): Map<string, string> {
+  return new Map(
+    [...readTypedRelationships(archive, relsPath, baseDir)].map(([id, entry]) => [id, entry.path]),
+  );
+}
+
+/** Declared canvas from `p:sldSz`, defaulting to PowerPoint's 4:3 page. */
+function readSlideSize(presentation: XmlDocumentBody | undefined): {
+  widthPt: number;
+  heightPt: number;
+} {
+  const size = presentation ? elements(presentation, "p:sldSz")[0] : undefined;
+  const width = pptxPoints(attribute(size, "cx"));
+  const height = pptxPoints(attribute(size, "cy"));
+  return {
+    widthPt:
+      width && width > 0 ? Math.min(4_000, Math.round(width * 10) / 10) : DEFAULT_SLIDE_WIDTH_PT,
+    heightPt:
+      height && height > 0
+        ? Math.min(4_000, Math.round(height * 10) / 10)
+        : DEFAULT_SLIDE_HEIGHT_PT,
+  };
+}
+
+/** Single slide background color resolved from `p:bg`. */
+function readSlideBackground(
+  doc: XmlDocumentBody | undefined,
+  theme: PptxTheme,
+): string | undefined {
+  const background = doc ? elements(doc, "p:bg")[0] : undefined;
+  const properties = childNamed(background, "bgPr");
+  const solid = resolveDrawingColor(childNamed(properties, "solidFill"), theme);
+  if (solid) {
+    return solid;
+  }
+  // `p:bgRef` points at a theme fill; its scheme color is the usable value.
+  return resolveDrawingColor(childNamed(background, "bgRef"), theme);
+}
+
+/** Resolved per-slide inheritance context, cached by package part. */
+class SlideInheritance {
+  private readonly themes = new Map<string, PptxTheme>();
+  private readonly masters = new Map<
+    string,
+    { styles: PptxMasterStyles; placeholders: PptxPlaceholders }
+  >();
+  private readonly layouts = new Map<string, PptxPlaceholders>();
+  private readonly presentationMaster: string | undefined;
+
+  constructor(
+    private readonly archive: OfficeZipArchive,
+    presentationRels: ReadonlyMap<string, { path: string; type: string }>,
+  ) {
+    this.presentationMaster = firstRelationshipOfType(presentationRels, "slideMaster");
+  }
+
+  /** Layout placeholder boxes plus master styles and theme for one slide part. */
+  resolve(slidePart: string): {
+    layoutPlaceholders: PptxPlaceholders;
+    masterPlaceholders: PptxPlaceholders;
+    theme: PptxTheme;
+    masterStyles: PptxMasterStyles;
+    relationships: Map<string, string>;
+  } {
+    const slideRelationships = readTypedRelationships(
+      this.archive,
+      relationshipsPathFor(slidePart),
+      baseDirOf(slidePart),
+    );
+    const layoutPath = firstRelationshipOfType(slideRelationships, "slideLayout");
+    const layoutRelationships = layoutPath
+      ? readTypedRelationships(
+          this.archive,
+          relationshipsPathFor(layoutPath),
+          baseDirOf(layoutPath),
+        )
+      : new Map<string, { path: string; type: string }>();
+    const masterPath =
+      firstRelationshipOfType(layoutRelationships, "slideMaster") ?? this.presentationMaster;
+    const masterRelationships = masterPath
+      ? readTypedRelationships(
+          this.archive,
+          relationshipsPathFor(masterPath),
+          baseDirOf(masterPath),
+        )
+      : new Map<string, { path: string; type: string }>();
+    const themePath =
+      firstRelationshipOfType(masterRelationships, "theme") ?? "ppt/theme/theme1.xml";
+    const masterDoc = parsePartXml(this.archive, masterPath);
+    const masterKey = masterPath ?? "";
+    const themeKey = `${themePath}|${masterKey}`;
+    let theme = this.themes.get(themeKey);
+    if (!theme) {
+      theme = readPptxTheme(this.archive, themePath, masterDoc);
+      this.themes.set(themeKey, theme);
+    }
+    let master = this.masters.get(masterKey);
+    if (!master) {
+      master = {
+        styles: readMasterStyles(masterDoc, theme),
+        placeholders: readPlaceholderFrames(masterDoc),
+      };
+      this.masters.set(masterKey, master);
+    }
+    let layoutPlaceholders = layoutPath ? this.layouts.get(layoutPath) : undefined;
+    if (layoutPath && !layoutPlaceholders) {
+      layoutPlaceholders = readPlaceholderFrames(parsePartXml(this.archive, layoutPath));
+      this.layouts.set(layoutPath, layoutPlaceholders);
+    }
+    return {
+      layoutPlaceholders: layoutPlaceholders ?? new Map(),
+      masterPlaceholders: master.placeholders,
+      theme,
+      masterStyles: master.styles,
+      relationships: new Map([...slideRelationships].map(([id, entry]) => [id, entry.path])),
+    };
+  }
+}
+
+function baseDirOf(partPath: string): string {
+  const slash = partPath.lastIndexOf("/");
+  return slash < 0 ? "" : partPath.slice(0, slash + 1);
+}
+
 /** Reads one presentation package; null means the package is not a presentation. */
 export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficePreview | null {
   if (!archive.has("ppt/presentation.xml") && !archive.has("ppt/slides/slide1.xml")) {
     return null;
   }
+  const presentation = parsePartXml(archive, "ppt/presentation.xml");
+  const slideSize = readSlideSize(presentation);
+  const presentationRelationships = readTypedRelationships(
+    archive,
+    "ppt/_rels/presentation.xml.rels",
+    "ppt/",
+  );
+  const inheritance = new SlideInheritance(archive, presentationRelationships);
+  const counter = new OmittedFeatureCounter();
+  const media = createSlideImageReader(archive, counter);
   const budget = new CharacterBudget(OFFICE_PREVIEW_MAX_PRESENTATION_CHARS);
   const slides: SessionFileOfficeSlide[] = [];
   let truncated = false;
+
   for (const part of slideParts(archive)) {
     if (slides.length >= OFFICE_PREVIEW_MAX_SLIDES) {
       truncated = true;
@@ -145,10 +319,51 @@ export function parsePresentation(archive: OfficeZipArchive): SessionFileOfficeP
     parsed.slide.lines = parsed.slide.lines
       .map((line) => budget.take(line, OFFICE_PREVIEW_MAX_SLIDE_LINE_CHARS))
       .filter((line) => line.length > 0);
+    if (parsed.doc) {
+      const context = inheritance.resolve(part);
+      const background = readSlideBackground(parsed.doc, context.theme);
+      if (background) {
+        parsed.slide.background = background;
+      }
+      const shapes: SlideShape[] = readSlideShapes(elements(parsed.doc, "p:spTree")[0], {
+        theme: context.theme,
+        masterStyles: context.masterStyles,
+        layoutPlaceholders: context.layoutPlaceholders,
+        masterPlaceholders: context.masterPlaceholders,
+        relationships: context.relationships,
+        media,
+        counter,
+        onTruncated: () => {
+          truncated = true;
+        },
+        onEquations: (count: number) => counter.add("equations", count),
+        readText: (txBody, levels) =>
+          readSlideTextBody({
+            txBody,
+            levels,
+            theme: context.theme,
+            budget,
+            onEquations: (count) => counter.add("equations", count),
+            onTruncated: () => {
+              truncated = true;
+            },
+          }),
+      });
+      if (shapes.length > 0) {
+        parsed.slide.shapes = shapes;
+      }
+    }
     slides.push(parsed.slide);
   }
   if (budget.exhausted) {
     truncated = true;
   }
-  return { format: "pptx", slides, ...(truncated ? { truncated: true } : {}) };
+  return {
+    format: "pptx",
+    slides,
+    slideSize,
+    ...(media.media.length > 0 ? { media: media.media } : {}),
+    ...(truncated ? { truncated: true } : {}),
+    ...(counter.list().length > 0 ? { omitted: counter.list() } : {}),
+  };
 }
