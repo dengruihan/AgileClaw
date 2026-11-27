@@ -494,7 +494,10 @@ function sampleDocumentCanvas() {
   const bodies = [...reader.querySelectorAll<HTMLElement>(".sidebar-office-docx__page-body")];
   const pageRect = pages[0]!.getBoundingClientRect();
   return {
-    canvasWidth: Number.parseFloat(pages[0]!.style.getPropertyValue("--office-doc-page-width")),
+    // The scaler reserves the page box and declares its canvas size.
+    canvasWidth: Number.parseFloat(
+      pages[0]!.parentElement!.style.getPropertyValue("--office-doc-page-width"),
+    ),
     paragraphHeight: paragraph.offsetHeight,
     maxBodyOverflow: Math.max(0, ...bodies.map((body) => body.scrollHeight - body.clientHeight)),
     overflowX: reader.scrollWidth - reader.clientWidth,

@@ -316,8 +316,11 @@ it("renders approximate Word pages with styles, tables, media, and notices", asy
   const viewer = panel.querySelector("openclaw-chat-office-preview")!;
   const pages = [...viewer.querySelectorAll<HTMLElement>(".sidebar-office-docx__page")];
   expect(pages).toHaveLength(2);
-  // A4 width in points converts to the browser's 794px page card.
-  expect(pages[0]?.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
+  // A4 width in points converts to the browser's 794px page card. The scaler
+  // reserves that box and declares the canvas size the page inherits.
+  const scaler = pages[0]?.parentElement;
+  expect(scaler?.classList.contains("sidebar-office-docx__page-scaler")).toBe(true);
+  expect(scaler?.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
   // 72pt margins on a 595.3pt page stay 96px at any zoom level.
   expect(pages[0]?.style.paddingTop).toBe("96px");
   expect(pages[0]?.style.paddingLeft).toBe("96px");
@@ -407,8 +410,11 @@ it("lays Word pages on one fixed canvas with fit, actual, and zoom controls", as
   const scroller = viewer.querySelector<HTMLElement>(".sidebar-office-docx__scroll")!;
   const page = viewer.querySelector<HTMLElement>(".sidebar-office-docx__page")!;
   // The canvas keeps the document's own page box; the reader only scales it.
-  expect(page.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
-  expect(page.style.getPropertyValue("--office-doc-page-height")).toBe("1123px");
+  // The scaler declares that box and the page inherits it.
+  const pageScaler = page.parentElement!;
+  expect(pageScaler.classList.contains("sidebar-office-docx__page-scaler")).toBe(true);
+  expect(pageScaler.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
+  expect(pageScaler.style.getPropertyValue("--office-doc-page-height")).toBe("1123px");
   // Without a layout box the stage must stay mounted: unmounting it here would
   // leave the document on the unpaginated fallback forever.
   expect(viewer.querySelector(".sidebar-office-docx__measure")).not.toBeNull();
