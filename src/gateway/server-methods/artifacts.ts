@@ -19,11 +19,11 @@ import {
   resolveManagedOutgoingMediaArtifactDownload,
   resolveManagedOutgoingMediaUrlDownload,
 } from "../managed-image-attachments.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview-limits.js";
 import {
   buildOfficePreviewPayload,
   resolveOfficePreviewFamily,
-} from "../office-preview/office-preview-payload.js";
-import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview.js";
+} from "../office-preview/office-preview.js";
 import { MAX_PAYLOAD_BYTES } from "../server-constants.js";
 import { tryResolveSessionCompatibilityOwnerAgentId } from "../session-request-agent.js";
 import { getSessionRowProjection } from "../session-row-projection-access.js";
@@ -328,9 +328,9 @@ function managedArtifactSummary(
 const BASE64_MAX_LENGTH_FOR_OFFICE_PREVIEW = Math.ceil((OFFICE_PREVIEW_MAX_BYTES * 4) / 3) + 4;
 
 /**
- * Opt-in structured preview for one artifact. The normal download path never
- * parses content; only `preview: "office"` reads the bounded original and
- * reuses the shared Office worker.
+ * Opt-in PDF preview for one artifact. The normal download path never reads
+ * content; only `preview: "office"` reads the bounded original and reuses the
+ * shared Office conversion owner.
  *
  * Returns `"ordinary"` without responding when the artifact is outside the
  * Office families, so the caller answers with the artifact's normal download

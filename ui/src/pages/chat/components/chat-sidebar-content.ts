@@ -320,9 +320,9 @@ type MarkdownSidebarProps = {
   onAttachmentUpdate: () => void;
   attachmentRuntime: AttachmentSidebarRuntime;
   attachmentDownload?: { pending: boolean; error: string | null; onDownload: () => void };
-  /** Structured Office preview for an attachment, loaded by the detail panel. */
+  /** Converted-PDF Office preview for an attachment, loaded by the detail panel. */
   attachmentOfficePreview?: TemplateResult | typeof nothing;
-  /** Lazy-loaded structured Office viewer for the selected sidebar preview. */
+  /** Converted-PDF Office preview for the selected sidebar file. */
   officePreview?: TemplateResult | typeof nothing;
 };
 

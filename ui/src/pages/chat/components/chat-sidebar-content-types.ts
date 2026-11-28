@@ -2,7 +2,7 @@ import type { TemplateResult } from "lit";
 import type { ChatMessageGetResult } from "../../../../../packages/gateway-protocol/src/schema/logs-chat.js";
 import type {
   SessionFileOfficeFormat,
-  SessionFileOfficePreview,
+  SessionFileOfficePdf,
 } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { ArtifactOfficePreview } from "../../../api/artifact-download.ts";
 import type { ToolCard } from "../../../lib/chat/chat-types.ts";
@@ -132,12 +132,12 @@ type FileSidebarEdit = {
 
 export type FileSidebarNavigation = { line: number };
 
-/** Structured read-only spreadsheet, document, or presentation preview. */
+/** Converted PDF preview of one spreadsheet, document, or presentation. */
 export type OfficeSidebarContent = {
   kind: "office";
   title: string;
-  format: SessionFileOfficeFormat;
-  preview: SessionFileOfficePreview;
+  /** Gateway-converted PDF; the original Office file stays the only download. */
+  pdf: SessionFileOfficePdf;
   rawText?: string | null;
   /** Artifact-backed previews keep an explicit download beside the reader. */
   download?: (signal: AbortSignal) => Promise<Blob | null>;

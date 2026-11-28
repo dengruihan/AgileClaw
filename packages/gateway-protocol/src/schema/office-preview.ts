@@ -6,27 +6,49 @@ import { closedObject } from "./closed-object.js";
 /**
  * Bounded typed facts for read-only Office previews.
  *
- * The Gateway parses OOXML packages itself and ships displayed layout facts:
- * worksheet grids with resolved styles, word-processing pages with runs and
- * tables, and slide outlines. Nothing here carries raw HTML/CSS, macro code,
+ * The current Gateway renders Office documents to PDF through an external
+ * converter and ships that PDF. The structured OOXML schemas below are the
+ * previously published public contract: they stay valid for readers, but the
+ * Gateway no longer emits a structured `preview` — `SessionFileOfficePdfSchema`
+ * carries the current payload. Nothing here carries raw HTML/CSS, macro code,
  * formulas, or external relationships; every value is untrusted display data.
  */
 
-/** Modern OOXML container the Gateway parsed for an `office` preview. */
+/** Modern OOXML container the Gateway converts for an `office` preview. */
 export const SessionFileOfficeFormatSchema = Type.Union([
   Type.Literal("xlsx"),
   Type.Literal("docx"),
   Type.Literal("pptx"),
 ]);
 
-/** Whether the Gateway could build the requested structured preview. */
+/**
+ * Why an Office file has or lacks a PDF preview.
+ *
+ * `ready` carries the PDF; `unavailable` means the conversion service could not
+ * be reached or answered with a server error; `failed` means the service
+ * rejected or mis-rendered this document; `too-large` covers both source and
+ * converted size limits.
+ */
 export const SessionFileOfficePreviewStateSchema = Type.Union([
   Type.Literal("ready"),
   Type.Literal("unsupported"),
   Type.Literal("too-large"),
   Type.Literal("invalid"),
   Type.Literal("password-protected"),
+  Type.Literal("unavailable"),
+  Type.Literal("failed"),
 ]);
+
+/**
+ * One converted PDF preview payload. `data` is the base64 PDF body; the
+ * browser reader turns it into a blob URL, so no ticket or extra fetch is
+ * needed and the source attachment stays the only durable file.
+ */
+export const SessionFileOfficePdfSchema = closedObject({
+  mimeType: Type.Literal("application/pdf"),
+  data: Type.String({ maxLength: 24 * 1024 * 1024 }),
+  sizeBytes: Type.Integer({ minimum: 0, maximum: 16 * 1024 * 1024 }),
+});
 
 /** Normalized `#rrggbb` color; document-authored themes resolve before the wire. */
 const OfficeHexColorSchema = Type.String({ pattern: "^#[0-9a-f]{6}$" });
@@ -369,6 +391,7 @@ export const SessionFileOfficePreviewSchema = closedObject({
 
 export type SessionFileOfficeFormat = Static<typeof SessionFileOfficeFormatSchema>;
 export type SessionFileOfficePreviewState = Static<typeof SessionFileOfficePreviewStateSchema>;
+export type SessionFileOfficePdf = Static<typeof SessionFileOfficePdfSchema>;
 export type SessionFileOfficeCellStyle = Static<typeof SessionFileOfficeCellStyleSchema>;
 export type SessionFileOfficeSheetColumn = Static<typeof SessionFileOfficeSheetColumnSchema>;
 export type SessionFileOfficeCell = Static<typeof SessionFileOfficeCellSchema>;

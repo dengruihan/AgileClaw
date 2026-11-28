@@ -1,10 +1,10 @@
 /**
- * Container-level detection shared by the Gateway entry points and the parser.
+ * Container-level detection shared by the Gateway entry points.
  *
  * Modern OOXML is always a ZIP, so OLE bytes behind a `.docx`/`.xlsx`/`.pptx`
  * name are either a renamed legacy file or the ECMA-376 encrypted package. This
- * module stays free of parser imports so main-thread callers never load the
- * OOXML readers just to classify bytes.
+ * module stays free of conversion and parser imports so callers classify bytes
+ * without loading the Gotenberg client.
  */
 
 /** Legacy OLE compound-file signature, as produced by .xls/.doc/.ppt and encrypted OOXML. */

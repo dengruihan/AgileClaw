@@ -245,3 +245,39 @@ it.each(["unchanged", "changed", "failed", "identity", "oversized"] as const)(
     }
   },
 );
+
+it("renders Gateway-provided PDF bytes without a network fetch", async () => {
+  const urls = stubObjectUrls();
+  const fetchMock = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetchMock);
+  const preview = document.createElement("openclaw-chat-pdf-preview") as HTMLElement & {
+    pdfData: string;
+    label: string;
+    updateComplete: Promise<unknown>;
+  };
+  preview.pdfData = btoa("%PDF-1.7\nconverted");
+  preview.label = "budget.xlsx";
+  document.body.append(preview);
+  await preview.updateComplete;
+
+  await vi.waitFor(() => expect(preview.querySelector("iframe")).not.toBeNull());
+  expect(preview.querySelector("iframe")?.getAttribute("src")).toBe("blob:pdf-preview");
+  expect(urls.createObjectURL).toHaveBeenCalledOnce();
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("shows the unavailable state for undecodable PDF bytes", async () => {
+  stubObjectUrls();
+  const preview = document.createElement("openclaw-chat-pdf-preview") as HTMLElement & {
+    pdfData: string;
+    label: string;
+    updateComplete: Promise<unknown>;
+  };
+  preview.pdfData = "!!!not-base64!!!";
+  preview.label = "broken.xlsx";
+  document.body.append(preview);
+  await preview.updateComplete;
+
+  await vi.waitFor(() => expect(preview.textContent).toContain("Preview unavailable"));
+  expect(preview.querySelector("iframe")).toBeNull();
+});

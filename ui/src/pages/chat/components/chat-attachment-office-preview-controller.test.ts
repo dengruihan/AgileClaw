@@ -20,15 +20,14 @@ function officeAttachment(
   };
 }
 
+const PDF_BASE64 = btoa("%PDF-1.7\nconverted");
+
 function readyPreview(): ArtifactOfficePreview {
   return {
     kind: "office",
     format: "xlsx",
     state: "ready",
-    preview: {
-      format: "xlsx",
-      sheets: [{ name: "Budget", rowCount: 1, columnCount: 1, rows: [["Rent"]] }],
-    },
+    pdf: { mimeType: "application/pdf", data: PDF_BASE64, sizeBytes: 18 },
   };
 }
 
@@ -51,7 +50,7 @@ describe("attachment office preview controller transitions", () => {
   });
 
   it("shows the loading state on the initial open before the payload settles", async () => {
-    // jsdom's Blob lacks arrayBuffer; the ready viewer reads preview bytes.
+    // jsdom's Blob lacks the browser blob surface; the reader builds a blob URL.
     vi.stubGlobal("Blob", NodeBlob);
     const deferred = createDeferred<ArtifactOfficePreview>();
     const panel = createPanel();
@@ -61,12 +60,10 @@ describe("attachment office preview controller transitions", () => {
       await vi.waitFor(() =>
         expect(panel.querySelector(".sidebar-office-preview__state[role='status']")).toBeTruthy(),
       );
-      expect(panel.querySelector("openclaw-chat-office-preview")).toBeNull();
+      expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeNull();
 
       deferred.resolve(readyPreview());
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
       expect(panel.querySelector(".sidebar-office-preview__state")).toBeNull();
     } finally {
       panel.remove();
@@ -80,9 +77,7 @@ describe("attachment office preview controller transitions", () => {
     try {
       panel.content = officeAttachment("budget.xlsx", () => first.promise);
       first.resolve(readyPreview());
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
 
       const second = createDeferred<ArtifactOfficePreview>();
       panel.content = officeAttachment(
@@ -99,20 +94,15 @@ describe("attachment office preview controller transitions", () => {
       await vi.waitFor(() =>
         expect(panel.querySelector(".sidebar-office-preview__state[role='status']")).toBeTruthy(),
       );
-      expect(panel.querySelector("openclaw-chat-office-preview")).toBeNull();
+      expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeNull();
 
       second.resolve({
         kind: "office",
         format: "pptx",
         state: "ready",
-        preview: {
-          format: "pptx",
-          slides: [{ index: 1, lines: ["Ship"] }],
-        },
+        pdf: { mimeType: "application/pdf", data: PDF_BASE64, sizeBytes: 18 },
       });
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
     } finally {
       panel.remove();
     }
@@ -132,9 +122,7 @@ describe("attachment office preview controller transitions", () => {
       });
       await vi.waitFor(() => expect(deferreds).toHaveLength(1));
       deferreds[0]!.resolve(readyPreview());
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
 
       panel.attachmentRuntime = { connectionEpoch: 2, sessionKey: "agent:main:main" };
       await panel.updateComplete;
@@ -143,12 +131,10 @@ describe("attachment office preview controller transitions", () => {
       await vi.waitFor(() =>
         expect(panel.querySelector(".sidebar-office-preview__state[role='status']")).toBeTruthy(),
       );
-      expect(panel.querySelector("openclaw-chat-office-preview")).toBeNull();
+      expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeNull();
 
       deferreds[1]!.resolve(readyPreview());
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
     } finally {
       panel.remove();
     }
@@ -177,13 +163,11 @@ describe("attachment office preview controller transitions", () => {
       // A late result from the old connection must not publish over the reload.
       deferreds[0]!.resolve(readyPreview());
       await Promise.resolve();
-      expect(panel.querySelector("openclaw-chat-office-preview")).toBeNull();
+      expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeNull();
       expect(panel.querySelector(".sidebar-office-preview__state[role='status']")).toBeTruthy();
 
       deferreds[1]!.resolve(readyPreview());
-      await vi.waitFor(() =>
-        expect(panel.querySelector("openclaw-chat-office-preview")).toBeTruthy(),
-      );
+      await vi.waitFor(() => expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeTruthy());
     } finally {
       panel.remove();
     }

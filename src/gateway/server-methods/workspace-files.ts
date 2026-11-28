@@ -17,9 +17,9 @@ import {
   looksLikeEncryptedOfficePackage,
   OLE_COMPOUND_FILE_SIGNATURE,
 } from "../office-preview/office-preview-container.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview-limits.js";
 import {
-  OFFICE_PREVIEW_MAX_BYTES,
-  readOfficePreviewResult,
+  buildOfficePreviewPayload,
   resolveOfficePreviewTarget,
   type OfficePreviewTarget,
 } from "../office-preview/office-preview.js";
@@ -188,17 +188,26 @@ export async function populateSessionFilePreview(
   // preview: a renamed text file still gets its text preview below.
   const officeTarget = resolveOfficePreviewTarget(entry.path);
   const modernOffice = officeTarget?.kind === "modern" ? officeTarget : undefined;
-  if (modernOffice && hasSignature(buffer, ZIP_LOCAL_HEADER)) {
-    const result = await readOfficePreviewResult(buffer, modernOffice.format);
+  if (modernOffice) {
+    // Declared modern type wins until a text/image reader proves otherwise.
     entry.mimeType = modernOffice.mimeType;
-    if ("preview" in result) {
+  }
+  if (modernOffice && hasSignature(buffer, ZIP_LOCAL_HEADER)) {
+    const preview = await buildOfficePreviewPayload({
+      filename: entry.name || entry.path,
+      mimeType: modernOffice.mimeType,
+      sizeBytes: buffer.length,
+      read: async () => buffer,
+    });
+    if (preview?.pdf) {
       entry.previewKind = "office";
-      entry.officePreview = result.preview;
+      entry.officePdf = preview.pdf;
       entry.previewState = "ready";
     } else {
-      // Corrupt and encrypted packages keep their distinct reasons.
+      // Corrupt, encrypted, oversized, and converter failures keep their
+      // distinct reasons for the visible degraded panel.
       entry.previewKind = "unsupported";
-      entry.previewState = result.failure;
+      entry.previewState = preview?.state ?? "invalid";
     }
     return;
   }

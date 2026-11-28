@@ -110,8 +110,8 @@ import {
 } from "./http-image-response.js";
 import type { GatewayHttpRequestAuthOptions } from "./http-request-authority.js";
 import { authorizeControlUiReadRequestOrReply } from "./http-utils.js";
-import { buildOfficePreviewPayload } from "./office-preview/office-preview-payload.js";
-import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview/office-preview.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview/office-preview-limits.js";
+import { buildOfficePreviewPayload } from "./office-preview/office-preview.js";
 import { readControlUiRootAsset, type ControlUiRootState } from "./server-control-ui-root.js";
 import { isTerminalConfigEnabled } from "./terminal/enabled.js";
 
@@ -389,11 +389,13 @@ async function readAssistantMediaOfficePreview(
   opened: Awaited<ReturnType<typeof openAssistantMedia>>["opened"],
   reference: Awaited<ReturnType<typeof openAssistantMedia>>["reference"],
   mimeType: string | undefined,
+  signal: AbortSignal,
 ) {
   return await buildOfficePreviewPayload({
     filename: path.basename(reference.path),
     ...(mimeType ? { mimeType } : {}),
     sizeBytes: opened.stat.size,
+    signal,
     read: async () => {
       if (opened.stat.size > OFFICE_PREVIEW_MAX_BYTES) {
         return null;
@@ -423,7 +425,7 @@ async function resolveAssistantMediaAvailability(
     );
     const officePreview =
       preview === "office"
-        ? await readAssistantMediaOfficePreview(opened, reference, mimeType)
+        ? await readAssistantMediaOfficePreview(opened, reference, mimeType, signal)
         : undefined;
     assertCurrent();
     // The inspection owner reopens and verifies this identity after queue admission.
@@ -460,10 +462,10 @@ async function resolveAssistantMediaAvailability(
 }
 
 /**
- * Parses one client-held Office upload for its structured preview. The bytes
- * never persist and never mint a ticket; the route exists so optimistic/outbox
+ * Converts one client-held Office upload for its PDF preview. The bytes never
+ * persist and never mint a ticket; the route exists so optimistic/outbox
  * attachments, whose bytes live only in the browser, still preview through the
- * one Office parser owner.
+ * one Office conversion owner.
  */
 async function respondAssistantMediaUploadParse(
   req: IncomingMessage,
@@ -503,6 +505,7 @@ async function respondAssistantMediaUploadParse(
           filename,
           ...(declaredType ? { mimeType: declaredType } : {}),
           sizeBytes: buffer.length,
+          signal: requestAbort.signal,
           read: async () => (requestAbort.signal.aborted ? null : buffer),
         })
       : undefined;

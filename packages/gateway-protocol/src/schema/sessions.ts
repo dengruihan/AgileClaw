@@ -6,6 +6,7 @@ import { ErrorShapeSchema } from "./frames.js";
 import { HumanMentionsSchema } from "./human-mentions.js";
 import { ChatAttachmentsSchema } from "./logs-chat.js";
 import {
+  SessionFileOfficePdfSchema,
   SessionFileOfficePreviewSchema,
   SessionFileOfficePreviewStateSchema,
 } from "./office-preview.js";
@@ -188,6 +189,7 @@ export const SessionFilePreviewKindSchema = Type.Union([
 export {
   SessionFileOfficeBlockSchema,
   SessionFileOfficeFormatSchema,
+  SessionFileOfficePdfSchema,
   SessionFileOfficePreviewSchema,
   SessionFileOfficeSheetSchema,
   SessionFileOfficeSlideSchema,
@@ -203,6 +205,7 @@ export {
   type SessionFileOfficeOmittedFeature,
   type SessionFileOfficePage,
   type SessionFileOfficeParagraph,
+  type SessionFileOfficePdf,
   type SessionFileOfficePreview,
   type SessionFileOfficeRun,
   type SessionFileOfficeSheet,
@@ -233,8 +236,14 @@ export const SessionFileEntrySchema = closedObject({
   mimeType: Type.Optional(NonEmptyString),
   contentEncoding: Type.Optional(SessionFileContentEncodingSchema),
   previewKind: Type.Optional(SessionFilePreviewKindSchema),
+  /**
+   * Structured Office preview retained as a published contract. The current
+   * Gateway emits `officePdf` instead and leaves this field absent.
+   */
   officePreview: Type.Optional(SessionFileOfficePreviewSchema),
-  /** Why an Office file has no structured preview; absent for non-Office files. */
+  /** Converted PDF preview for a modern Office file. */
+  officePdf: Type.Optional(SessionFileOfficePdfSchema),
+  /** Why an Office file has no preview; absent for non-Office files. */
   previewState: Type.Optional(SessionFileOfficePreviewStateSchema),
 });
 

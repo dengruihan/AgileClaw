@@ -1,8 +1,7 @@
 import { html, nothing, type TemplateResult } from "lit";
-import type { LazyCustomElementRequestController } from "../../../app/lazy-custom-element.ts";
 import { t } from "../../../i18n/index.ts";
 import { renderCompactAttachmentCard } from "./chat-attachment-card.ts";
-import { officePreviewPayload } from "./chat-office-attachment.ts";
+import { officePreviewPdf } from "./chat-office-attachment.ts";
 import { renderOfficePreview } from "./chat-office-preview.ts";
 import type {
   AttachmentSidebarContent,
@@ -35,15 +34,19 @@ function unavailableReason(state: string | undefined): string {
       return t("chat.officePreview.invalid");
     case "password-protected":
       return t("chat.officePreview.passwordProtected");
+    case "unavailable":
+      return t("chat.officePreview.unavailable");
+    case "failed":
+      return t("chat.officePreview.failed");
     default:
       return t("chat.officePreview.unsupported");
   }
 }
 
 /**
- * Loads the structured Office payload only while one attachment is open, and
- * keeps the explicit download action outside the viewer. Cancels on close or
- * selection change so a late parse cannot replace newer content.
+ * Loads the converted PDF only while one attachment is open, and keeps the
+ * explicit download action outside the viewer. Cancels on close or selection
+ * change so a late conversion cannot replace newer content.
  */
 export class AttachmentOfficePreviewController {
   private state: OfficePreviewState = { status: "idle" };
@@ -53,7 +56,6 @@ export class AttachmentOfficePreviewController {
   constructor(
     private readonly host: OfficePreviewHost,
     private readonly content: () => ChatDetailPanelContent | null,
-    private readonly loader: LazyCustomElementRequestController,
     private readonly blobDownload: DownloadControls,
   ) {}
 
@@ -109,15 +111,14 @@ export class AttachmentOfficePreviewController {
           return;
         }
         this.request = null;
-        const payload = officePreviewPayload(preview);
-        this.state = payload
+        const pdf = officePreviewPdf(preview);
+        this.state = pdf
           ? {
               status: "ready",
               content: {
                 kind: "office",
                 title: content.title,
-                format: payload.format,
-                preview: payload.preview,
+                pdf,
                 ...(content.download ? { download: content.download } : {}),
                 ...(content.downloadNow ? { downloadNow: content.downloadNow } : {}),
               },
@@ -174,6 +175,6 @@ export class AttachmentOfficePreviewController {
     if (this.state.status === "unavailable") {
       return this.renderUnavailable(content, this.state.reason);
     }
-    return renderOfficePreview(this.loader, this.state.content, this.blobDownload);
+    return renderOfficePreview(this.state.content, this.blobDownload);
   }
 }

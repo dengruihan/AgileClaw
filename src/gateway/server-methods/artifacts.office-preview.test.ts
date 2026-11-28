@@ -2,11 +2,6 @@ import { Value } from "typebox/value";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ArtifactsDownloadResultSchema } from "../../../packages/gateway-protocol/src/schema/artifacts.js";
 import {
-  buildEncryptedOoxmlContainer,
-  buildStyledXlsxFixture,
-  buildXlsxFixture,
-} from "../office-preview/office-preview.test-support.js";
-import {
   expectErrorDetails,
   expectFirstArtifact,
   expectOkPayload,
@@ -15,6 +10,30 @@ import {
 } from "./artifacts.test-support.js";
 
 const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+const PREVIEW_PDF = Buffer.from("%PDF-1.7\nartifact-preview");
+const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+
+let fixtureSequence = 0;
+function workbookBytes(): Buffer {
+  fixtureSequence += 1;
+  return Buffer.concat([ZIP_LOCAL_HEADER, Buffer.from(`synthetic-workbook-${fixtureSequence}`)]);
+}
+
+function encryptedContainer(): Buffer {
+  return Buffer.concat([
+    Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]),
+    Buffer.from("EncryptedPackage", "utf16le"),
+  ]);
+}
+
+const officeHoisted = vi.hoisted(() => ({
+  convert: vi.fn(),
+}));
+
+vi.mock("../office-preview/office-preview-convert.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../office-preview/office-preview-convert.js")>()),
+  convertOfficeDocumentToPdf: officeHoisted.convert,
+}));
 
 const hoisted = vi.hoisted(() => ({
   readManagedArtifactContent: vi.fn(),
@@ -115,11 +134,12 @@ async function openInlineArtifact(file: Record<string, unknown>) {
 describe("artifacts.download opt-in Office preview", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    officeHoisted.convert.mockResolvedValue({ pdf: PREVIEW_PDF });
     hoisted.readManagedArtifactContent.mockResolvedValue(null);
   });
 
-  it("parses an inline workbook only when preview is requested", async () => {
-    const buffer = await buildXlsxFixture();
+  it("converts an inline workbook only when preview is requested", async () => {
+    const buffer = workbookBytes();
     const artifactId = await openInlineArtifact({
       type: "file",
       title: "budget.xlsx",
@@ -139,11 +159,20 @@ describe("artifacts.download opt-in Office preview", () => {
       data?: string;
     };
     expect(payload.artifact).toMatchObject({ id: artifactId, title: "budget.xlsx" });
-    expect(payload.preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+    expect(payload.preview).toEqual({
+      kind: "office",
+      format: "xlsx",
+      state: "ready",
+      pdf: {
+        mimeType: "application/pdf",
+        data: PREVIEW_PDF.toString("base64"),
+        sizeBytes: PREVIEW_PDF.length,
+      },
+    });
     expect(payload.data).toBeUndefined();
     expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
 
-    // The ordinary download path still returns bytes and never parses them.
+    // The ordinary download path still returns bytes and never converts them.
     messageWithFile({
       type: "file",
       title: "budget.xlsx",
@@ -165,11 +194,12 @@ describe("artifacts.download opt-in Office preview", () => {
     expect(download.preview).toBeUndefined();
   });
 
-  it("returns the richer workbook layout through an inline artifact", async () => {
-    const buffer = await buildStyledXlsxFixture();
+  it("reports an unreachable converter as a visible unavailable state", async () => {
+    officeHoisted.convert.mockResolvedValue({ failure: "unavailable" });
+    const buffer = workbookBytes();
     const artifactId = await openInlineArtifact({
       type: "file",
-      title: "styled.xlsx",
+      title: "budget.xlsx",
       mimeType: XLSX_MIME,
       data: buffer.toString("base64"),
       sizeBytes: buffer.length,
@@ -181,18 +211,13 @@ describe("artifacts.download opt-in Office preview", () => {
         artifactId,
         preview: "office",
       }),
-    ) as { preview: { state: string; preview: { sheets: Record<string, unknown>[] } } };
-    expect(payload.preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
-    const sheet = payload.preview.preview.sheets[0];
-    expect(sheet?.columns).toEqual([{ width: 30 }, { width: 16 }, { width: 16 }]);
-    expect(sheet?.mergedCells).toHaveLength(1);
-    const rows = sheet?.rows as string[][] | undefined;
-    expect(rows?.[1]?.[1]).toBe("$1,200.50");
+    ) as { preview: Record<string, unknown> };
+    expect(payload.preview).toEqual({ kind: "office", format: "xlsx", state: "unavailable" });
     expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
   });
 
-  it("returns the richer workbook layout through a managed artifact", async () => {
-    const buffer = await buildStyledXlsxFixture();
+  it("converts a managed artifact through its owning reader", async () => {
+    const buffer = workbookBytes();
     const artifactId = "artifact_managed_media_33333333-3333-4333-8333-333333333333";
     hoisted.readManagedArtifactContent.mockResolvedValue({
       artifactId,
@@ -213,18 +238,23 @@ describe("artifacts.download opt-in Office preview", () => {
         artifactId,
         preview: "office",
       }),
-    ) as { preview: { preview: { sheets: Record<string, unknown>[] } } };
-    expect(payload.preview.preview.sheets[0]?.frozenColumns).toBe(1);
-    expect(payload.preview.preview.sheets[0]?.styles).toBeTruthy();
+    ) as { preview: Record<string, unknown> };
+    expect(payload.preview).toMatchObject({
+      kind: "office",
+      format: "xlsx",
+      state: "ready",
+      pdf: { sizeBytes: PREVIEW_PDF.length },
+    });
   });
 
   it("reports an encrypted package as password-protected", async () => {
+    const encrypted = encryptedContainer();
     const artifactId = await openInlineArtifact({
       type: "file",
       title: "secret.docx",
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      data: buildEncryptedOoxmlContainer().toString("base64"),
-      sizeBytes: buildEncryptedOoxmlContainer().length,
+      data: encrypted.toString("base64"),
+      sizeBytes: encrypted.length,
     });
     const payload = expectOkPayload(
       await invoke("artifacts.download", {
@@ -238,6 +268,7 @@ describe("artifacts.download opt-in Office preview", () => {
       format: "docx",
       state: "password-protected",
     });
+    expect(officeHoisted.convert).not.toHaveBeenCalled();
     expect(Value.Check(ArtifactsDownloadResultSchema, payload)).toBe(true);
   });
 
@@ -361,7 +392,7 @@ describe("artifacts.download opt-in Office preview", () => {
   });
 
   it("reads the managed original under its existing ownership without minting a ticket", async () => {
-    const buffer = await buildXlsxFixture();
+    const buffer = workbookBytes();
     const artifactId = "artifact_managed_media_11111111-1111-4111-8111-111111111111";
     hoisted.readManagedArtifactContent.mockResolvedValue({
       artifactId,
@@ -406,7 +437,7 @@ describe("artifacts.download opt-in Office preview", () => {
   });
 
   it("carries matched run provenance into a managed Office preview", async () => {
-    const buffer = await buildXlsxFixture();
+    const buffer = workbookBytes();
     const artifactId = "artifact_managed_media_11111111-1111-4111-8111-111111111111";
     messageWithFilteredFile({
       runId: "run-preview",

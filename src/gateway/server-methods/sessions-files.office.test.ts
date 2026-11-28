@@ -2,18 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { Value } from "typebox/value";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { SessionFileOfficePreviewSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
-import {
-  buildDocxFixture,
-  buildEncryptedOoxmlContainer,
-  buildEncryptedZipFixture,
-  buildEntryOverflowZipFixture,
-  buildPptxFixture,
-  buildStyledDocxFixture,
-  buildStyledXlsxFixture,
-  buildXlsxFixture,
-  OLE_COMPOUND_FILE_HEADER,
-} from "../office-preview/office-preview.test-support.js";
+import { SessionFileOfficePdfSchema } from "../../../packages/gateway-protocol/src/schema/sessions.js";
+import { OLE_COMPOUND_FILE_SIGNATURE } from "../office-preview/office-preview-container.js";
 import { sessionsFilesHandlers } from "./sessions-files.js";
 import {
   createSessionFilesHandlerInvoker,
@@ -29,6 +19,12 @@ const hoisted = vi.hoisted(() => ({
   resolveAgentWorkspaceDir: vi.fn(),
   resolveDefaultAgentId: vi.fn(),
   readDelta: vi.fn(),
+  convert: vi.fn(),
+}));
+
+vi.mock("../office-preview/office-preview-convert.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../office-preview/office-preview-convert.js")>()),
+  convertOfficeDocumentToPdf: hoisted.convert,
 }));
 
 vi.mock("./open-path.js", async () => {
@@ -55,6 +51,19 @@ vi.mock("../session-transcript-readers.js", async (original) => ({
 
 const sessionKey = "agent:main:main";
 const invoke = createSessionFilesHandlerInvoker(sessionsFilesHandlers);
+const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+const PREVIEW_PDF = Buffer.from("%PDF-1.7\nworkspace-preview");
+
+let fixtureSequence = 0;
+function packageBytes(): Buffer {
+  fixtureSequence += 1;
+  return Buffer.concat([ZIP_LOCAL_HEADER, Buffer.from(`synthetic-package-${fixtureSequence}`)]);
+}
+
+function encryptedContainer(): Buffer {
+  return Buffer.concat([OLE_COMPOUND_FILE_SIGNATURE, Buffer.from("EncryptedPackage", "utf16le")]);
+}
+
 function getFile(filePath: string) {
   return invoke("sessions.files.get", { sessionKey, path: filePath });
 }
@@ -67,88 +76,71 @@ beforeEach(() => {
     { ...hoisted, readSessionTranscriptVisibleMessageDeltaCore: hoisted.readDelta },
     mockVisibleMessages,
   );
+  hoisted.convert.mockResolvedValue({ pdf: PREVIEW_PDF });
 });
 
 afterEach(() => {
   removeWorkspaceFixture(workspaceRoot);
 });
 
-describe("sessions.files office previews", () => {
-  it("bounds malformed worksheet row numbers at the RPC boundary", async () => {
-    const sheetDataXml = Array.from(
-      { length: 201 },
-      (_, index) => `<row r="1"><c r="A1"><v>${index}</v></c></row>`,
-    ).join("");
-    fs.writeFileSync(
-      path.join(workspaceRoot, "bogus-rows.xlsx"),
-      await buildXlsxFixture({ sheets: [{ name: "Bogus", sheetDataXml }], sharedStrings: [] }),
-    );
-
-    const file = expectOkPayload(await getFile("bogus-rows.xlsx")).file;
-
-    expect(file.previewKind).toBe("office");
-    expect(file.officePreview.sheets[0].rows).toHaveLength(200);
-    expect(file.officePreview.sheets[0].truncated).toBe(true);
-    expect(file.officePreview.truncated).toBe(true);
-    // The closed protocol schema rejects more than 200 rows, so the RPC payload
-    // must validate as a whole.
-    expect(Value.Check(SessionFileOfficePreviewSchema, file.officePreview)).toBe(true);
-  });
-
-  it("returns schema-valid payloads for overlong column references", async () => {
-    const overlong = "A".repeat(400);
-    const sheetDataXml = `<row r="1"><c r="${overlong}1"><v>1</v></c><c r="B1"><v>2</v></c></row>`;
-    fs.writeFileSync(
-      path.join(workspaceRoot, "overlong-column.xlsx"),
-      await buildXlsxFixture({ sheets: [{ name: "Columns", sheetDataXml }], sharedStrings: [] }),
-    );
-
-    const file = expectOkPayload(await getFile("overlong-column.xlsx")).file;
-
-    expect(file.previewKind).toBe("office");
-    expect(file.officePreview.sheets[0].rows).toEqual([["1", "2"]]);
-    expect(file.officePreview.sheets[0].columnCount).toBe(2);
-    expect(Value.Check(SessionFileOfficePreviewSchema, file.officePreview)).toBe(true);
-    expect(JSON.stringify(file.officePreview)).toContain('"columnCount":2');
-  });
-
-  it("returns structured payloads for modern OOXML files", async () => {
-    fs.writeFileSync(path.join(workspaceRoot, "budget.xlsx"), await buildXlsxFixture());
-    fs.writeFileSync(path.join(workspaceRoot, "report.docx"), await buildDocxFixture());
-    fs.writeFileSync(path.join(workspaceRoot, "deck.pptx"), await buildPptxFixture());
+describe("sessions.files Office PDF previews", () => {
+  it("converts modern OOXML workspace files only when they are opened", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "budget.xlsx"), packageBytes());
+    fs.writeFileSync(path.join(workspaceRoot, "report.docx"), packageBytes());
+    fs.writeFileSync(path.join(workspaceRoot, "deck.pptx"), packageBytes());
 
     const workbook = expectOkPayload(await getFile("budget.xlsx")).file;
     expect(workbook).toMatchObject({
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       path: "budget.xlsx",
       previewKind: "office",
+      previewState: "ready",
     });
-    expect(workbook.officePreview.sheets[0].rows[1]).toEqual(["Rent", "1200"]);
+    expect(workbook.officePdf).toEqual({
+      mimeType: "application/pdf",
+      data: PREVIEW_PDF.toString("base64"),
+      sizeBytes: PREVIEW_PDF.length,
+    });
+    expect(workbook.officePreview).toBeUndefined();
+    expect(workbook.content).toBeUndefined();
+    expect(Value.Check(SessionFileOfficePdfSchema, workbook.officePdf)).toBe(true);
 
     const document = expectOkPayload(await getFile("report.docx")).file;
     expect(document).toMatchObject({
       mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       previewKind: "office",
+      previewState: "ready",
     });
-    expect(document.officePreview.blocks[0]).toEqual({
-      kind: "heading",
-      level: 1,
-      text: "Quarterly report",
-    });
-
     const presentation = expectOkPayload(await getFile("deck.pptx")).file;
     expect(presentation).toMatchObject({
       mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       previewKind: "office",
+      previewState: "ready",
     });
-    expect(presentation.officePreview.slides[0]).toMatchObject({ index: 1, title: "Roadmap" });
+    expect(hoisted.convert).toHaveBeenCalledTimes(3);
   });
 
-  it("degrades corrupt packages to metadata instead of failing the read", async () => {
-    const fixture = await buildXlsxFixture();
+  it("surfaces a converter outage instead of failing the file read", async () => {
+    hoisted.convert.mockResolvedValue({ failure: "unavailable" });
+    fs.writeFileSync(path.join(workspaceRoot, "outage.xlsx"), packageBytes());
+
+    const file = expectOkPayload(await getFile("outage.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "outage.xlsx",
+      previewKind: "unsupported",
+      previewState: "unavailable",
+    });
+    expect(file.officePdf).toBeUndefined();
+    expect(file.content).toBeUndefined();
+  });
+
+  it("degrades a corrupt package to a visible conversion failure", async () => {
+    hoisted.convert.mockResolvedValue({ failure: "failed" });
     fs.writeFileSync(
       path.join(workspaceRoot, "broken.xlsx"),
-      Buffer.concat([fixture.subarray(0, 64), Buffer.from("garbage")]),
+      Buffer.concat([ZIP_LOCAL_HEADER, Buffer.from("garbage")]),
     );
 
     const file = expectOkPayload(await getFile("broken.xlsx")).file;
@@ -157,16 +149,35 @@ describe("sessions.files office previews", () => {
       mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       path: "broken.xlsx",
       previewKind: "unsupported",
-      previewState: "invalid",
+      previewState: "failed",
     });
-    expect(file.officePreview).toBeUndefined();
+    expect(file.officePdf).toBeUndefined();
     expect(file.content).toBeUndefined();
+    expect(hoisted.convert).toHaveBeenCalledOnce();
   });
 
-  it("labels legacy OLE containers without parsing them", async () => {
+  it("reports non-package bytes as invalid without converting them", async () => {
+    fs.writeFileSync(
+      path.join(workspaceRoot, "renamed.xlsx"),
+      Buffer.from([0x00, 0x01, 0x02, 0x03, 0x04]),
+    );
+
+    const file = expectOkPayload(await getFile("renamed.xlsx")).file;
+
+    expect(file).toMatchObject({
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      path: "renamed.xlsx",
+      previewKind: "unsupported",
+      previewState: "invalid",
+    });
+    expect(file.officePdf).toBeUndefined();
+    expect(hoisted.convert).not.toHaveBeenCalled();
+  });
+
+  it("labels legacy OLE containers without converting them", async () => {
     fs.writeFileSync(
       path.join(workspaceRoot, "legacy.xls"),
-      Buffer.concat([OLE_COMPOUND_FILE_HEADER, Buffer.alloc(512)]),
+      Buffer.concat([OLE_COMPOUND_FILE_SIGNATURE, Buffer.alloc(512)]),
     );
 
     const file = expectOkPayload(await getFile("legacy.xls")).file;
@@ -177,13 +188,13 @@ describe("sessions.files office previews", () => {
       previewKind: "unsupported",
       previewState: "unsupported",
     });
+    expect(hoisted.convert).not.toHaveBeenCalled();
   });
 
   it("keeps the metadata-only preview for oversized workbooks", async () => {
-    const fixture = await buildXlsxFixture();
     fs.writeFileSync(
       path.join(workspaceRoot, "huge.xlsx"),
-      Buffer.concat([fixture, Buffer.alloc(9 * 1024 * 1024)]),
+      Buffer.concat([packageBytes(), Buffer.alloc(9 * 1024 * 1024)]),
     );
 
     const file = expectOkPayload(await getFile("huge.xlsx")).file;
@@ -194,43 +205,11 @@ describe("sessions.files office previews", () => {
       previewState: "too-large",
     });
     expect(file.content).toBeUndefined();
+    expect(hoisted.convert).not.toHaveBeenCalled();
   });
 
-  it("returns richer layout payloads for styled workbooks and documents", async () => {
-    fs.writeFileSync(path.join(workspaceRoot, "styled.xlsx"), await buildStyledXlsxFixture());
-    fs.writeFileSync(path.join(workspaceRoot, "styled.docx"), await buildStyledDocxFixture());
-
-    const workbook = expectOkPayload(await getFile("styled.xlsx")).file;
-    expect(workbook).toMatchObject({ previewKind: "office", previewState: "ready" });
-    expect(workbook.officePreview.sheets[0].columns).toEqual([
-      { width: 30 },
-      { width: 16 },
-      { width: 16 },
-    ]);
-    expect(workbook.officePreview.sheets[0].rows[1][1]).toBe("$1,200.50");
-    expect(workbook.officePreview.sheets[0].mergedCells).toHaveLength(1);
-    expect(workbook.officePreview.sheets[0].frozenRows).toBe(1);
-    expect(Value.Check(SessionFileOfficePreviewSchema, workbook.officePreview)).toBe(true);
-
-    const document = expectOkPayload(await getFile("styled.docx")).file;
-    expect(document).toMatchObject({ previewKind: "office", previewState: "ready" });
-    expect(document.officePreview.pages).toHaveLength(3);
-    expect(document.officePreview.pages[0].blocks).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ kind: "paragraph", role: "title" }),
-        expect.objectContaining({ kind: "table" }),
-        expect.objectContaining({ kind: "image" }),
-      ]),
-    );
-    expect(Value.Check(SessionFileOfficePreviewSchema, document.officePreview)).toBe(true);
-  });
-
-  it("keeps password-protected and encrypted packages metadata-only", async () => {
-    fs.writeFileSync(
-      path.join(workspaceRoot, "encrypted-container.docx"),
-      buildEncryptedOoxmlContainer(),
-    );
-    fs.writeFileSync(path.join(workspaceRoot, "encrypted-zip.docx"), buildEncryptedZipFixture());
+  it("keeps password-protected packages metadata-only", async () => {
+    fs.writeFileSync(path.join(workspaceRoot, "encrypted-container.docx"), encryptedContainer());
 
     const container = expectOkPayload(await getFile("encrypted-container.docx")).file;
     expect(container).toMatchObject({
@@ -238,27 +217,8 @@ describe("sessions.files office previews", () => {
       previewKind: "unsupported",
       previewState: "password-protected",
     });
-    expect(container.officePreview).toBeUndefined();
-
-    const zip = expectOkPayload(await getFile("encrypted-zip.docx")).file;
-    expect(zip).toMatchObject({ previewKind: "unsupported", previewState: "password-protected" });
-    expect(zip.officePreview).toBeUndefined();
-  });
-
-  it("reports an archive resource-limit budget as too-large", async () => {
-    fs.writeFileSync(
-      path.join(workspaceRoot, "overflow.xlsx"),
-      await buildEntryOverflowZipFixture(),
-    );
-
-    const file = expectOkPayload(await getFile("overflow.xlsx")).file;
-
-    expect(file).toMatchObject({
-      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      previewKind: "unsupported",
-      previewState: "too-large",
-    });
-    expect(file.officePreview).toBeUndefined();
+    expect(container.officePdf).toBeUndefined();
+    expect(hoisted.convert).not.toHaveBeenCalled();
   });
 
   it("keeps a text file renamed to .xlsx on the text preview", async () => {
