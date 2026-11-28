@@ -1,0 +1,20 @@
+# Native host overlay: the Gateway runs outside Docker and reaches the
+# conversion API on http://127.0.0.1:3000.
+#
+# The published port is bound to loopback only, and the second bridge does not
+# masquerade outbound traffic, so the container has no route to the internet.
+# Use with the base definition:
+#
+#   docker compose -f deploy/gotenberg/compose.yaml \
+#     -f deploy/gotenberg/compose.host.yaml up -d
+services:
+  gotenberg:
+    ports:
+      - "127.0.0.1:3000:3000"
+    networks:
+      - gotenberg-loopback
+
+networks:
+  gotenberg-loopback:
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"

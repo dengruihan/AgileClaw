@@ -248,27 +248,58 @@ the RPC schema and WebSocket base64 response are unchanged.
 ## Preview Office artifacts
 
 Pass `preview: "office"` to `artifacts.download` when the client wants a
-structured preview instead of a download. The Gateway reads the bounded
+rendered preview instead of the original file. The Gateway reads the bounded
 original (8 MiB) under the same transcript membership and ownership checks,
-parses it in the shared Office worker, and returns an optional `preview`
-object beside the artifact summary. `preview.state` is `ready` with the
-worksheet, document, or slide payload, or `unsupported` (legacy `.xls`/`.doc`/
-`.ppt` and non-Office sources), `too-large`, or `invalid`. When the artifact
-is outside the Office families the request is answered with the artifact's
-ordinary download delivery — inline base64, ticket URL, or managed media URL —
-so a preview opt-in never strips the payload another preview needs. Managed
-image artifacts keep their managed URL response. Without the parameter, the
-normal download response never parses file content.
+converts it through the Gotenberg service described in
+[Office PDF previews](/gateway/office-pdf-preview), and returns an optional
+`preview` object beside the artifact summary. `preview.kind` is `office` and
+`preview.format` is `docx`, `xlsx`, or `pptx` when the bytes identify a modern
+Office package. On success `preview.state` is `ready` and `preview.pdf` carries
+`{ mimeType: "application/pdf", data: <base64>, sizeBytes }`; the browser
+renders those bytes with the author's page geometry.
 
-Local and uploaded document attachments use the same parser through the
-optional `preview=office` parameter on the Control UI assistant-media
-metadata request. That route keeps its existing read authorization and returns
-the structured payload only for that opt-in request. Optimistic and outbox
-uploads, whose bytes still exist only in the client, send the retained bytes
-to the same route with `meta=1&preview=office&upload=1` and the file name; the
-Gateway parses the bounded request body (8 MiB cap), persists nothing, and
-mints no ticket, and an oversized upload answers with
-`{ available: false, code: "office-preview-too-large" }`.
+Degraded states keep the same object shape without `preview.pdf`:
+
+- `unavailable`: the conversion service is unreachable, refused the
+  connection, timed out, or answered with a server error.
+- `failed`: the converter rejected the document or returned a non-PDF body.
+- `password-protected`: encrypted OOXML packaging behind an Office extension.
+- `too-large`: the source exceeds 8 MiB or the converted PDF exceeds 16 MiB.
+- `invalid`: non-ZIP, renamed, or corrupt bytes without a ZIP signature.
+- `unsupported`: legacy `.doc`/`.xls`/`.ppt` containers, which also omit
+  `preview.format`. Non-Office sources return no `preview` object at all and
+  keep their ordinary delivery.
+
+Degraded previews are successful responses, not RPC errors; they are also not
+cached, so the next request retries. The legacy structured `preview.preview`
+payload (worksheet, document, or slide data) remains in the published schema but
+is never emitted. When the artifact is outside the Office families the request
+is answered with the artifact's ordinary download delivery — inline base64,
+ticket URL, or managed media URL, with no `preview` object — so a preview opt-in
+never strips the payload another preview needs. Managed image artifacts keep
+their managed URL response.
+Without the parameter, the normal download response reads the original bytes
+for delivery but never parses or converts them for an Office preview.
+
+The preview PDF is display-only. It lives in a bounded in-process Gateway cache
+(8 entries, 64 MiB, 15 minutes idle) and is never written to disk or a database,
+never served by a download action, and never used for an export. The download
+action still delivers the original Office file, and a user who keeps a PDF does
+so from their viewer's own save or print, not from a server export endpoint.
+
+Local and uploaded document attachments use the same conversion through the
+optional `preview=office` parameter on the Control UI assistant-media metadata
+request. That route keeps its existing read authorization and returns
+`{ available: true, mimeType, sizeBytes, officePreview }` for that opt-in
+request, with the same `officePreview` states and PDF payload. Optimistic and
+outbox uploads, whose bytes still exist only in the client, send the retained
+bytes to the same route with `meta=1&preview=office&upload=1` and the file name;
+the Gateway converts the bounded request body (8 MiB cap), persists nothing, and
+mints no ticket. A request body that exceeds the streaming limit before it can
+be read answers with `{ available: false, code: "office-preview-too-large" }`;
+a smaller body that still converts past a limit reports
+`officePreview.state: "too-large"` instead. Non-Office uploads keep
+`{ available: true }` with no `officePreview`.
 
 Use the active Gateway's HTTPS origin and configured Control UI base path. TLS
 can terminate at the Gateway or its reverse proxy; the proxy must forward
