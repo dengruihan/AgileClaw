@@ -2566,6 +2566,10 @@
                     ]
                   },
                   {
+                    "group": "Documents and previews",
+                    "pages": ["gateway/office-pdf-preview"]
+                  },
+                  {
                     "group": "Networking and discovery",
                     "pages": [
                       "network",

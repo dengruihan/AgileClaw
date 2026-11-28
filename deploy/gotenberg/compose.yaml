@@ -1,0 +1,70 @@
+# Reusable Gotenberg 9 conversion service for Office PDF previews.
+#
+# The base definition keeps the conversion engine off every routable network:
+# it joins only an internal bridge, so it cannot reach the internet or the
+# host. A deployment that must reach it adds one network of its own:
+#
+# - docker-compose.yml (Gateway in Compose): attaches the Gateway to
+#   `openclaw-gotenberg` and reaches `http://gotenberg:3000`.
+# - compose.host.yaml (Gateway on the native host): publishes the API on
+#   `127.0.0.1:3000` only and reaches `http://127.0.0.1:3000`.
+#
+# Keep this service definition in sync with the `gotenberg` service in the
+# repository root docker-compose.yml; deploy/gotenberg/verify.sh compares them.
+services:
+  gotenberg:
+    image: gotenberg/gotenberg:9
+    # Only the LibreOffice conversion route is reachable. Remote downloads,
+    # webhooks, and every Chromium route are disabled, and LibreOffice may not
+    # open outbound URLs, so an uploaded document can never pull remote bytes.
+    command:
+      [
+        "gotenberg",
+        "--api-timeout=60s",
+        "--api-body-limit=18MB",
+        "--api-disable-download-from=true",
+        "--webhook-disable=true",
+        "--chromium-disable-routes=true",
+        "--pdf-disable-routes=true",
+        "--libreoffice-max-queue-size=4",
+        "--libreoffice-max-memory=768MB",
+        "--libreoffice-deny-private-ips=true",
+        "--libreoffice-deny-public-ips=true",
+      ]
+    environment:
+      GOMEMLIMIT: 1500MiB
+    # No persistent volume: every conversion works inside the tmpfs, so no
+    # document or PDF survives the container. 512 MiB bounds one conversion's
+    # temporary footprint (the Gateway caps source files at 8 MiB).
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    memswap_limit: 2g
+    init: true
+    restart: unless-stopped
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "http://127.0.0.1:3000/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    networks:
+      - gotenberg-internal
+
+networks:
+  gotenberg-internal:
+    internal: true

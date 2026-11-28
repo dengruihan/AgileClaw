@@ -65,6 +65,12 @@ services:
       - no-new-privileges:true
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # The second network carries Office PDF preview conversions to the
+    # `gotenberg` service below; the default network keeps every existing
+    # inbound and outbound path unchanged.
+    networks:
+      - default
+      - openclaw-gotenberg
     ports:
       - "${OPENCLAW_GATEWAY_PORT:-18789}:18789"
       - "${OPENCLAW_BRIDGE_PORT:-18790}:18790"
@@ -133,3 +139,59 @@ services:
     entrypoint: ["node", "dist/index.js"]
     depends_on:
       - openclaw-gateway
+
+  # Office PDF preview conversion. The Gateway reaches it as
+  # http://gotenberg:3000 over an internal network; it publishes no port and
+  # has no route off that network. Keep this definition in sync with
+  # deploy/gotenberg/compose.yaml (native-host deployment); verify with
+  # deploy/gotenberg/verify.sh.
+  gotenberg:
+    image: gotenberg/gotenberg:9
+    command:
+      [
+        "gotenberg",
+        "--api-timeout=60s",
+        "--api-body-limit=18MB",
+        "--api-disable-download-from=true",
+        "--webhook-disable=true",
+        "--chromium-disable-routes=true",
+        "--pdf-disable-routes=true",
+        "--libreoffice-max-queue-size=4",
+        "--libreoffice-max-memory=768MB",
+        "--libreoffice-deny-private-ips=true",
+        "--libreoffice-deny-public-ips=true",
+      ]
+    environment:
+      GOMEMLIMIT: 1500MiB
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 512
+    mem_limit: 2g
+    memswap_limit: 2g
+    init: true
+    restart: unless-stopped
+    networks:
+      - openclaw-gotenberg
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "http://127.0.0.1:3000/health",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  openclaw-gotenberg:
+    internal: true
