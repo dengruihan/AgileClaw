@@ -65,6 +65,12 @@ export type StagedWorkerArtifactInventory = {
   changedEntries: WorkerWorkspaceManifestEntry[];
   changes: SessionDiffFile[];
   preview?: Uint8Array;
+  /**
+   * Why a selected artifact has no preview. Modern Office files over the 8 MiB
+   * conversion bound report `too-large` so the caller shows the Office notice
+   * instead of the generic small-preview failure.
+   */
+  previewState?: "too-large";
 };
 
 export type WorkspaceArtifactReadOperations = {

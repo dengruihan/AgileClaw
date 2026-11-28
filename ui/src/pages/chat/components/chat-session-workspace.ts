@@ -123,6 +123,10 @@ function officePreviewStateNotice(state: string | undefined): string | undefined
       return t("chat.officePreview.invalid");
     case "password-protected":
       return t("chat.officePreview.passwordProtected");
+    case "unavailable":
+      return t("chat.officePreview.unavailable");
+    case "failed":
+      return t("chat.officePreview.failed");
     case "unsupported":
       return t("chat.officePreview.unsupported");
     default:
@@ -172,12 +176,11 @@ async function loadArtifactSidebarContent(
   const { title } = result.artifact;
   const mimeType = result.artifact.mimeType ?? "";
   if (preview?.kind === "office") {
-    if (preview.state === "ready" && preview.format && preview.preview) {
+    if (preview.state === "ready" && preview.pdf) {
       return {
         kind: "office",
         title,
-        format: preview.format,
-        preview: preview.preview,
+        pdf: preview.pdf,
         ...(downloads.blob ? { download: downloads.blob } : {}),
         ...(freshDownloadNow ? { downloadNow: freshDownloadNow } : {}),
       };
@@ -323,9 +326,9 @@ function openFile(
         };
       }
       if (file.previewKind === "office") {
-        const preview = file.officePreview;
-        if (!preview) {
-          // An office kind without its payload still renders the metadata panel
+        const pdf = file.officePdf;
+        if (!pdf) {
+          // An office kind without its PDF still renders the metadata panel
           // instead of failing the open.
           return {
             ...unsupportedFileSidebarContent(file, path),
@@ -335,8 +338,7 @@ function openFile(
         return {
           kind: "office",
           title: name,
-          format: preview.format,
-          preview,
+          pdf,
         };
       }
       if (file.previewKind === "unsupported") {

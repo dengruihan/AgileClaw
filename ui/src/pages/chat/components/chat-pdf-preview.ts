@@ -2,6 +2,7 @@ import { html, nothing, type PropertyValues } from "lit";
 import { property, state } from "lit/decorators.js";
 import { icons } from "../../../components/icons.ts";
 import { t } from "../../../i18n/index.ts";
+import { base64ToBytes } from "../../../lib/bytes-base64.ts";
 import { OpenClawLightDomContentsElement } from "../../../lit/openclaw-element.ts";
 import {
   renderAttachmentPreviewSkeleton,
@@ -29,8 +30,16 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
   @property() mimeType = "";
   @property({ type: Number }) sizeBytes: number | undefined;
   @property() downloadHref = "";
+  /**
+   * Base64 PDF bytes produced by the Gateway's Office converter. When set it is
+   * authoritative and no network fetch runs; ordinary PDF attachments keep
+   * using `src`.
+   */
+  @property() pdfData = "";
   /** Fresh, user-triggered download; replaces the plain href when provided. */
   @property({ attribute: false }) onDownload: (() => void) | undefined;
+  @property({ type: Boolean }) downloadPending = false;
+  @property() downloadError = "";
 
   @state() private status: "loading" | "ready" | "error" = "loading";
   @state() private previewUrl: string | null = null;
@@ -42,6 +51,7 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.requestUpdate("src");
+    this.requestUpdate("pdfData");
   }
 
   override disconnectedCallback(): void {
@@ -51,7 +61,20 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
   }
 
   override willUpdate(changed: PropertyValues<this>): void {
+    if (changed.has("pdfData")) {
+      this.cancelLoad();
+      this.revokePreviewUrl();
+      if (this.pdfData) {
+        this.applyPdfData();
+        return;
+      }
+      this.status = "loading";
+    }
     if (changed.has("src") || changed.has("sourceIdentity") || changed.has("sizeBytes")) {
+      if (this.pdfData && !changed.has("pdfData")) {
+        // A renewed ticket never replaces converter-produced bytes.
+        return;
+      }
       this.cancelLoad();
       // A renewed ticket for the same attachment must not reset the native reader.
       if (
@@ -67,6 +90,21 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
       if (this.src) {
         void this.loadPdf();
       }
+    }
+  }
+
+  /** Decodes the Gateway-provided PDF without any network round trip. */
+  private applyPdfData(): void {
+    try {
+      const bytes = base64ToBytes(this.pdfData);
+      if (bytes.byteLength > PDF_PREVIEW_MAX_BYTES) {
+        throw new Error("PDF preview exceeds the reader limit");
+      }
+      this.previewBytes = bytes;
+      this.previewUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+      this.status = "ready";
+    } catch {
+      this.status = "error";
     }
   }
 
@@ -147,10 +185,12 @@ class ChatPdfPreview extends OpenClawLightDomContentsElement {
                   type="button"
                   aria-label=${t("chat.mediaPlayer.download", { filename: this.label })}
                   title=${t("chat.mediaPlayer.download", { filename: this.label })}
+                  ?disabled=${this.downloadPending}
                   @click=${this.onDownload}
                 >
                   ${icons.download}<span>${t("chat.officePreview.download")}</span>
                 </button>
+                ${this.downloadError ? html`<div role="alert">${this.downloadError}</div>` : nothing}
               </div>`
             : nothing
         }

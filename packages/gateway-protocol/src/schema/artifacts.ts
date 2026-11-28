@@ -4,6 +4,7 @@ import { Type } from "typebox";
 import { closedObject } from "./closed-object.js";
 import {
   SessionFileOfficePreviewStateSchema,
+  SessionFileOfficePdfSchema,
   type SessionFileOfficePreviewState,
 } from "./office-preview.js";
 import { NonEmptyString } from "./primitives.js";
@@ -75,7 +76,7 @@ export const ArtifactsDownloadParamsSchema = closedObject({
   artifactId: NonEmptyString,
   /** Opt in only when the client can reach the Gateway's HTTP(S) media routes. */
   transport: Type.Optional(Type.Literal("http")),
-  /** Opt-in structured preview; the default download path never parses content. */
+  /** Opt-in Office PDF preview; the default download path never reads content. */
   preview: Type.Optional(Type.Literal("office")),
 });
 
@@ -87,14 +88,19 @@ export const ArtifactsDownloadParamsSchema = closedObject({
 export const ArtifactOfficePreviewStateSchema = SessionFileOfficePreviewStateSchema;
 
 /**
- * Structured read-only Office preview returned only when the caller opts in.
- * Legacy containers and non-Office files report `unsupported` without a format.
+ * Read-only Office preview returned only when the caller opts in.
+ *
+ * Modern packages ship a converted PDF in `pdf`; legacy containers and
+ * non-Office files report `unsupported` without a format. The structured
+ * `preview` schema remains part of the published contract but is no longer
+ * emitted by this Gateway.
  */
 export const ArtifactOfficePreviewSchema = closedObject({
   kind: Type.Literal("office"),
-  /** Modern OOXML format the reader selected; absent when no modern format applies. */
+  /** Modern OOXML format the converter handled; absent when no modern format applies. */
   format: Type.Optional(SessionFileOfficeFormatSchema),
   state: ArtifactOfficePreviewStateSchema,
+  pdf: Type.Optional(SessionFileOfficePdfSchema),
   preview: Type.Optional(SessionFileOfficePreviewSchema),
 });
 

@@ -5,6 +5,7 @@ import type {
   SessionsDiffParams,
   SessionsDiffResult,
 } from "../../../packages/gateway-protocol/src/index.js";
+import { resolveOfficePreviewTarget } from "../office-preview/office-preview-target.js";
 import { readSessionRepositoryArtifacts } from "../worker-environments/session-repository-checkpoints.js";
 import type { resolveRepositoryWorkspaceAccess } from "./session-repository-workspace-access.js";
 import { populateSessionFilePreview } from "./workspace-files.js";
@@ -138,6 +139,15 @@ export async function getRepositoryArtifact(
     await populateSessionFilePreview(file, content);
     // Accepted artifacts are immutable; editing resumes with the live worker checkout.
     delete file.hash;
+  } else if (snapshot.previewState !== undefined) {
+    // A selected artifact the inventory deliberately did not read keeps its
+    // visible Office reason instead of the generic small-preview failure.
+    file.previewKind = "unsupported";
+    file.previewState = snapshot.previewState;
+    const target = resolveOfficePreviewTarget(entry.path);
+    if (target) {
+      file.mimeType = target.mimeType;
+    }
   }
   access.assertCurrent();
   return { file };

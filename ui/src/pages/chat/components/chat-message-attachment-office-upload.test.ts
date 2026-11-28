@@ -23,9 +23,10 @@ describe("office attachment previews", () => {
       kind: "office",
       format: "xlsx",
       state: "ready",
-      preview: {
-        format: "xlsx",
-        sheets: [{ name: "Budget", rowCount: 1, columnCount: 1, rows: [["Rent"]] }],
+      pdf: {
+        mimeType: "application/pdf",
+        data: btoa("%PDF-1.7\nupload-preview"),
+        sizeBytes: 18,
       },
     };
     const resolveArtifactDownload = vi.fn(
@@ -133,9 +134,10 @@ describe("office attachment previews", () => {
         kind: "office",
         format: "xlsx",
         state: "ready",
-        preview: {
-          format: "xlsx",
-          sheets: [{ name: "Budget", rowCount: 1, columnCount: 1, rows: [["Rent"]] }],
+        pdf: {
+          mimeType: "application/pdf",
+          data: btoa("%PDF-1.7\nupload-preview"),
+          sizeBytes: 18,
         },
       };
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -192,7 +194,12 @@ describe("office attachment previews", () => {
       // The retained client bytes back an explicit local download.
       expect(content.downloadNow).toBeTypeOf("function");
       const preview = await content.office?.load(new AbortController().signal);
-      expect(preview).toMatchObject({ kind: "office", format: "xlsx", state: "ready" });
+      expect(preview).toMatchObject({
+        kind: "office",
+        format: "xlsx",
+        state: "ready",
+        pdf: { mimeType: "application/pdf" },
+      });
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
@@ -202,9 +209,10 @@ describe("office attachment previews", () => {
         kind: "office",
         format: "xlsx",
         state: "ready",
-        preview: {
-          format: "xlsx",
-          sheets: [{ name: "Budget", rowCount: 1, columnCount: 1, rows: [["Rent"]] }],
+        pdf: {
+          mimeType: "application/pdf",
+          data: btoa("%PDF-1.7\nupload-preview"),
+          sizeBytes: 18,
         },
       };
       const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {

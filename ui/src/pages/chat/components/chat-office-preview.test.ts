@@ -1,7 +1,6 @@
 /* @vitest-environment jsdom */
 
-import { afterEach, expect, it } from "vitest";
-import type { SessionFileOfficePreview } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
+import { afterEach, expect, it, vi } from "vitest";
 import type { SidebarContent } from "./chat-sidebar-content-types.ts";
 import "./chat-detail-panel.ts";
 
@@ -10,467 +9,88 @@ type DetailPanel = HTMLElement & {
   updateComplete: Promise<unknown>;
 };
 
-const ONE_PIXEL_PNG =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const PDF_BASE64 = btoa("%PDF-1.7\nconverted");
+const PDF_BYTES = 18;
 
-type OfficeSidebarContent = Extract<SidebarContent, { kind: "office" }>;
+function stubObjectUrls() {
+  const NativeURL = URL;
+  class TestURL extends NativeURL {}
+  const createObjectURL = vi.fn(() => "blob:office-pdf");
+  Object.defineProperty(TestURL, "createObjectURL", { value: createObjectURL });
+  Object.defineProperty(TestURL, "revokeObjectURL", { value: vi.fn() });
+  vi.stubGlobal("URL", TestURL);
+  return { createObjectURL };
+}
 
-async function mountOffice(
-  content: Omit<Partial<OfficeSidebarContent>, "kind" | "format" | "preview"> & {
-    preview: SessionFileOfficePreview;
-  },
-) {
+async function mountOffice(overrides: Partial<Extract<SidebarContent, { kind: "office" }>> = {}) {
   const panel = document.createElement("openclaw-chat-detail-panel") as DetailPanel;
   panel.content = {
     kind: "office",
     title: "budget.xlsx",
-    format: content.preview.format,
-    ...content,
+    pdf: { mimeType: "application/pdf", data: PDF_BASE64, sizeBytes: PDF_BYTES },
+    ...overrides,
   };
   document.body.append(panel);
   await panel.updateComplete;
-  await expect
-    .poll(() => panel.querySelector("openclaw-chat-office-preview")?.children.length ?? 0)
-    .toBeGreaterThan(0);
-  return panel;
+  const preview = panel.querySelector("openclaw-chat-pdf-preview") as
+    | (HTMLElement & { updateComplete: Promise<unknown> })
+    | null;
+  await preview?.updateComplete;
+  return { panel, preview };
 }
 
 afterEach(() => {
   document.body.replaceChildren();
+  vi.unstubAllGlobals();
 });
 
-it("renders workbook rows and switches worksheets", async () => {
-  const panel = await mountOffice({
-    preview: {
-      format: "xlsx",
-      sheets: [
-        {
-          name: "Budget",
-          rows: [
-            ["Item", "Cost"],
-            ["Rent", "1200"],
-          ],
-          rowNumbers: [1, 3],
-          rowCount: 3,
-          columnCount: 2,
-        },
-        { name: "Notes", rows: [["Hello"]], rowCount: 1, columnCount: 1 },
-        { name: "Hidden", hidden: true, rows: [["Secret"]], rowCount: 1, columnCount: 1 },
-      ],
+it("renders the converted PDF in the shared browser reader without a fetch", async () => {
+  stubObjectUrls();
+  const fetchMock = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetchMock);
+  const { panel, preview } = await mountOffice();
+
+  await vi.waitFor(() => expect(panel.querySelector("iframe")).not.toBeNull());
+  const frame = panel.querySelector<HTMLIFrameElement>("iframe")!;
+  expect(preview?.getAttribute("label")).toBeNull();
+  expect(frame.className).toBe("sidebar-pdf-preview__frame");
+  expect(frame.getAttribute("src")).toBe("blob:office-pdf");
+  expect(frame.title).toBe("budget.xlsx");
+  expect(fetchMock).not.toHaveBeenCalled();
+});
+
+it("keeps the explicit original-file download beside the PDF reader", async () => {
+  stubObjectUrls();
+  const onDownload = vi.fn();
+  const { panel } = await mountOffice({ downloadNow: onDownload });
+
+  const button = panel.querySelector<HTMLButtonElement>("button.sidebar-office-preview__download");
+  await vi.waitFor(() => expect(button).not.toBeNull());
+  expect(button!.getAttribute("aria-label")).toBe("Download budget.xlsx");
+  expect(panel.querySelector("a[download]")).toBeNull();
+  button!.click();
+  expect(onDownload).toHaveBeenCalledOnce();
+});
+
+it("replaces the reader when a different Office file is selected", async () => {
+  const urls = stubObjectUrls();
+  const { panel } = await mountOffice();
+  await vi.waitFor(() => expect(panel.querySelector("iframe")).not.toBeNull());
+
+  panel.content = {
+    kind: "office",
+    title: "report.docx",
+    pdf: {
+      mimeType: "application/pdf",
+      data: btoa("%PDF-1.7\nother"),
+      sizeBytes: 16,
     },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  expect(viewer.querySelector("table")?.textContent).toContain("Rent");
-  // Sparse worksheets keep their real row numbers instead of renumbering.
-  expect(
-    [...viewer.querySelectorAll(".sidebar-office-sheet__row-header")].map((cell) =>
-      cell.textContent?.trim(),
-    ),
-  ).toEqual(["1", "3"]);
-  const tabs = [...viewer.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
-  // Hidden worksheets stay in the payload but are not switchable tabs.
-  expect(tabs.map((tab) => tab.textContent?.trim())).toEqual(["Budget", "Notes"]);
-  expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
-
-  tabs[1]?.click();
+  };
   await panel.updateComplete;
-  await viewer.updateComplete;
-
-  expect(viewer.querySelector("table")?.textContent).toContain("Hello");
-  expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
-});
-
-it("renders workbook geometry, merges, styles, and frozen panes", async () => {
-  const panel = await mountOffice({
-    preview: {
-      format: "xlsx",
-      omitted: [{ feature: "charts", count: 1 }],
-      sheets: [
-        {
-          name: "Budget",
-          rowCount: 2,
-          columnCount: 3,
-          rowNumbers: [1, 2],
-          rows: [
-            ["Total", "$1,200.50", "15/01/2024"],
-            ["Plain", "Kept", ""],
-          ],
-          rowHeights: [24, 0],
-          columns: [{ width: 30 }, { width: 16 }, { width: 16 }],
-          frozenRows: 1,
-          frozenColumns: 1,
-          mergedCells: [{ row: 0, column: 0, rowSpan: 1, columnSpan: 2 }],
-          cells: [
-            { row: 0, column: 0, style: 0 },
-            { row: 0, column: 2, style: 1 },
-            { row: 1, column: 0, plain: true },
-          ],
-          styles: [
-            {
-              bold: true,
-              fill: "#1f3864",
-              color: "#ffffff",
-              horizontal: "center",
-              vertical: "middle",
-              border: { top: { style: "thin" }, bottom: { style: "double" } },
-            },
-            { italic: true, numberFormat: "dd/mm/yyyy" },
-          ],
-          defaultStyle: 0,
-        },
-      ],
-    },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  expect(viewer.querySelector(".sidebar-office-preview__omitted")?.textContent).toContain("Charts");
-  expect(
-    [...viewer.querySelectorAll(".sidebar-office-sheet__column-header")].map((cell) =>
-      cell.textContent?.trim(),
-    ),
-  ).toEqual(["A", "B", "C"]);
-
-  // 30 Excel character units is about 215 CSS pixels, not 30px.
-  const colgroup = [...viewer.querySelectorAll("colgroup col")];
-  expect((colgroup[1] as HTMLElement).style.width).toBe("215px");
-  expect((colgroup[2] as HTMLElement).style.width).toBe("117px");
-
-  const headerRow = viewer.querySelector("tbody tr") as HTMLElement;
-  expect(headerRow.style.height).toBe("32px");
-
-  const merged = viewer.querySelector('td[colspan="2"]') as HTMLElement;
-  expect(merged?.textContent).toContain("Total");
-  expect(merged.style.fontWeight).toBe("700");
-  expect(merged.style.textAlign).toBe("center");
-  expect(merged.style.borderBottom).toContain("double");
-  expect(merged.classList.contains("sidebar-office-sheet__cell--frozen-row")).toBe(true);
-  expect(merged.classList.contains("sidebar-office-sheet__cell--frozen-column")).toBe(true);
-  expect(merged.style.top).toBe("20px");
-  expect(merged.style.left).toBe("46px");
-
-  const plain = viewer.querySelector('td[data-row="1"][data-column="0"]') as HTMLElement;
-  // `plain: true` clears the styled sheet default instead of inheriting it.
-  expect(plain.style.backgroundColor).toBe("");
-  expect(plain.style.fontWeight).toBe("");
-
-  const styledDate = viewer.querySelector('td[data-row="0"][data-column="2"]') as HTMLElement;
-  expect(styledDate.textContent).toContain("15/01/2024");
-  expect(styledDate.style.fontStyle).toBe("italic");
-  expect(styledDate.style.top).toBe("20px");
-  expect(styledDate.style.left).toBe("");
-});
-
-it("renders document headings, paragraphs, and list items", async () => {
-  const panel = await mountOffice({
-    title: "report.docx",
-    preview: {
-      format: "docx",
-      blocks: [
-        { kind: "heading", level: 2, text: "Quarterly report" },
-        { kind: "paragraph", text: "Revenue grew" },
-        { kind: "listItem", text: "First point" },
-        { kind: "listItem", text: "Second point" },
-      ],
-    },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  expect(viewer.querySelector('[role="heading"]')?.getAttribute("aria-level")).toBe("2");
-  expect(viewer.querySelectorAll("ul li")).toHaveLength(2);
-  expect(viewer.textContent).toContain("Revenue grew");
-});
-
-it("renders approximate Word pages with styles, tables, media, and notices", async () => {
-  const panel = await mountOffice({
-    title: "report.docx",
-    preview: {
-      format: "docx",
-      truncated: true,
-      header: [
-        { kind: "paragraph", role: "body", text: "Confidential", runs: [{ text: "Confidential" }] },
-      ],
-      footer: [
-        { kind: "paragraph", role: "body", text: "Page footer", runs: [{ text: "Page footer" }] },
-      ],
-      omitted: [
-        { feature: "exactPagination", count: 0 },
-        { feature: "charts", count: 1 },
-        { feature: "multipleSections", count: 1 },
-      ],
-      media: [{ dataUrl: ONE_PIXEL_PNG }],
-      pages: [
-        {
-          widthPt: 595.3,
-          heightPt: 841.9,
-          marginTopPt: 72,
-          marginRightPt: 72,
-          marginBottomPt: 72,
-          marginLeftPt: 72,
-          blocks: [
-            {
-              kind: "paragraph",
-              role: "title",
-              text: "Quarterly Layout",
-              alignment: "center",
-              spaceBeforePt: 12,
-              spaceAfterPt: 6,
-              runs: [
-                {
-                  text: "Quarterly Layout",
-                  bold: true,
-                  fontName: "Georgia",
-                  fontSizePt: 24,
-                  color: "#1f3864",
-                },
-              ],
-            },
-            {
-              kind: "paragraph",
-              role: "body",
-              text: "Plain bold red strong",
-              runs: [
-                { text: "Plain ", fontSizePt: 11, color: "#000000" },
-                { text: "bold red", bold: true, fontSizePt: 11, color: "#ff0000" },
-              ],
-            },
-            {
-              kind: "paragraph",
-              role: "listItem",
-              level: 1,
-              listMarker: "1.",
-              text: "First numbered",
-              runs: [{ text: "First numbered", fontSizePt: 11 }],
-            },
-            {
-              kind: "table",
-              columnWidthsPt: [150, 150],
-              border: { top: { style: "thin" } },
-              rows: [
-                {
-                  cells: [
-                    {
-                      columnSpan: 2,
-                      shading: "#d9e2f3",
-                      paragraphs: [
-                        {
-                          kind: "paragraph",
-                          role: "body",
-                          text: "Merged",
-                          runs: [{ text: "Merged", bold: true }],
-                        },
-                      ],
-                    },
-                  ],
-                },
-                {
-                  cells: [
-                    {
-                      rowSpan: 2,
-                      paragraphs: [
-                        {
-                          kind: "paragraph",
-                          role: "body",
-                          text: "Merged",
-                          runs: [{ text: "Merged" }],
-                        },
-                      ],
-                    },
-                    {
-                      paragraphs: [
-                        {
-                          kind: "paragraph",
-                          role: "body",
-                          text: "Right",
-                          runs: [{ text: "Right" }],
-                        },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-            { kind: "image", media: 0, widthPt: 75, heightPt: 75, alt: "Synthetic logo" },
-          ],
-        },
-        {
-          widthPt: 595.3,
-          heightPt: 841.9,
-          marginTopPt: 72,
-          marginRightPt: 72,
-          marginBottomPt: 72,
-          marginLeftPt: 72,
-          blocks: [
-            {
-              kind: "paragraph",
-              role: "body",
-              text: "Second page",
-              runs: [{ text: "Second page", fontSizePt: 11 }],
-            },
-          ],
-        },
-      ],
-    },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  const pages = [...viewer.querySelectorAll<HTMLElement>(".sidebar-office-docx__page")];
-  expect(pages).toHaveLength(2);
-  // A4 width in points converts to the browser's 794px page card. The scaler
-  // reserves that box and declares the canvas size the page inherits.
-  const scaler = pages[0]?.parentElement;
-  expect(scaler?.classList.contains("sidebar-office-docx__page-scaler")).toBe(true);
-  expect(scaler?.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
-  // 72pt margins on a 595.3pt page stay 96px at any zoom level.
-  expect(pages[0]?.style.paddingTop).toBe("96px");
-  expect(pages[0]?.style.paddingLeft).toBe("96px");
-
-  // The document-level header and footer are shown on every rendered page card.
-  // jsdom has no layout, so the off-flow measuring stage stays mounted and its
-  // copies are excluded here.
-  expect(
-    viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-header"),
-  ).toHaveLength(2);
-  expect(
-    viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-footer"),
-  ).toHaveLength(2);
-  expect(
-    [
-      ...viewer.querySelectorAll(".sidebar-office-docx__page .sidebar-office-docx__page-header"),
-    ].map((entry) => entry.textContent?.trim()),
-  ).toEqual(["Confidential", "Confidential"]);
-
-  const title = viewer.querySelector<HTMLElement>(
-    '.sidebar-office-docx__page [data-role="title"]',
-  )!;
-  expect(title.style.textAlign).toBe("center");
-  expect(title.style.marginTop).toBe("16px");
-  const titleRun = title.querySelector<HTMLElement>(".sidebar-office-docx__run")!;
-  expect(titleRun.style.fontWeight).toBe("700");
-  expect(titleRun.style.fontSize).toBe("24pt");
-  expect(titleRun.style.fontFamily).toContain("Georgia");
-  expect(titleRun.style.color).toBeTruthy();
-
-  const redRun = [...viewer.querySelectorAll<HTMLElement>(".sidebar-office-docx__run")].find(
-    (run) => run.textContent === "bold red",
-  )!;
-  expect(redRun.style.fontWeight).toBe("700");
-  expect(redRun.style.fontSize).toBe("11pt");
-
-  expect(viewer.querySelector(".sidebar-office-docx__list-marker")?.textContent?.trim()).toBe("1.");
-
-  const table = viewer.querySelector<HTMLElement>(".sidebar-office-docx__table")!;
-  expect(table.style.borderTop).toContain("solid");
-  const tableCols = [...table.querySelectorAll("col")];
-  expect(tableCols).toHaveLength(2);
-  expect((tableCols[0] as HTMLElement).style.width).toBe("50%");
-  const mergedCell = table.querySelector<HTMLElement>('td[colspan="2"]')!;
-  expect(mergedCell.style.backgroundColor).toBeTruthy();
-  expect(table.querySelector('td[rowspan="2"]')).not.toBeNull();
-
-  const image = viewer.querySelector<HTMLImageElement>(".sidebar-office-docx__image")!;
-  expect(image.src).toBe(ONE_PIXEL_PNG);
-  expect(image.alt).toBe("Synthetic logo");
-  expect(image.style.width).toBe("100px");
-
-  expect(viewer.querySelector(".sidebar-office-preview__approximation")?.textContent).toContain(
-    "Pages approximate",
-  );
-  expect(viewer.querySelector(".sidebar-office-preview__omitted")?.textContent).toContain("Charts");
-  expect(viewer.querySelector(".sidebar-office-preview__omitted")?.textContent).toContain(
-    "Other sections",
-  );
-  expect(viewer.querySelector(".sidebar-office-preview__notice")?.textContent).toContain(
-    "truncated",
-  );
-});
-
-it("lays Word pages on one fixed canvas with fit, actual, and zoom controls", async () => {
-  const panel = await mountOffice({
-    title: "report.docx",
-    preview: {
-      format: "docx",
-      pages: [
-        {
-          widthPt: 595.3,
-          heightPt: 841.9,
-          marginTopPt: 72,
-          marginRightPt: 72,
-          marginBottomPt: 72,
-          marginLeftPt: 72,
-          blocks: [
-            { kind: "paragraph", role: "body", text: "Fixed canvas", runs: [{ text: "Fixed" }] },
-          ],
-        },
-      ],
-    },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  const scroller = viewer.querySelector<HTMLElement>(".sidebar-office-docx__scroll")!;
-  const page = viewer.querySelector<HTMLElement>(".sidebar-office-docx__page")!;
-  // The canvas keeps the document's own page box; the reader only scales it.
-  // The scaler declares that box and the page inherits it.
-  const pageScaler = page.parentElement!;
-  expect(pageScaler.classList.contains("sidebar-office-docx__page-scaler")).toBe(true);
-  expect(pageScaler.style.getPropertyValue("--office-doc-page-width")).toBe("794px");
-  expect(pageScaler.style.getPropertyValue("--office-doc-page-height")).toBe("1123px");
-  // Without a layout box the stage must stay mounted: unmounting it here would
-  // leave the document on the unpaginated fallback forever.
-  expect(viewer.querySelector(".sidebar-office-docx__measure")).not.toBeNull();
-
-  const press = (action: string) =>
-    viewer.querySelector<HTMLElement>(`[data-office-zoom="${action}"]`)!.click();
-  const level = () => viewer.querySelector("[data-office-zoom-level]")!.textContent?.trim();
-
-  press("in");
-  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1.25");
-  await expect.poll(level).toBe("125%");
-  press("in");
-  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1.563");
-  press("out");
-  press("out");
-  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1");
-
-  press("actual");
-  expect(scroller.style.getPropertyValue("--office-canvas-scale")).toBe("1");
-  await expect.poll(level).toBe("100%");
-  expect(viewer.querySelector('[data-office-zoom="actual"]')?.getAttribute("aria-pressed")).toBe(
-    "true",
-  );
-
-  press("fit");
-  await expect
-    .poll(() => viewer.querySelector('[data-office-zoom="fit"]')?.getAttribute("aria-pressed"))
-    .toBe("true");
-});
-
-it("renders slide outlines", async () => {
-  const panel = await mountOffice({
-    title: "deck.pptx",
-    preview: {
-      format: "pptx",
-      slides: [
-        { index: 1, title: "Roadmap", lines: ["Ship previews"] },
-        { index: 2, lines: ["No title slide"] },
-      ],
-    },
-  });
-
-  const viewer = panel.querySelector("openclaw-chat-office-preview")!;
-  const slides = [...viewer.querySelectorAll("[data-slide-index]")];
-  expect(slides).toHaveLength(2);
-  expect(slides[0]?.textContent).toContain("Roadmap");
-  expect(slides[1]?.textContent).toContain("Slide 2");
-});
-
-it("shows truncation and empty states", async () => {
-  const truncated = await mountOffice({
-    preview: { format: "docx", blocks: [{ kind: "paragraph", text: "Partial" }], truncated: true },
-  });
-  expect(truncated.textContent).toContain("truncated");
-
-  document.body.replaceChildren();
-  const empty = await mountOffice({ preview: { format: "xlsx", sheets: [] } });
-  expect(empty.textContent).toContain("no previewable content");
+  const preview = panel.querySelector("openclaw-chat-pdf-preview") as HTMLElement & {
+    updateComplete: Promise<unknown>;
+  };
+  await preview.updateComplete;
+  await vi.waitFor(() => expect(panel.querySelector("iframe")?.title).toBe("report.docx"));
+  expect(urls.createObjectURL).toHaveBeenCalledTimes(2);
 });

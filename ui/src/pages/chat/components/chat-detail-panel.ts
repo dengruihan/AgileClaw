@@ -1,6 +1,5 @@
 import { toErrorObject } from "@openclaw/normalization-core";
 import { property, state } from "lit/decorators.js";
-import { LazyCustomElementRequestController } from "../../../app/lazy-custom-element.ts";
 import {
   localEditorFilePath,
   observeNativeGateway,
@@ -26,7 +25,7 @@ import { FileCopyController } from "./chat-file-copy-controller.ts";
 import { captureFileEditorDraft, readFileDraft, setFileDraft } from "./chat-file-drafts.ts";
 import { FileHtmlPreviewController } from "./chat-html-preview.ts";
 import { releaseChatMediaResourceSubscriber } from "./chat-message-media.ts";
-import { officePreviewElement, renderOfficePreview } from "./chat-office-preview.ts";
+import { renderOfficePreview } from "./chat-office-preview.ts";
 import type {
   FileSidebarNavigation,
   AttachmentSidebarRuntime,
@@ -91,8 +90,6 @@ class ChatDetailPanel extends OpenClawLightDomElement {
     () => this.currentFileText(),
   );
 
-  private readonly officePreviewLoader = new LazyCustomElementRequestController(this);
-
   private fileOperationVersion = 0;
   private showingRawText = false;
   private rawFileContent: FileSidebarContent | null = null;
@@ -110,7 +107,6 @@ class ChatDetailPanel extends OpenClawLightDomElement {
   private readonly attachmentOffice = new AttachmentOfficePreviewController(
     this,
     () => (this.content === this.visibleContent ? this.content : null),
-    this.officePreviewLoader,
     this.attachmentDownload,
   );
 
@@ -127,7 +123,6 @@ class ChatDetailPanel extends OpenClawLightDomElement {
   override disconnectedCallback() {
     this.attachmentDownload.cancel();
     this.attachmentOffice.cancel();
-    this.officePreviewLoader.requestWhileActive(officePreviewElement, false);
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
     if (this.fileDirty) {
       this.fileDraftContent = this.currentFileText();
@@ -744,11 +739,7 @@ class ChatDetailPanel extends OpenClawLightDomElement {
       attachmentRuntime: this.attachmentRuntime,
       attachmentDownload: this.attachmentDownload,
       attachmentOfficePreview: this.attachmentOffice.render(),
-      officePreview: renderOfficePreview(
-        this.officePreviewLoader,
-        officeContent,
-        this.attachmentDownload,
-      ),
+      officePreview: renderOfficePreview(officeContent, this.attachmentDownload),
     });
   }
 }

@@ -184,6 +184,7 @@ export {
   SessionFileKindSchema,
   SessionFileOfficeBlockSchema,
   SessionFileOfficeFormatSchema,
+  SessionFileOfficePdfSchema,
   SessionFileOfficePreviewSchema,
   SessionFileOfficeSheetSchema,
   SessionFileOfficeSlideSchema,

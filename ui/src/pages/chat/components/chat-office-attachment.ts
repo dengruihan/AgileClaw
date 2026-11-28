@@ -1,4 +1,7 @@
-import type { SessionFileOfficeFormat } from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
+import type {
+  SessionFileOfficeFormat,
+  SessionFileOfficePdf,
+} from "../../../../../packages/gateway-protocol/src/schema/sessions.js";
 import type { ArtifactOfficePreview } from "../../../api/artifact-download.ts";
 import { t } from "../../../i18n/index.ts";
 import { createRetainedUploadDownloadHandler } from "./chat-attachment-download.ts";
@@ -120,20 +123,14 @@ export function resolveAttachmentOfficePreview(
   return { office: { format, load }, legacy: false };
 }
 
-/** Formats the viewer can show, or null when the preview has no payload. */
-export function officePreviewPayload(preview: ArtifactOfficePreview | null | undefined): {
-  format: SessionFileOfficeFormat;
-  preview: NonNullable<ArtifactOfficePreview["preview"]>;
-} | null {
-  if (
-    preview?.kind !== "office" ||
-    preview.state !== "ready" ||
-    !preview.format ||
-    !preview.preview
-  ) {
+/** PDF bytes from a ready Office preview, or null when the preview degraded. */
+export function officePreviewPdf(
+  preview: ArtifactOfficePreview | null | undefined,
+): SessionFileOfficePdf | null {
+  if (preview?.kind !== "office" || preview.state !== "ready" || !preview.pdf) {
     return null;
   }
-  return { format: preview.format, preview: preview.preview };
+  return preview.pdf;
 }
 
 /**

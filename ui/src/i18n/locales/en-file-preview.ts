@@ -51,51 +51,19 @@ const catalog = {
       fullContentLoadFailed: "Failed to load full content: {error}",
     },
     officePreview: {
-      title: "Office preview",
-      truncated: "This preview is truncated. Open the file in an Office app to see everything.",
-      empty: "This file has no previewable content.",
-      sheetPicker: "Worksheets",
-      untitledSheet: "Untitled sheet",
-      slideLabel: "Slide {index}",
-      slideOf: "Slide {index} of {count}",
-      approximatePages:
-        "Pages approximate the document layout. Line breaks and pagination can differ from Word.",
-      pageOf: "Page {index} of {count}",
-      zoom: "Document zoom",
-      zoomIn: "Zoom in",
-      zoomOut: "Zoom out",
-      zoomFitWidth: "Fit width",
-      zoomActual: "Actual size",
-      zoomLevel: "{percent}%",
-      header: "Document header",
-      footer: "Document footer",
-      imageUnavailable: "This image could not be shown safely.",
-      omittedFeatures: "Not shown in this preview: {features}.",
-      omittedFeature: {
-        charts: "Charts",
-        comments: "Comments",
-        conditionalFormatting: "Conditional formatting",
-        dataValidation: "Data validation",
-        diagrams: "SmartArt diagrams",
-        drawings: "Drawings",
-        embeddedObjects: "Embedded objects",
-        equations: "Equations",
-        exactPagination: "Exact pagination",
-        floatingObjects: "Floating objects",
-        images: "Unsupported images",
-        media: "Audio and video",
-        multipleSections: "Other sections",
-        pivotTables: "Pivot tables",
-      },
+      download: "Download",
       unsupported:
         "This Office file can't be previewed here. Download it to open it in an Office app.",
       tooLarge:
-        "This Office file is larger than the 8 MiB preview limit. Download it to open it in an Office app.",
+        "This Office preview supports a source file up to 8 MiB and a converted PDF up to 16 MiB. Download the file to open it in an Office app.",
       invalid:
         "This Office file couldn't be read for preview. Download it to open it in an Office app.",
       passwordProtected:
         "This Office file is password-protected. Download it and open it in an Office app.",
-      download: "Download",
+      unavailable:
+        "The document conversion service is unavailable, so this Office file can't be previewed right now. Download it to open it in an Office app.",
+      failed:
+        "This Office file couldn't be converted for preview. Download it to open it in an Office app.",
     },
   },
   filePreview: {

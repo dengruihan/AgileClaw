@@ -2,7 +2,7 @@ import { once } from "node:events";
 import fs from "node:fs/promises";
 import { createServer, type IncomingMessage } from "node:http";
 import path from "node:path";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createDeferred } from "../../test/helpers/promise.js";
 import { useAutoCleanupTempDirTracker } from "../../test/helpers/temp-dir.js";
 import * as fsSafe from "../infra/fs-safe.js";
@@ -10,18 +10,33 @@ import { resolvePreferredOpenClawTmpDir } from "../infra/tmp-openclaw-dir.js";
 import * as playback from "../media/playback-transcode.js";
 import { handleControlUiAssistantMediaRequest } from "./control-ui.js";
 import * as httpAuth from "./http-auth-utils.js";
-import { buildStyledXlsxFixture } from "./office-preview/office-preview.test-support.js";
 import { makeMockHttpResponse } from "./test-http-response.js";
 
 const runFfprobe = vi.hoisted(() => vi.fn<() => Promise<string>>());
+const officeHoisted = vi.hoisted(() => ({ convert: vi.fn() }));
 vi.mock("../media/ffmpeg-exec.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../media/ffmpeg-exec.js")>()),
   runFfprobe,
 }));
+vi.mock("./office-preview/office-preview-convert.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./office-preview/office-preview-convert.js")>()),
+  convertOfficeDocumentToPdf: officeHoisted.convert,
+}));
 const tempDirs = useAutoCleanupTempDirTracker(afterEach);
+const PREVIEW_PDF = Buffer.from("%PDF-1.7\nassistant-media-preview");
+const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+let fixtureSequence = 0;
+function packageBytes(): Buffer {
+  fixtureSequence += 1;
+  return Buffer.concat([ZIP_LOCAL_HEADER, Buffer.from(`synthetic-attachment-${fixtureSequence}`)]);
+}
+beforeEach(() => {
+  officeHoisted.convert.mockResolvedValue({ pdf: PREVIEW_PDF });
+});
 afterEach(() => {
   vi.restoreAllMocks();
   runFfprobe.mockReset();
+  officeHoisted.convert.mockReset();
 });
 
 function startMediaRequest(filePath: string, mode: "meta" | "playback" = "meta") {
@@ -427,30 +442,52 @@ async function readUploadParseResponse(request: ReturnType<typeof startUploadPar
   return JSON.parse(String(request.end.mock.calls[0]?.[0] ?? "")) as Record<string, unknown>;
 }
 
-it("returns a structured layout preview for a local Office attachment", async () => {
+it("returns a PDF preview for a local Office attachment", async () => {
   const root = tempDirs.make("ui-media-office-", resolvePreferredOpenClawTmpDir());
-  const filePath = path.join(root, "styled.xlsx");
-  await fs.writeFile(filePath, await buildStyledXlsxFixture());
+  const filePath = path.join(root, "budget.xlsx");
+  await fs.writeFile(filePath, packageBytes());
 
   const payload = (await readMetadataResponse(startMediaPreviewRequest(filePath))) as {
-    officePreview: { state: string; preview: { sheets: Record<string, unknown>[] } };
+    officePreview: {
+      kind: string;
+      format: string;
+      state: string;
+      pdf: { mimeType: string; data: string; sizeBytes: number };
+    };
   };
 
   expect(payload).toMatchObject({
     available: true,
     officePreview: { kind: "office", format: "xlsx", state: "ready" },
   });
-  expect(payload.officePreview.preview.sheets[0]?.columns).toEqual([
-    { width: 30 },
-    { width: 16 },
-    { width: 16 },
-  ]);
-  // The preview is parsed locally; audio probing never runs for a workbook.
+  expect(payload.officePreview.pdf).toEqual({
+    mimeType: "application/pdf",
+    data: PREVIEW_PDF.toString("base64"),
+    sizeBytes: PREVIEW_PDF.length,
+  });
+  // The preview is converted by the Office owner; audio probing never runs.
   expect(runFfprobe).not.toHaveBeenCalled();
 });
 
-it("parses an uploaded Office document for a preview without persisting it", async () => {
-  const workbook = await buildStyledXlsxFixture();
+it("surfaces an unreachable converter on a local Office attachment", async () => {
+  officeHoisted.convert.mockResolvedValue({ failure: "unavailable" });
+  const root = tempDirs.make("ui-media-office-", resolvePreferredOpenClawTmpDir());
+  const filePath = path.join(root, "budget.xlsx");
+  await fs.writeFile(filePath, packageBytes());
+
+  const payload = (await readMetadataResponse(startMediaPreviewRequest(filePath))) as {
+    officePreview: Record<string, unknown>;
+  };
+
+  expect(payload).toMatchObject({
+    available: true,
+    officePreview: { kind: "office", format: "xlsx", state: "unavailable" },
+  });
+  expect(payload.officePreview.pdf).toBeUndefined();
+});
+
+it("converts an uploaded Office document for a preview without persisting it", async () => {
+  const workbook = packageBytes();
   const root = tempDirs.make("ui-media-upload-", resolvePreferredOpenClawTmpDir());
   const before = await fs.readdir(root);
   const payload = await readUploadParseResponse(
@@ -461,14 +498,13 @@ it("parses an uploaded Office document for a preview without persisting it", asy
     officePreview: { kind: "office", format: "xlsx", state: "ready" },
   });
   const officePreview = payload.officePreview as {
-    preview: { sheets: Record<string, unknown>[] };
+    pdf: { mimeType: string; data: string; sizeBytes: number };
   };
-  expect(officePreview.preview.sheets[0]?.mergedCells).toHaveLength(1);
-  expect(officePreview.preview.sheets[0]?.rows).toEqual([
-    ["Item", "Cost", "Date"],
-    ["Rent", "$1,200.50", "15/01/2024"],
-    ["Share", "0.125"],
-  ]);
+  expect(officePreview.pdf).toEqual({
+    mimeType: "application/pdf",
+    data: PREVIEW_PDF.toString("base64"),
+    sizeBytes: PREVIEW_PDF.length,
+  });
   // The upload never writes anything: nothing new exists under the temp root.
   expect(await fs.readdir(root)).toEqual(before);
 });
@@ -488,7 +524,7 @@ it("answers oversized uploads with the explicit too-large preview state", async 
   expect(payload.officePreview).toBeUndefined();
 });
 
-it("keeps non-Office uploads without a structured preview", async () => {
+it("keeps non-Office uploads without an Office preview", async () => {
   const payload = await readUploadParseResponse(
     startUploadParseRequest({ filename: "notes.txt", body: Buffer.from("hello") }),
   );
