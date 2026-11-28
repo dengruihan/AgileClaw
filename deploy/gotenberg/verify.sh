@@ -64,14 +64,32 @@ const root = require(rootPath).services.gotenberg;
 const keys = [
   "image", "command", "entrypoint", "environment", "read_only", "tmpfs",
   "cap_drop", "security_opt", "pids_limit", "mem_limit", "memswap_limit",
-  "user", "working_dir", "stdin_open", "tty",
+  "user", "working_dir", "stdin_open", "tty", "init", "restart", "volumes",
+  "ports", "healthcheck",
 ];
 const normalize = (svc) => {
   const pick = (src, key) => {
     if (key === "command" || key === "entrypoint") return src[key] ?? null;
-    if (key === "environment") return Object.entries(src[key] ?? {}).sort(([a], [b]) => a.localeCompare(b));
-    if (key === "tmpfs") return [...(src[key] ?? [])].sort();
-    if (key === "cap_drop" || key === "security_opt") return [...(src[key] ?? [])].sort();
+    if (key === "environment") {
+      return Object.entries(src[key] ?? {}).sort(([a], [b]) => a.localeCompare(b));
+    }
+    if (key === "volumes" || key === "ports") {
+      return [...(src[key] ?? [])].map((entry) => JSON.stringify(entry)).sort();
+    }
+    if (key === "healthcheck") {
+      const h = src[key] ?? {};
+      return {
+        test: h.test ?? null,
+        timeout: h.timeout ?? null,
+        interval: h.interval ?? null,
+        retries: h.retries ?? null,
+        start_period: h.start_period ?? null,
+        disable: h.disable ?? null,
+      };
+    }
+    if (key === "tmpfs" || key === "cap_drop" || key === "security_opt") {
+      return [...(src[key] ?? [])].sort();
+    }
     return src[key] ?? null;
   };
   return Object.fromEntries(keys.map((key) => [key, pick(svc, key)]));
@@ -189,6 +207,8 @@ docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/docker-compose.yml" up -d --wait 
 COMPOSE_CID="$(docker compose -p "$COMPOSE_PROJECT" -f "$ROOT/docker-compose.yml" ps --quiet gotenberg)"
 COMPOSE_NET="${COMPOSE_PROJECT}_openclaw-gotenberg"
 check "Compose publishes no host port" "$([[ -z "$(docker port "$COMPOSE_CID")" ]] && echo 1 || echo 0)"
+check "Compose container has no persistent mounts" \
+  "$([[ "$(docker inspect --format '{{len .Mounts}}' "$COMPOSE_CID")" == 0 ]] && echo 1 || echo 0)"
 check "conversion network is internal" \
   "$([[ "$(docker network inspect "$COMPOSE_NET" --format '{{.Internal}}')" == true ]] && echo 1 || echo 0)"
 check "service name gotenberg resolves from another container" \

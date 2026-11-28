@@ -150,7 +150,10 @@ attachment stays reachable:
 - `password-protected`: encrypted OOXML packaging.
 - `too-large`: the source is above 8 MiB or the PDF above 16 MiB.
 - `invalid`: non-ZIP, renamed, or corrupt bytes.
-- `unsupported`: legacy `.doc`/`.xls`/`.ppt` and non-Office sources.
+- `unsupported`: legacy `.doc`/`.xls`/`.ppt` containers.
+
+Non-Office attachments never request an Office preview: the request follows the
+ordinary download delivery and returns no preview object at all.
 
 None of these states block session loading, chat history, or downloads, and
 none are cached, so a repaired deployment recovers on the next request. The

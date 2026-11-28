@@ -266,17 +266,20 @@ Degraded states keep the same object shape without `preview.pdf`:
 - `password-protected`: encrypted OOXML packaging behind an Office extension.
 - `too-large`: the source exceeds 8 MiB or the converted PDF exceeds 16 MiB.
 - `invalid`: non-ZIP, renamed, or corrupt bytes without a ZIP signature.
-- `unsupported`: legacy `.doc`/`.xls`/`.ppt` containers and non-Office sources,
-  which also omit `preview.format`.
+- `unsupported`: legacy `.doc`/`.xls`/`.ppt` containers, which also omit
+  `preview.format`. Non-Office sources return no `preview` object at all and
+  keep their ordinary delivery.
 
 Degraded previews are successful responses, not RPC errors; they are also not
 cached, so the next request retries. The legacy structured `preview.preview`
 payload (worksheet, document, or slide data) remains in the published schema but
 is never emitted. When the artifact is outside the Office families the request
 is answered with the artifact's ordinary download delivery — inline base64,
-ticket URL, or managed media URL — so a preview opt-in never strips the payload
-another preview needs. Managed image artifacts keep their managed URL response.
-Without the parameter, the normal download response never reads file content.
+ticket URL, or managed media URL, with no `preview` object — so a preview opt-in
+never strips the payload another preview needs. Managed image artifacts keep
+their managed URL response.
+Without the parameter, the normal download response reads the original bytes
+for delivery but never parses or converts them for an Office preview.
 
 The preview PDF is display-only. It lives in a bounded in-process Gateway cache
 (8 entries, 64 MiB, 15 minutes idle) and is never written to disk or a database,

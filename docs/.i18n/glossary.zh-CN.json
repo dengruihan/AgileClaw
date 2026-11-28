@@ -5018,5 +5018,9 @@
   {
     "source": "Side conversations",
     "target": "侧边会话"
+  },
+  {
+    "source": "Office PDF previews",
+    "target": "Office PDF 预览"
   }
 ]
