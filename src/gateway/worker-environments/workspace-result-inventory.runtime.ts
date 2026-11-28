@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { runGitBuffered } from "../../agents/worktrees/git.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview-limits.js";
+import { resolveOfficePreviewTarget } from "../office-preview/office-preview-target.js";
 import { WORKSPACE_PREVIEW_MAX_BYTES } from "../workspace-file-limits.js";
 import { parseChangedWorkspaceResult } from "./workspace-manifest-comparison.js";
 import {
@@ -259,12 +261,23 @@ export async function collectStagedWorkerArtifacts(
       })),
   ].toSorted((left, right) => left.path.localeCompare(right.path));
   const selected = snapshot.changedEntries.find((entry) => entry.path === input.previewPath);
+  const officeFile = selected?.type === "file" ? selected : undefined;
+  const modernOffice = officeFile
+    ? resolveOfficePreviewTarget(officeFile.path)?.kind === "modern"
+    : false;
+  // Only modern Office files need the larger conversion bound; every other
+  // artifact keeps the small inline-preview cap.
+  const previewLimit = modernOffice ? OFFICE_PREVIEW_MAX_BYTES : WORKSPACE_PREVIEW_MAX_BYTES;
   const preview =
-    selected?.type === "file" && selected.size <= WORKSPACE_PREVIEW_MAX_BYTES
+    officeFile && officeFile.size <= previewLimit
       ? await readStagedWorkerWorkspaceEntries({
           root: input.root,
-          entries: [resolveStagedWorkspaceReadEntry(snapshot.objectsByPath, selected)],
+          entries: [resolveStagedWorkspaceReadEntry(snapshot.objectsByPath, officeFile)],
         })
+      : undefined;
+  const previewState =
+    modernOffice && officeFile && officeFile.size > OFFICE_PREVIEW_MAX_BYTES
+      ? ("too-large" as const)
       : undefined;
   return {
     baseManifestRef: snapshot.baseManifestRef,
@@ -274,5 +287,6 @@ export async function collectStagedWorkerArtifacts(
     changedEntries: snapshot.changedEntries,
     changes,
     ...(preview === undefined ? {} : { preview }),
+    ...(previewState === undefined ? {} : { previewState }),
   };
 }

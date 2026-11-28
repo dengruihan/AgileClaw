@@ -88,4 +88,40 @@ describe("openSessionWorkspaceFile Office previews", () => {
       expect(content.content).toContain("document conversion service is unavailable");
     }
   });
+  it("explains both the source and converted-PDF preview limits", async () => {
+    const getFile = vi.fn<SessionWorkspaceHost["sessions"]["getFile"]>(async (sessionKey) => ({
+      sessionKey,
+      root: "/shared",
+      file: {
+        path: "budget.xlsx",
+        workspacePath: "budget.xlsx",
+        name: "budget.xlsx",
+        kind: "read",
+        missing: false,
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        previewKind: "unsupported",
+        previewState: "too-large",
+      },
+    }));
+    const state: SessionWorkspaceHost = {
+      client: createGatewayBrowserClientFixture(),
+      connected: true,
+      connectionEpoch: 1,
+      handleOpenSidebar: createSidebarContentRecorder(),
+      hello: gatewayHelloForMethods([]),
+      sessionKey: "agent:main:viewer",
+      sidebarContent: null,
+      requestUpdate: vi.fn(),
+      sessions: createSessionCapabilityFixture({ getFile }),
+    };
+
+    openSessionWorkspaceFile(state, { path: "budget.xlsx" });
+
+    const content = await loadedSidebarContent(state);
+    expect(content.kind).toBe("markdown");
+    if (content.kind === "markdown") {
+      expect(content.content).toContain("8 MiB");
+      expect(content.content).toContain("16 MiB");
+    }
+  });
 });

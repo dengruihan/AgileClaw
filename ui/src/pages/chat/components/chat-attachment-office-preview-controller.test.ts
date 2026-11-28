@@ -190,4 +190,20 @@ describe("attachment office preview controller transitions", () => {
     expect(observedSignal?.aborted).toBe(true);
     panel.remove();
   });
+
+  it("shows both Office preview limits for an oversized conversion", async () => {
+    const panel = createPanel();
+    try {
+      panel.content = officeAttachment("budget.xlsx", () =>
+        Promise.resolve({ kind: "office", format: "xlsx", state: "too-large" }),
+      );
+      await panel.updateComplete;
+      await vi.waitFor(() => expect(panel.textContent).toContain("8 MiB"));
+      // The same state covers a small source whose converted PDF exceeded 16 MiB.
+      expect(panel.textContent).toContain("16 MiB");
+      expect(panel.querySelector("openclaw-chat-pdf-preview")).toBeNull();
+    } finally {
+      panel.remove();
+    }
+  });
 });

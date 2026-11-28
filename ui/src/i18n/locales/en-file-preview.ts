@@ -55,7 +55,7 @@ const catalog = {
       unsupported:
         "This Office file can't be previewed here. Download it to open it in an Office app.",
       tooLarge:
-        "This Office file is larger than the 8 MiB preview limit. Download it to open it in an Office app.",
+        "This Office preview supports a source file up to 8 MiB and a converted PDF up to 16 MiB. Download the file to open it in an Office app.",
       invalid:
         "This Office file couldn't be read for preview. Download it to open it in an Office app.",
       passwordProtected:

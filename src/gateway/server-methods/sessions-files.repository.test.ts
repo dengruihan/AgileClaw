@@ -25,6 +25,7 @@ import {
   readGitHubRepositoryPublicationMetadata,
   REMOTE_GITHUB_PUBLICATION_SNAPSHOT_JS,
 } from "../github-repository-publication-snapshot.js";
+import { OFFICE_PREVIEW_MAX_BYTES } from "../office-preview/office-preview-limits.js";
 import { nodeWorkerGatewayNamespace } from "../worker-environments/node-worker-gateway-namespace.js";
 import { createNodeWorkerTunnelManager } from "../worker-environments/node-worker-tunnel.js";
 import {
@@ -65,6 +66,7 @@ const mocks = vi.hoisted(() => ({
   workspace: vi.fn(),
   store: vi.fn(),
   open: vi.fn(),
+  convert: vi.fn(),
 }));
 vi.mock("../session-utils.js", () => ({ loadGatewaySessionEntryReadOnly: mocks.load }));
 vi.mock("../../config/sessions/session-accessor.js", async (original) => ({
@@ -86,6 +88,10 @@ vi.mock("./open-path.js", async (original) => ({
 vi.mock("../session-transcript-readers.js", async (original) => ({
   ...(await original<typeof import("../session-transcript-readers.js")>()),
   readSessionTranscriptVisibleMessageDeltaCore: () => ({ kind: "missing" }),
+}));
+vi.mock("../office-preview/office-preview-convert.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../office-preview/office-preview-convert.js")>()),
+  convertOfficeDocumentToPdf: mocks.convert,
 }));
 
 const invoke = createSessionFilesHandlerInvoker(sessionsFilesHandlers);
@@ -158,6 +164,7 @@ function requestContext() {
 
 beforeEach(async () => {
   vi.clearAllMocks();
+  mocks.convert.mockResolvedValue({ pdf: Buffer.from("%PDF-1.7\nrepository-office") });
   gatewayRoot = createWorkspaceFixture("repository-files-gateway-");
   vi.stubEnv("OPENCLAW_STATE_DIR", gatewayRoot);
   nodeRoot = createWorkspaceFixture("repository-files-node-");
@@ -634,6 +641,87 @@ it("keeps stopped inspection limited to verified changed artifacts", async () =>
   await expect(
     invoke("sessions.files.get", { sessionKey, path: "second.txt" }, context),
   ).rejects.toThrow("workspace owner changed");
+});
+
+it("converts retained Office selections over the small cap and bounds both limits", async () => {
+  const previewPdf = Buffer.from("%PDF-1.7\nretained-office");
+  mocks.convert.mockResolvedValue({ pdf: previewPdf });
+  const base = await captureWorkspaceManifest({
+    root: workspace,
+    baseCommit: source.baseCommit,
+  });
+  const workbook = Buffer.concat([
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+    Buffer.alloc(300 * 1024, 0x41),
+  ]);
+  fs.writeFileSync(path.join(workspace, "workbook.xlsx"), workbook);
+  fs.writeFileSync(
+    path.join(workspace, "huge.docx"),
+    Buffer.concat([
+      Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+      Buffer.alloc(OFFICE_PREVIEW_MAX_BYTES, 0x42),
+    ]),
+  );
+  fs.writeFileSync(
+    path.join(workspace, "large.txt"),
+    Buffer.alloc(WORKSPACE_PREVIEW_MAX_BYTES + 1, 97),
+  );
+  const current = await captureWorkspaceManifest({
+    root: workspace,
+    baseCommit: source.baseCommit,
+  });
+  const staged = await stageSessionRepositoryCheckpoint({
+    store,
+    workspaceId: source.workspaceId,
+    expectedRevision: source.revision,
+    stagingRoot: workspace,
+    baseManifestRaw: serializeWorkerWorkspaceManifest(base.manifest),
+    currentManifestRaw: serializeWorkerWorkspaceManifest(current.manifest),
+    baseManifestRef: base.manifestRef,
+    currentManifestRef: current.manifestRef,
+    assertCurrent: () => {},
+  });
+  source = await staged.publish();
+  active = false;
+
+  const converted = expectOkPayload(
+    await invoke("sessions.files.get", { sessionKey, path: "workbook.xlsx" }, context),
+  ).file;
+  expect(converted).toMatchObject({
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    previewKind: "office",
+    previewState: "ready",
+    officePdf: {
+      mimeType: "application/pdf",
+      data: previewPdf.toString("base64"),
+      sizeBytes: previewPdf.length,
+    },
+  });
+  expect(mocks.convert).toHaveBeenCalledOnce();
+  expect(mocks.convert.mock.calls[0]?.[0]).toMatchObject({ filename: "workbook.xlsx" });
+
+  // Over the Office bound: visible too-large state, no payload read, no error.
+  const oversized = expectOkPayload(
+    await invoke("sessions.files.get", { sessionKey, path: "huge.docx" }, context),
+  ).file;
+  expect(oversized).toMatchObject({
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    previewKind: "unsupported",
+    previewState: "too-large",
+  });
+  expect(oversized.officePdf).toBeUndefined();
+  expect(mocks.convert).toHaveBeenCalledOnce();
+
+  // Non-Office artifacts keep the small inline-preview cap and its failure.
+  const large = expectError(
+    await invoke("sessions.files.get", { sessionKey, path: "large.txt" }, context),
+  );
+  expect(large.details).toMatchObject({
+    type: "session_file_too_large",
+    path: "large.txt",
+    maxPreviewBytes: WORKSPACE_PREVIEW_MAX_BYTES,
+    size: WORKSPACE_PREVIEW_MAX_BYTES + 1,
+  });
 });
 
 it.each(["symlink", "hardlink"])(

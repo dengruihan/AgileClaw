@@ -21,25 +21,14 @@ import {
   type OfficeConversionResult,
 } from "./office-preview-convert.js";
 import { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview-limits.js";
+import { resolveOfficePreviewFamily } from "./office-preview-target.js";
 
 export { OFFICE_PREVIEW_MAX_BYTES } from "./office-preview-limits.js";
-
-const MODERN_OFFICE_MIME_TYPES: Record<SessionFileOfficeFormat, string> = {
-  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  pptx: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-};
-
-/** Legacy OLE containers keep metadata-only previews with a recognizable type label. */
-const LEGACY_OFFICE_MIME_TYPES: Record<string, string> = {
-  xls: "application/vnd.ms-excel",
-  doc: "application/msword",
-  ppt: "application/vnd.ms-powerpoint",
-};
-
-export type OfficePreviewTarget =
-  | { kind: "modern"; format: SessionFileOfficeFormat; mimeType: string }
-  | { kind: "legacy"; mimeType: string };
+export {
+  resolveOfficePreviewFamily,
+  resolveOfficePreviewTarget,
+  type OfficePreviewTarget,
+} from "./office-preview-target.js";
 
 /** One caller-owned document that may receive an opt-in PDF preview. */
 export type OfficePreviewSource = {
@@ -52,72 +41,6 @@ export type OfficePreviewSource = {
   /** Cancels the wait for a conversion; the shared job may still finish. */
   signal?: AbortSignal;
 };
-
-function extensionOf(filePath: string): string {
-  return filePath.match(/\.([a-z0-9]+)$/iu)?.[1]?.toLowerCase() ?? "";
-}
-
-function modernFormatForExtension(extension: string): SessionFileOfficeFormat | undefined {
-  switch (extension) {
-    case "xlsx":
-    case "docx":
-    case "pptx":
-      return extension;
-    default:
-      return undefined;
-  }
-}
-
-/** Selects the preview reader for a path; extension is the only pre-read signal. */
-export function resolveOfficePreviewTarget(filePath: string): OfficePreviewTarget | undefined {
-  const extension = extensionOf(filePath);
-  const format = modernFormatForExtension(extension);
-  if (format) {
-    return { kind: "modern", format, mimeType: MODERN_OFFICE_MIME_TYPES[format] };
-  }
-  const legacyMimeType = LEGACY_OFFICE_MIME_TYPES[extension];
-  return legacyMimeType ? { kind: "legacy", mimeType: legacyMimeType } : undefined;
-}
-
-/** Modern format declared by a package MIME type, independent of any file name. */
-function resolveOfficePreviewFormatForMime(
-  mimeType: string | undefined,
-): SessionFileOfficeFormat | undefined {
-  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
-  if (!normalized) {
-    return undefined;
-  }
-  for (const [format, mime] of Object.entries(MODERN_OFFICE_MIME_TYPES)) {
-    if (mime === normalized) {
-      return format as SessionFileOfficeFormat;
-    }
-  }
-  return undefined;
-}
-
-/** Legacy binary Office family declared by a MIME type. */
-function isLegacyOfficeMimeType(mimeType: string | undefined): boolean {
-  const normalized = mimeType?.split(";", 1)[0]?.trim().toLowerCase();
-  return Boolean(normalized && Object.hasOwn(LEGACY_OFFICE_MIME_TYPES, normalized));
-}
-
-/** Office family declared by a file name and/or MIME type. */
-export function resolveOfficePreviewFamily(source: { filename?: string; mimeType?: string }): {
-  format?: SessionFileOfficeFormat;
-  legacy: boolean;
-  office: boolean;
-} {
-  const named = source.filename ? resolveOfficePreviewTarget(source.filename) : undefined;
-  if (named?.kind === "modern") {
-    return { format: named.format, legacy: false, office: true };
-  }
-  const byMime = resolveOfficePreviewFormatForMime(source.mimeType);
-  if (byMime) {
-    return { format: byMime, legacy: false, office: true };
-  }
-  const legacy = named?.kind === "legacy" || isLegacyOfficeMimeType(source.mimeType);
-  return { legacy, office: Boolean(named || legacy) };
-}
 
 const ZIP_LOCAL_HEADER = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 
